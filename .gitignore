@@ -1,0 +1,12 @@
+_original/
+tests/output/
+__pycache__/
+*.pyc
+# сборки и окружения сборки (packaging/linux/build_linux.sh, packaging/windows-exe/build.ps1)
+/dist/
+/dist-*/
+/build/
+/winbuild/
+/.venv-build*/
+# пробная сборка (packaging/preview_build.py пишет его только в отдельную копию исходников)
+clipshot/_preview_build.py

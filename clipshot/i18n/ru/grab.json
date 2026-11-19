@@ -1,0 +1,3 @@
+{
+  "grab.wayland_failed": "Не удалось снять экран под Wayland: GNOME Shell и портал скриншотов отказали, внешних утилит (grim, spectacle, gnome-screenshot) нет."
+}

@@ -1,0 +1,72 @@
+{
+  "translate_ui.all_copied": "Alle Übersetzungen kopiert",
+  "translate_ui.all_done_screen": "Der ganze Bildschirm ist bereits übersetzt",
+  "translate_ui.all_done_snapshot": "Der ganze Screenshot ist bereits übersetzt",
+  "translate_ui.already_running": "Eine Übersetzung läuft bereits",
+  "translate_ui.ask_screen": {
+    "one": "Auf dem Bildschirm ist {need} Zeichen, für heute bleibt {left}",
+    "other": "Auf dem Bildschirm sind {need} Zeichen, für heute bleiben {left}"
+  },
+  "translate_ui.ask_snapshot": {
+    "one": "Im Screenshot ist {need} Zeichen, für heute bleibt {left}",
+    "other": "Im Screenshot sind {need} Zeichen, für heute bleiben {left}"
+  },
+  "translate_ui.banner_tip": "Markieren Sie Text mit der Maus; die Übersetzung lässt sich zur Seite ziehen.\n{usage}",
+  "translate_ui.busy": "Übersetze…",
+  "translate_ui.close_esc": "Schließen (Esc)",
+  "translate_ui.command_copied": "Befehl kopiert",
+  "translate_ui.connect_google": "Google verbinden…",
+  "translate_ui.copied": "Übersetzung in die Zwischenablage kopiert",
+  "translate_ui.copy_all": "Alles kopieren",
+  "translate_ui.copy_all_menu": "Alle Übersetzungen kopieren",
+  "translate_ui.copy_command": "Befehl kopieren",
+  "translate_ui.done_count": {
+    "one": "Übersetzt: {m} Absatz",
+    "other": "Übersetzt: {m} Absätze"
+  },
+  "translate_ui.email_button": "E-Mail angeben: 50.000 pro Tag",
+  "translate_ui.email_menu": "E-Mail angeben: 50.000 pro Tag…",
+  "translate_ui.email_short": "50.000 pro Tag…",
+  "translate_ui.esc_cancel": "Esc: abbrechen",
+  "translate_ui.failed": "Übersetzung fehlgeschlagen",
+  "translate_ui.full_wait_screen": "Ganzer Bildschirm wird übersetzt…",
+  "translate_ui.full_wait_snapshot": "Ganzer Screenshot wird übersetzt…",
+  "translate_ui.head_long": "Bildschirmübersetzung: Text mit Maus markieren",
+  "translate_ui.head_mid": "Bildschirmübersetzung: Text markieren",
+  "translate_ui.head_short": "Text mit Maus markieren",
+  "translate_ui.hint_exit": "Beenden: Esc oder „Schließen“",
+  "translate_ui.hint_select": "Markieren Sie den zu übersetzenden Text mit der Maus",
+  "translate_ui.lang_auto": "Wie im System ({lang})",
+  "translate_ui.lang_auto_ui": "Wie die Sprache der App ({lang})",
+  "translate_ui.left_month": "Noch {left} von {limit} in diesem Monat",
+  "translate_ui.left_today": "Noch {left} von {limit} heute",
+  "translate_ui.left_unknown": "Restliches Limit unbekannt",
+  "translate_ui.link_copied": "Link kopiert",
+  "translate_ui.more": "Mehr",
+  "translate_ui.no_registration": "Sie müssen sich weder registrieren noch die E-Mail-Adresse bestätigen.",
+  "translate_ui.no_second_engine": "Ein zweiter Übersetzungsdienst ist nicht verbunden: „Abbrechen“ verbraucht kein Limit.",
+  "translate_ui.not_found_screen": "Kein Text auf dem Bildschirm gefunden",
+  "translate_ui.not_found_snapshot": "Kein Text im Screenshot gefunden",
+  "translate_ui.original": "Original",
+  "translate_ui.partial": {
+    "one": "Übersetzt, soweit das Limit reichte: {m} Absatz",
+    "other": "Übersetzt, soweit das Limit reichte: {m} Absätze"
+  },
+  "translate_ui.partial_of": {
+    "one": "Übersetzt, soweit das Limit reichte: {m} von {k} Absatz",
+    "other": "Übersetzt, soweit das Limit reichte: {m} von {k} Absätzen"
+  },
+  "translate_ui.service": "Dienst: {name}",
+  "translate_ui.setup_note": "Klicken Sie auf „Google verbinden…“: Es öffnet sich ein Fenster mit den Schritten und einem Feld für den Schlüssel. Oder übersetzen Sie über MyMemory.",
+  "translate_ui.to_lang": "In: {lang}",
+  "translate_ui.translate_more": "Weiteres Stück übersetzen",
+  "translate_ui.translate_partial": "Übersetzen, was reicht",
+  "translate_ui.translation": "Übersetzung",
+  "translate_ui.unexpected_error": "Unerwarteter Übersetzungsfehler",
+  "translate_ui.use_mymemory": "Über MyMemory übersetzen",
+  "translate_ui.via_mymemory": "Übersetze über MyMemory…",
+  "translate_ui.view_card": "Als Karte",
+  "translate_ui.view_overlay": "Über dem Text",
+  "translate_ui.window_title": "ClipSD: Übersetzung",
+  "translate_ui.with_skipped": "{text}. {skipped}"
+}

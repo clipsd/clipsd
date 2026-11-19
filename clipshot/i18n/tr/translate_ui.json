@@ -1,0 +1,72 @@
+{
+  "translate_ui.all_copied": "Tüm çeviriler kopyalandı",
+  "translate_ui.all_done_screen": "Tüm ekran zaten çevrildi",
+  "translate_ui.all_done_snapshot": "Tüm ekran görüntüsü zaten çevrildi",
+  "translate_ui.already_running": "Çeviri zaten sürüyor",
+  "translate_ui.ask_screen": {
+    "one": "Ekranda {need} karakter var, bugün {left} kaldı",
+    "other": "Ekranda {need} karakter var, bugün {left} kaldı"
+  },
+  "translate_ui.ask_snapshot": {
+    "one": "Ekran görüntüsünde {need} karakter var, bugün {left} kaldı",
+    "other": "Ekran görüntüsünde {need} karakter var, bugün {left} kaldı"
+  },
+  "translate_ui.banner_tip": "Metni fareyle seçin, çeviri kenara sürüklenebilir.\n{usage}",
+  "translate_ui.busy": "Çevriliyor…",
+  "translate_ui.close_esc": "Kapat (Esc)",
+  "translate_ui.command_copied": "Komut kopyalandı",
+  "translate_ui.connect_google": "Google'ı bağla…",
+  "translate_ui.copied": "Çeviri panoya kopyalandı",
+  "translate_ui.copy_all": "Tümünü kopyala",
+  "translate_ui.copy_all_menu": "Tüm çevirileri kopyala",
+  "translate_ui.copy_command": "Komutu kopyala",
+  "translate_ui.done_count": {
+    "one": "Çevrilen paragraf: {m}",
+    "other": "Çevrilen paragraf: {m}"
+  },
+  "translate_ui.email_button": "E-posta gir: günde 50.000",
+  "translate_ui.email_menu": "E-posta gir: günde 50.000…",
+  "translate_ui.email_short": "Günde 50.000…",
+  "translate_ui.esc_cancel": "Esc: iptal",
+  "translate_ui.failed": "Çeviri yapılamadı",
+  "translate_ui.full_wait_screen": "Tüm ekran çevriliyor…",
+  "translate_ui.full_wait_snapshot": "Tüm ekran görüntüsü çevriliyor…",
+  "translate_ui.head_long": "Ekrandan çeviri: metni fareyle seçin",
+  "translate_ui.head_mid": "Ekrandan çeviri: metni seçin",
+  "translate_ui.head_short": "Metni fareyle seçin",
+  "translate_ui.hint_exit": "Çıkış: Esc veya “Kapat”",
+  "translate_ui.hint_select": "Çevrilecek metni fareyle seçin",
+  "translate_ui.lang_auto": "Sistemdeki gibi ({lang})",
+  "translate_ui.lang_auto_ui": "Program diliyle aynı ({lang})",
+  "translate_ui.left_month": "Bu ay {limit} içinden {left} kaldı",
+  "translate_ui.left_today": "Bugün {limit} içinden {left} kaldı",
+  "translate_ui.left_unknown": "Kalan limit bilinmiyor",
+  "translate_ui.link_copied": "Bağlantı kopyalandı",
+  "translate_ui.more": "Daha",
+  "translate_ui.no_registration": "Kayıt olmanız veya e-postayı onaylamanız gerekmez.",
+  "translate_ui.no_second_engine": "İkinci çeviri hizmeti bağlı değil: “İptal” limiti harcamaz.",
+  "translate_ui.not_found_screen": "Ekranda metin bulunamadı",
+  "translate_ui.not_found_snapshot": "Ekran görüntüsünde metin bulunamadı",
+  "translate_ui.original": "Orijinal",
+  "translate_ui.partial": {
+    "one": "Limitin yettiği kadar çevrildi: {m} paragraf",
+    "other": "Limitin yettiği kadar çevrildi: {m} paragraf"
+  },
+  "translate_ui.partial_of": {
+    "one": "Limitin yettiği kadar çevrildi: {k} paragraftan {m}",
+    "other": "Limitin yettiği kadar çevrildi: {k} paragraftan {m}"
+  },
+  "translate_ui.service": "Hizmet: {name}",
+  "translate_ui.setup_note": "“Google'ı bağla…” düğmesine tıklayın: adımların ve anahtar alanının olduğu pencere açılır. Ya da MyMemory ile çevirin.",
+  "translate_ui.to_lang": "→ {lang}",
+  "translate_ui.translate_more": "Bir parça daha çevir",
+  "translate_ui.translate_partial": "Yettiği kadar çevir",
+  "translate_ui.translation": "Çeviri",
+  "translate_ui.unexpected_error": "Beklenmeyen çeviri hatası",
+  "translate_ui.use_mymemory": "MyMemory ile çevir",
+  "translate_ui.via_mymemory": "MyMemory ile çevriliyor…",
+  "translate_ui.view_card": "Kart",
+  "translate_ui.view_overlay": "Metnin üstünde",
+  "translate_ui.window_title": "ClipSD: çeviri",
+  "translate_ui.with_skipped": "{text}. {skipped}"
+}

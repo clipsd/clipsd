@@ -1,0 +1,135 @@
+# ClipSD: self-contained Linux build (ADR-0009) and a check of install, update, rollback and removal.
+# Built on ubuntu-22.04 (glibc 2.35): the result starts on every newer glibc.
+# Ready archive: Actions -> latest run -> Artifacts -> ClipSD-linux.
+# Actions are pinned by commit SHA (the tag in the comment); update both together.
+name: Linux build
+
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      preview:
+        description: "Пробная сборка (канал proba, папка на компьютере владельца), не выпуск"
+        type: boolean
+        default: false
+      version:
+        description: "Номер версии пробной сборки, например 2.0.1 (пусто: как в исходниках; ветка proba/<версия> задаёт его сама)"
+        type: string
+        default: ""
+
+# read-only token: the builds publish nothing (no releases, no pages, no pushes)
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: System libraries for the build and the offscreen tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
+            libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 libxkbcommon0 libegl1 libgl1 \
+            libdbus-1-3 libfontconfig1 xvfb tesseract-ocr tesseract-ocr-rus
+
+      # Sources run from a checkout on older systems too: every file must compile with Python 3.10
+      # (the system python3 of ubuntu-22.04; setup-python above put 3.12 first in PATH).
+      - name: Python 3.10 syntax
+        run: /usr/bin/python3 --version && git ls-files '*.py' | xargs /usr/bin/python3 -m py_compile
+
+      # Placeholders (TODO keys, .invalid addresses) fail a v* tag, warn otherwise;
+      # versions pinned for both Linux and Windows must match.
+      - name: Release check
+        run: python3 tools/release_check.py ${{ startsWith(github.ref, 'refs/tags/v') && '--strict' || '' }}
+
+      - name: Build archive (pip --require-hashes, selfcheck of the built program)
+        run: packaging/linux/build_linux.sh dist
+
+      # Every test except linux_layout_test (next step, system python3), each in its own process with its own
+      # temporary HOME and XDG folders. The build venv holds exactly the pinned packages of the release.
+      # The program speaks Russian: tests of the system language expect a Russian session.
+      - name: Tests offscreen in the build venv
+        env:
+          QT_QPA_PLATFORM: offscreen
+          LANG: ru_RU.UTF-8
+          LANGUAGE: ru
+        run: |
+          PY="$PWD/.venv-build-linux/bin/python"
+          failed=""
+          for t in tests/*_test.py tests/test_windows_hidpi.py; do
+            case "$t" in tests/linux_layout_test.py) continue ;; esac
+            echo "::group::$t"
+            H="$(mktemp -d "$RUNNER_TEMP/t-XXXXXX")"
+            mkdir -p "$H/home" "$H/cfg" "$H/data" "$H/cache" "$H/state" "$H/rt"; chmod 700 "$H/rt"
+            HOME="$H/home" XDG_CONFIG_HOME="$H/cfg" XDG_DATA_HOME="$H/data" XDG_CACHE_HOME="$H/cache" \
+              XDG_STATE_HOME="$H/state" XDG_RUNTIME_DIR="$H/rt" TMPDIR="$H" "$PY" "$t" || failed="$failed $t"
+            echo "::endgroup::"
+          done
+          if [ -n "$failed" ]; then echo "::error::tests failed:$failed"; exit 1; fi
+
+      - name: Layout test (install, update through clipsd-switch, rollback, removal; stubs, temporary HOME)
+        run: python3 tests/linux_layout_test.py
+
+      - name: Real archive in a clean HOME (install, start, quit, remove)
+        run: |
+          set -euo pipefail
+          export HOME="$RUNNER_TEMP/clean-home"
+          mkdir -p "$HOME" "$RUNNER_TEMP/unpack"
+          unset XDG_DATA_HOME XDG_CONFIG_HOME XDG_STATE_HOME XDG_CACHE_HOME
+          tar -xzf dist/ClipSD-*-linux-x86_64.tar.gz -C "$RUNNER_TEMP/unpack"
+          REL="$(echo "$RUNNER_TEMP"/unpack/clipsd-*)"
+          # no sudo and no network: the installer must not need either
+          CLIPSD_NO_SYSTEM=1 bash "$REL/install.sh"
+          test -L "$HOME/.local/bin/clipsd"
+          test -x "$HOME/.local/share/clipsd/current/clipsd"
+          test -f "$HOME/.local/share/icons/hicolor/48x48/apps/clipsd.png"
+          check_out="$(QT_QPA_PLATFORM=offscreen "$HOME/.local/bin/clipsd" --selfcheck)"
+          printf '%s\n' "$check_out"
+          grep -qx "build: release" <<<"$check_out"   # the ordinary archive is never a preview build
+          # the program starts under a virtual display and stays alive
+          export XDG_RUNTIME_DIR="$RUNNER_TEMP/rt"; mkdir -p -m 700 "$XDG_RUNTIME_DIR"
+          xvfb-run -a bash -c '"$HOME/.local/bin/clipsd" & pid=$!; sleep 8; kill -0 $pid && "$HOME/.local/bin/clipsd" --quit; sleep 2; ! kill -0 $pid 2>/dev/null'
+          CLIPSD_NO_SYSTEM=1 bash "$HOME/.local/share/clipsd/current/uninstall.sh"
+          test ! -e "$HOME/.local/share/clipsd" && test ! -e "$HOME/.local/bin/clipsd"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: ClipSD-linux
+          path: dist/ClipSD-*-linux-x86_64.tar.gz
+          if-no-files-found: error
+
+      # Preview ("проба") build: on a push to a branch proba/<version> (the version comes from the branch
+      # name) or on a manual run with "preview". After the ordinary archive is uploaded, so a failure here
+      # never loses it. A separate copy of the sources (packaging/preview_build.py); never on a tag.
+      - name: Preview build (proba channel)
+        if: (startsWith(github.ref, 'refs/heads/proba/') || (github.event_name == 'workflow_dispatch' && inputs.preview)) && !startsWith(github.ref, 'refs/tags/')
+        env:
+          PROBA_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          V="${PROBA_VERSION:-}"
+          case "$GITHUB_REF" in refs/heads/proba/*) V="${GITHUB_REF#refs/heads/proba/}" ;; esac
+          python3 packaging/preview_build.py "$RUNNER_TEMP/proba" ${V:+--version "$V"}
+          CLIPSD_BUILD_VENV="$PWD/.venv-build-linux" "$RUNNER_TEMP/proba/packaging/linux/build_linux.sh" "$PWD/dist-proba"
+          ls -la dist-proba
+          # the archive itself: unpacked, its program says "build: preview"
+          mkdir -p "$RUNNER_TEMP/proba-unpack"
+          tar -xzf dist-proba/ClipSD-*-proba-linux-x86_64.tar.gz -C "$RUNNER_TEMP/proba-unpack"
+          check_out="$(QT_QPA_PLATFORM=offscreen "$RUNNER_TEMP"/proba-unpack/clipsd-*/clipsd --selfcheck)"
+          printf '%s\n' "$check_out"
+          grep -qx "build: preview" <<<"$check_out"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        if: (startsWith(github.ref, 'refs/heads/proba/') || (github.event_name == 'workflow_dispatch' && inputs.preview)) && !startsWith(github.ref, 'refs/tags/')
+        with:
+          name: ClipSD-linux-proba
+          path: dist-proba/ClipSD-*-proba-linux-x86_64.tar.gz
+          if-no-files-found: error

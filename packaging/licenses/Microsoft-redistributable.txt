@@ -1,0 +1,12 @@
+Microsoft runtime files redistributed with ClipSD for Windows
+
+- Microsoft Visual C++ runtime (vcruntime140*.dll, msvcp140*.dll, concrt140.dll) and the Universal C Runtime
+  (ucrtbase.dll, api-ms-win-*.dll): redistributable files of Microsoft Visual Studio and the Windows SDK, distributed
+  under the Microsoft Visual Studio / Windows SDK licence terms for redistributable code:
+  https://learn.microsoft.com/cpp/windows/redistributing-visual-cpp-files
+  https://visualstudio.microsoft.com/license-terms/
+- D3DCompiler (d3dcompiler_47.dll, shipped inside the PyQt6-Qt6 package for Qt's shader compilation): redistributable
+  file of the Windows SDK, distributed under the Windows SDK licence terms:
+  https://learn.microsoft.com/windows/win32/directx-sdk--august-2009-
+  https://developer.microsoft.com/windows/downloads/windows-sdk/
+These files remain the property of Microsoft Corporation and are not covered by the GNU GPL of ClipSD.

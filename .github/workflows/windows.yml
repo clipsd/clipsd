@@ -1,0 +1,203 @@
+# ClipSD: build of ClipSD-<version>-Setup.exe on Windows after every push, autotests, and a test of
+# install, update over a running ClipSD, failures and uninstall (packaging/windows-exe/install_test.ps1).
+# Ready installer: Actions tab -> latest run -> Artifacts -> ClipSD-Setup.
+# Actions are pinned by commit SHA (the tag in the comment); update both together.
+name: Windows build
+
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      preview:
+        description: "Пробная сборка (канал proba, папка на компьютере владельца), не выпуск"
+        type: boolean
+        default: false
+      version:
+        description: "Номер версии пробной сборки, например 2.0.1 (пусто: как в исходниках; ветка proba/<версия> задаёт его сама)"
+        type: string
+        default: ""
+
+# read-only token: the builds publish nothing (no releases, no pages, no pushes)
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      PYTHONUTF8: "1"             # Cyrillic in script output (the cloud Windows console is cp1252)
+      PYTHONIOENCODING: "utf-8"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Inno Setup 6
+        shell: pwsh
+        run: |
+          # always exactly 6.7.1 (a preinstalled other version is replaced)
+          choco install innosetup --version=6.7.1 -y --no-progress --allow-downgrade --force
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "Inno Setup не установился" }
+          # ISCC.exe of the choco package reports ProductVersion 0.0.0.0: the version is read from every source
+          # that knows it (file versions of ISCC.exe, ISCmplr.dll, Compil32.exe; the uninstall entry; choco), the
+          # empty and 0.0.0.0 ones are skipped; at least one must be found and all of them must be 6.7.1
+          $dir = Split-Path $iscc
+          $seen = @()
+          foreach ($f in "ISCC.exe", "ISCmplr.dll", "Compil32.exe") {
+            $p = Join-Path $dir $f
+            if (Test-Path $p) { $vi = (Get-Item $p).VersionInfo; $seen += "$f=$($vi.ProductVersion)", "$f=$($vi.FileVersion)" }
+          }
+          foreach ($k in "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup 6_is1",
+                         "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup 6_is1",
+                         "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup 6_is1") {
+            $d = (Get-ItemProperty $k -ErrorAction SilentlyContinue).DisplayVersion
+            if ($d) { $seen += "uninstall=$d" }
+          }
+          $c = choco list innosetup --exact --limit-output 2>$null | Select-Object -First 1
+          if ($c -match '^innosetup\|(.+)$') { $seen += "choco=$($Matches[1])" }
+          $vers = $seen | ForEach-Object { ($_ -split "=", 2)[1].Trim() } | Where-Object { $_ -and $_ -notmatch '^0([.,]0)*$' }
+          Write-Host "Inno Setup: $($seen -join '; ')"
+          if (-not $vers) { throw "Версия Inno Setup не определилась ($($seen -join '; '))" }
+          $other = $vers | Where-Object { -not $_.StartsWith("6.7.1") }
+          if ($other) { throw "Inno Setup $($other -join ', ') вместо 6.7.1" }
+
+      # Placeholders (TODO keys, .invalid addresses) fail a v* tag, warn otherwise.
+      - name: Проверка выпуска
+        run: python tools/release_check.py ${{ startsWith(github.ref, 'refs/tags/v') && '--strict' || '' }}
+
+      - name: Раскладка исходников
+        run: python packaging/stage_windows.py winbuild/ClipSD
+
+      - name: Сборка программы, запускателя и установщика
+        working-directory: winbuild/ClipSD
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build.ps1
+          if ($LASTEXITCODE -ne 0) { throw "build.ps1 завершился с ошибкой" }
+          if (-not (Test-Path dist\launcher\ClipSD.exe)) { throw "Запускатель не собран" }
+          if (-not (Test-Path dist\ClipSD-app\ClipSD-app.exe)) { throw "ClipSD-app.exe не собран" }
+          if (-not (Get-ChildItem dist\*-Setup.exe -ErrorAction SilentlyContinue)) { throw "Setup.exe не собран" }
+          Get-Item dist\launcher\ClipSD.exe | Format-List Name, Length, @{n="Version"; e={$_.VersionInfo.FileVersion}}
+
+      # The release installer: its program says "build: release" (selfcheck of build.ps1), no preview mark; its
+      # SHA-256 goes into SHA256SUMS-release-windows of the artifact, which tools/release.sh assemble --windows-sums
+      # compares (a renamed preview installer never matches).
+      - name: Проверка выпускной сборки и сумма установщика
+        working-directory: winbuild/ClipSD
+        shell: pwsh
+        run: |
+          if (Test-Path PREVIEW) { throw "В выпускной раскладке есть метка PREVIEW" }
+          if (Test-Path clipshot\_preview_build.py) { throw "В выпускной раскладке модуль пробной сборки" }
+          $report = Get-Content build\selfcheck.txt -Encoding utf8
+          if (-not ($report -contains "build: release")) { throw "selfcheck выпускной программы: нет 'build: release'" }
+          $setup = (Get-ChildItem dist\*-Setup.exe)[0]
+          $hash = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLower()
+          "$hash  $($setup.Name)" | Set-Content -Encoding ascii -NoNewline dist\SHA256SUMS-release-windows
+          Get-Content dist\SHA256SUMS-release-windows
+
+      # From the repository root (tools\channel_sign.py is not in the staged folder), with the build venv:
+      # exactly the pinned packages of the release. linux_layout_test is Linux only.
+      - name: Автотесты на Windows
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+          PYTHONUTF8: "1"
+        run: |
+          $py = "winbuild\ClipSD\.venv-build\Scripts\python.exe"
+          $outDir = "winbuild\ClipSD\test-out"
+          $failed = @()
+          & $py -X utf8 tests\test_windows_hidpi.py "$outDir\hidpi"
+          if ($LASTEXITCODE -ne 0) { $failed += "test_windows_hidpi" }
+          foreach ($t in "smoke_test", "features_test", "ocr_test", "translate_test", "light_test",
+                         "updater_test", "update_app_test", "channel_sign_test") {
+            Write-Host "::group::$t"
+            if ($t -in "smoke_test", "features_test", "ocr_test", "translate_test", "light_test", "updater_test") {
+              & $py -X utf8 "tests\$t.py" . "$outDir\$t"
+            } else {
+              & $py -X utf8 "tests\$t.py"
+            }
+            if ($LASTEXITCODE -ne 0) { $failed += $t }
+            Write-Host "::endgroup::"
+          }
+          if ($failed) { throw "Не прошли: $($failed -join ', ')" }
+
+      # The same code with version 9.9.9: the "next release" for the update test.
+      - name: Вторая сборка с другим номером версии
+        shell: pwsh
+        run: |
+          python packaging/stage_windows.py winbuild/next
+          if ($LASTEXITCODE -ne 0) { throw "Раскладка второй сборки не удалась" }
+          $init = "winbuild/next/clipshot/__init__.py"
+          $text = (Get-Content $init -Raw) -replace '(?m)^__version__ = "[^"]+"', '__version__ = "9.9.9"'
+          Set-Content $init $text -NoNewline -Encoding utf8NoBOM
+          Push-Location winbuild/next
+          python packaging/stamp_version.py
+          if ($LASTEXITCODE -ne 0) { throw "stamp_version.py не удался" }
+          powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build.ps1
+          if ($LASTEXITCODE -ne 0) { throw "build.ps1 второй сборки завершился с ошибкой" }
+          Pop-Location
+
+      - name: Установка, обновление при работающей программе, сбои, удаление
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem winbuild/ClipSD/dist/*-Setup.exe)[0].FullName
+          $next  = (Get-ChildItem winbuild/next/dist/ClipSD-9.9.9-Setup.exe)[0].FullName
+          pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/windows-exe/install_test.ps1 `
+            -Setup $setup -SetupNext $next -LogDir winbuild/ClipSD/test-out/install
+          if ($LASTEXITCODE -ne 0) { throw "Проверка установки и обновления не прошла" }
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        if: always()
+        with:
+          name: ClipSD-Setup
+          path: |
+            winbuild/ClipSD/dist/*-Setup.exe
+            winbuild/ClipSD/dist/SHA256SUMS-release-windows
+            winbuild/ClipSD/test-out/**
+          if-no-files-found: warn
+
+      # Preview ("проба") build: on a push to a branch proba/<version> (the version comes from the branch
+      # name) or on a manual run with "preview". After the ordinary installer is uploaded. A separate copy
+      # of the sources (packaging/preview_build.py); build.ps1 checks that the built exe says "build: preview".
+      - name: Пробная сборка (канал proba)
+        if: (startsWith(github.ref, 'refs/heads/proba/') || (github.event_name == 'workflow_dispatch' && inputs.preview)) && !startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          PROBA_VERSION: ${{ inputs.version }}
+        run: |
+          $v = "$env:PROBA_VERSION"
+          if ($env:GITHUB_REF -like "refs/heads/proba/*") { $v = $env:GITHUB_REF.Substring("refs/heads/proba/".Length) }
+          $pargs = @("packaging/preview_build.py", "$env:RUNNER_TEMP/proba")
+          if ($v) { $pargs += @("--version", $v) }
+          python @pargs
+          if ($LASTEXITCODE -ne 0) { throw "preview_build.py не удался" }
+          python "$env:RUNNER_TEMP/proba/packaging/stage_windows.py" winbuild/proba
+          if ($LASTEXITCODE -ne 0) { throw "Раскладка пробной сборки не удалась" }
+          Push-Location winbuild/proba
+          powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build.ps1
+          if ($LASTEXITCODE -ne 0) { throw "build.ps1 пробной сборки завершился с ошибкой" }
+          Pop-Location
+          $setup = (Get-ChildItem winbuild/proba/dist/*-Setup.exe)[0]
+          Rename-Item $setup.FullName ($setup.Name -replace '-Setup\.exe$', '-proba-Setup.exe')
+          Get-ChildItem winbuild/proba/dist/*-proba-Setup.exe | Format-List Name, Length
+
+      - name: Пробная установка, настоящая поверх неё (9.9.9), удаление
+        if: (startsWith(github.ref, 'refs/heads/proba/') || (github.event_name == 'workflow_dispatch' && inputs.preview)) && !startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $proba = (Get-ChildItem winbuild/proba/dist/*-proba-Setup.exe)[0].FullName
+          $next  = (Get-ChildItem winbuild/next/dist/ClipSD-9.9.9-Setup.exe)[0].FullName
+          pwsh -NoProfile -ExecutionPolicy Bypass -File packaging/windows-exe/preview_test.ps1 `
+            -SetupPreview $proba -SetupRelease $next -LogDir winbuild/proba/test-out
+          if ($LASTEXITCODE -ne 0) { throw "Проверка пробной установки не прошла" }
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        if: (startsWith(github.ref, 'refs/heads/proba/') || (github.event_name == 'workflow_dispatch' && inputs.preview)) && !startsWith(github.ref, 'refs/tags/')
+        with:
+          name: ClipSD-Setup-proba
+          path: winbuild/proba/dist/*-proba-Setup.exe
+          if-no-files-found: error

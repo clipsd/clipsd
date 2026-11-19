@@ -1,0 +1,67 @@
+{
+  "translate_ui.all_copied": "所有译文已复制",
+  "translate_ui.all_done_screen": "整个屏幕已翻译完毕",
+  "translate_ui.all_done_snapshot": "整张截图已翻译完毕",
+  "translate_ui.already_running": "翻译正在进行",
+  "translate_ui.ask_screen": {
+    "other": "屏幕上有 {need} 个字符，今天还剩 {left}"
+  },
+  "translate_ui.ask_snapshot": {
+    "other": "截图中有 {need} 个字符，今天还剩 {left}"
+  },
+  "translate_ui.banner_tip": "用鼠标选中文字，译文可以拖到一旁。\n{usage}",
+  "translate_ui.busy": "正在翻译…",
+  "translate_ui.close_esc": "关闭（Esc）",
+  "translate_ui.command_copied": "命令已复制",
+  "translate_ui.connect_google": "连接 Google…",
+  "translate_ui.copied": "译文已复制到剪贴板",
+  "translate_ui.copy_all": "复制全部",
+  "translate_ui.copy_all_menu": "复制所有译文",
+  "translate_ui.copy_command": "复制命令",
+  "translate_ui.done_count": {
+    "other": "已翻译：{m} 段"
+  },
+  "translate_ui.email_button": "填写邮箱：每天 50,000",
+  "translate_ui.email_menu": "填写邮箱：每天 50,000…",
+  "translate_ui.email_short": "每天 50,000…",
+  "translate_ui.esc_cancel": "Esc：取消",
+  "translate_ui.failed": "翻译失败",
+  "translate_ui.full_wait_screen": "正在翻译整个屏幕…",
+  "translate_ui.full_wait_snapshot": "正在翻译整张截图…",
+  "translate_ui.head_long": "屏幕翻译：用鼠标选中文字",
+  "translate_ui.head_mid": "屏幕翻译：选中文字",
+  "translate_ui.head_short": "用鼠标选中文字",
+  "translate_ui.hint_exit": "退出：Esc 或“关闭”",
+  "translate_ui.hint_select": "用鼠标选中要翻译的文字",
+  "translate_ui.lang_auto": "跟随系统（{lang}）",
+  "translate_ui.lang_auto_ui": "与程序语言相同（{lang}）",
+  "translate_ui.left_month": "本月剩余 {left} / {limit}",
+  "translate_ui.left_today": "今天剩余 {left} / {limit}",
+  "translate_ui.left_unknown": "剩余额度未知",
+  "translate_ui.link_copied": "链接已复制",
+  "translate_ui.more": "更多",
+  "translate_ui.no_registration": "无需注册，也无需验证邮箱。",
+  "translate_ui.no_second_engine": "未连接第二个翻译服务：“取消”不会消耗额度。",
+  "translate_ui.not_found_screen": "屏幕上未找到文字",
+  "translate_ui.not_found_snapshot": "截图中未找到文字",
+  "translate_ui.original": "原文",
+  "translate_ui.partial": {
+    "other": "已翻译，额度允许的部分：{m} 段"
+  },
+  "translate_ui.partial_of": {
+    "other": "已翻译至额度上限：{m}/{k} 段"
+  },
+  "translate_ui.service": "服务：{name}",
+  "translate_ui.setup_note": "点击“连接 Google…”：会打开带步骤和密钥输入框的窗口。或者改用 MyMemory 翻译。",
+  "translate_ui.to_lang": "译为：{lang}",
+  "translate_ui.translate_more": "再翻译一段",
+  "translate_ui.translate_partial": "翻译额度允许的部分",
+  "translate_ui.translation": "译文",
+  "translate_ui.unexpected_error": "翻译时出现意外错误",
+  "translate_ui.use_mymemory": "用 MyMemory 翻译",
+  "translate_ui.via_mymemory": "正在通过 MyMemory 翻译…",
+  "translate_ui.view_card": "卡片",
+  "translate_ui.view_overlay": "覆盖原文",
+  "translate_ui.window_title": "ClipSD：翻译",
+  "translate_ui.with_skipped": "{text}。{skipped}"
+}

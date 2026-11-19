@@ -1,0 +1,72 @@
+{
+  "translate_ui.all_copied": "Всички преводи са копирани",
+  "translate_ui.all_done_screen": "Целият екран вече е преведен",
+  "translate_ui.all_done_snapshot": "Цялата снимка вече е преведена",
+  "translate_ui.already_running": "Преводът вече върви",
+  "translate_ui.ask_screen": {
+    "one": "На екрана има {need} знак, за днес остават {left}",
+    "other": "На екрана има {need} знака, за днес остават {left}"
+  },
+  "translate_ui.ask_snapshot": {
+    "one": "На снимката има {need} знак, за днес остават {left}",
+    "other": "На снимката има {need} знака, за днес остават {left}"
+  },
+  "translate_ui.banner_tip": "Изберете текст с мишката, преводът може да се премести встрани.\n{usage}",
+  "translate_ui.busy": "Превеждам…",
+  "translate_ui.close_esc": "Затвори (Esc)",
+  "translate_ui.command_copied": "Командата е копирана",
+  "translate_ui.connect_google": "Свържи Google…",
+  "translate_ui.copied": "Преводът е копиран в клипборда",
+  "translate_ui.copy_all": "Копирай всичко",
+  "translate_ui.copy_all_menu": "Копирай всички преводи",
+  "translate_ui.copy_command": "Копирай командата",
+  "translate_ui.done_count": {
+    "one": "Преведено: {m} абзац",
+    "other": "Преведени: {m} абзаца"
+  },
+  "translate_ui.email_button": "Посочи имейл: 50 000 на ден",
+  "translate_ui.email_menu": "Посочи имейл: 50 000 на ден…",
+  "translate_ui.email_short": "50 000 на ден…",
+  "translate_ui.esc_cancel": "Esc: отказ",
+  "translate_ui.failed": "Преводът не успя",
+  "translate_ui.full_wait_screen": "Превеждам целия екран…",
+  "translate_ui.full_wait_snapshot": "Превеждам цялата снимка…",
+  "translate_ui.head_long": "Превод от екрана: изберете текст с мишката",
+  "translate_ui.head_mid": "Превод от екрана: изберете текст",
+  "translate_ui.head_short": "Изберете текст с мишката",
+  "translate_ui.hint_exit": "Изход: Esc или „Затвори“",
+  "translate_ui.hint_select": "Изберете с мишката текст за превод",
+  "translate_ui.lang_auto": "Като в системата ({lang})",
+  "translate_ui.lang_auto_ui": "Като езика на програмата ({lang})",
+  "translate_ui.left_month": "Остават {left} от {limit} този месец",
+  "translate_ui.left_today": "Остават {left} от {limit} днес",
+  "translate_ui.left_unknown": "Остатъкът от лимита е неизвестен",
+  "translate_ui.link_copied": "Връзката е копирана",
+  "translate_ui.more": "Още",
+  "translate_ui.no_registration": "Не е нужно да се регистрирате или да потвърждавате имейла.",
+  "translate_ui.no_second_engine": "Втората услуга за превод не е свързана: „Отказ“ не харчи лимит.",
+  "translate_ui.not_found_screen": "Текст на екрана не е намерен",
+  "translate_ui.not_found_snapshot": "Текст на снимката не е намерен",
+  "translate_ui.original": "Оригинал",
+  "translate_ui.partial": {
+    "one": "Преведено, доколкото стигна лимитът: {m} абзац",
+    "other": "Преведено, доколкото стигна лимитът: {m} абзаца"
+  },
+  "translate_ui.partial_of": {
+    "one": "Преведено до изчерпване на лимита: {m} от {k} абзац",
+    "other": "Преведено до изчерпване на лимита: {m} от {k} абзаца"
+  },
+  "translate_ui.service": "Услуга: {name}",
+  "translate_ui.setup_note": "Натиснете „Свържи Google…“: ще се отвори прозорец със стъпки и поле за ключа. Или преведете през MyMemory.",
+  "translate_ui.to_lang": "На: {lang}",
+  "translate_ui.translate_more": "Преведи още късче",
+  "translate_ui.translate_partial": "Преведи, доколкото стига",
+  "translate_ui.translation": "Превод",
+  "translate_ui.unexpected_error": "Неочаквана грешка при превода",
+  "translate_ui.use_mymemory": "Преведи през MyMemory",
+  "translate_ui.via_mymemory": "Превеждам през MyMemory…",
+  "translate_ui.view_card": "Картичка",
+  "translate_ui.view_overlay": "Върху текста",
+  "translate_ui.window_title": "ClipSD: превод",
+  "translate_ui.with_skipped": "{text}. {skipped}"
+}

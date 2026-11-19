@@ -1,0 +1,7 @@
+# Public key of the proba channel (preview builds only, the owner's own tests). Not a secret.
+# Made 04.11.2026 with: python3 tools/channel_sign.py keygen --private ~/.config/clipsd-dev/proba-channel.key
+# The private key stays in ~/.config/clipsd-dev/proba-channel.key (mode 600, outside any repository); it signs
+# only proba documents. Stable and test never trust this key: it is embedded as forbidden in
+# clipshot/update_channel.py (PREVIEW_ONLY_KEYS), and tools/release_check.py fails if this file and that list
+# differ or if the key appears in STABLE_PUBLIC_KEYS or TEST_PUBLIC_KEYS.
+SBq9Ms9skCqSpbhz2IUefATXQ8YZ0muE6/pnbuJUWKY=

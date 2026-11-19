@@ -1,0 +1,370 @@
+#!/usr/bin/env bash
+# ClipSD: version switch helper. Works without the program itself (pure bash, no Python).
+# Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко). SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Usage: clipsd-switch [--detach] --from A --to B [--timeout 60] [--exit-wait 60] [--socket PATH]
+#        clipsd-switch --ask-quit [--socket PATH]     (install.sh, uninstall.sh: prints ok | busy:<reason> | none)
+#        clipsd-switch [--detach] --resume              (the program at start: finish a switch cut by a power loss)
+#
+# 1. asks the running program to quit: command "quit-for-update" over its local socket (--socket,
+#    default as in clipshot/ipc.py) whenever the socket exists, even if no process of version A is
+#    recognised (HOME reached through a symbolic link, a renamed folder). Reply "ok": it saves its
+#    settings and quits; the helper waits until no process of A is left and the socket stops answering.
+#    Reply "busy": quitting would lose work (an editor with unsaved changes, text being typed): nothing
+#    is switched or stopped, versions/B stays for the program to retry later; exit code 4.
+#    The program is stopped by force only as the last resort: it never answered on the socket
+#    (hung) and did not exit within --exit-wait seconds (60 by default).
+# 2. atomically points ~/.local/share/clipsd/current at versions/B
+# 3. starts the program: `systemctl --user restart clipsd.service` if the unit exists,
+#    otherwise setsid + nohup ~/.local/bin/clipsd
+# 4. waits up to --timeout seconds for the mark ~/.local/state/clipsd/started-B written by the program
+# 5. mark found: removes versions/A (and any other old version), refreshes the menu entry, the icons
+#    and a GNOME extension put there by the package from versions/B (install.sh --refresh-integration);
+#    no mark: points current back at A, starts A, keeps versions/B for diagnosis
+# Result is always written to ~/.local/state/clipsd/update-result.json; "reason" is a short code
+# ([a-z0-9_]: started, busy, no_start_mark, cannot_return, cannot_switch, missing_version, lock_busy)
+# that the program passes to its statistics as it is; bad arguments (bad_version) only go to update.log.
+#
+# The caller must start this script OUTSIDE the service cgroup, otherwise `systemctl restart`
+# kills the helper together with the program. Use --detach (systemd-run --user --collect, or setsid);
+# systemd-run gets HOME and the XDG folders of the caller (--setenv), the user manager may have others.
+# The program started by the helper runs as its own transient user service (clipsd-app-*) when the helper itself
+# runs inside systemd: otherwise it would belong to the helper's unit and be stopped together with it.
+# Before the switch the helper writes switch-pending (from, to); a power loss after the switch and before the start
+# mark leaves it behind, and the next start of the program runs --resume: wait for the mark, otherwise roll back.
+# Exit code: 0 switched, 3 rolled back, 2 bad arguments or nothing changed, 4 deferred (program busy).
+set -uo pipefail
+
+APP="${XDG_DATA_HOME:-$HOME/.local/share}/clipsd"
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/clipsd"
+BIN="$HOME/.local/bin/clipsd"
+UNIT="clipsd.service"
+UNIT_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$UNIT"
+
+default_socket() {  # same rule as clipshot/ipc.py socket_path()
+  if [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -d "$XDG_RUNTIME_DIR" ] && [ "${#XDG_RUNTIME_DIR}" -le 89 ]; then  # 89 + /clipsd.sock = 100
+    printf '%s\n' "$XDG_RUNTIME_DIR/clipsd.sock"; return
+  fi
+  local p="${XDG_CACHE_HOME:-$HOME/.cache}/clipsd/clipsd.sock"
+  [ "${#p}" -le 100 ] || p="${TMPDIR:-/tmp}/clipsd-$(id -u)/clipsd.sock"
+  printf '%s\n' "$p"
+}
+
+FROM="" TO="" TIMEOUT=60 EXIT_WAIT=60 DETACH=0 SOCK="" ASK_ONLY=0 RESUME=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --ask-quit) ASK_ONLY=1; shift ;;
+    --resume) RESUME=1; shift ;;
+    --from) FROM="${2:-}"; shift 2 ;;
+    --to) TO="${2:-}"; shift 2 ;;
+    --timeout) TIMEOUT="${2:-}"; shift 2 ;;
+    --exit-wait) EXIT_WAIT="${2:-}"; shift 2 ;;
+    --socket) SOCK="${2:-}"; shift 2 ;;
+    --detach) DETACH=1; shift ;;
+    *) echo "clipsd-switch: unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+[ -n "$SOCK" ] || SOCK="$(default_socket)"
+
+result() {  # $1 result, $2 reason code; writes update-result.json (FROM and TO are valid or empty here)
+  mkdir -p "$STATE" || return
+  local tmp="$STATE/.update-result.$$"
+  printf '{"from": "%s", "to": "%s", "result": "%s", "reason": "%s", "time": "%s"}\n' \
+    "$FROM" "$TO" "$1" "$2" "$(date -Is)" > "$tmp" && mv -f "$tmp" "$STATE/update-result.json"
+  log "result=$1 reason=$2"
+}
+log() { mkdir -p "$STATE" && printf '%s %s\n' "$(date -Is)" "$*" >> "$STATE/update.log"; }
+
+valid_ver() { [[ "$1" =~ ^[0-9A-Za-z][0-9A-Za-z._+-]*$ ]]; }
+PENDING="$STATE/switch-pending"
+if [ "$RESUME" = 1 ]; then
+  read -r FROM TO _ < "$PENDING" 2>/dev/null || exit 0
+fi
+if [ "$ASK_ONLY" != 1 ]; then
+  # bad arguments go to the log only: update-result.json may still hold the result of a real attempt
+  if ! valid_ver "$FROM" || ! valid_ver "$TO" || [ "$FROM" = "$TO" ]; then
+    echo "usage: clipsd-switch --from A --to B (two different versions)" >&2
+    log "result=error reason=bad_version"; exit 2
+  fi
+  [[ "$TIMEOUT" =~ ^[0-9]+$ && "$EXIT_WAIT" =~ ^[0-9]+$ ]] || { echo "clipsd-switch: bad --timeout/--exit-wait" >&2; exit 2; }
+fi
+
+# The user manager's environment may differ from the program's: pass the folders the program uses and what a
+# window needs to open (display, session bus, session type, desktop, language).
+env_args() {
+  printf '%s\n' --setenv=HOME="$HOME" \
+    --setenv=XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}" \
+    --setenv=XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}" \
+    --setenv=XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}" \
+    --setenv=XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+  local name
+  for name in XDG_RUNTIME_DIR DISPLAY WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS XAUTHORITY XDG_SESSION_TYPE \
+              XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP DESKTOP_SESSION QT_QPA_PLATFORM LANG LANGUAGE LC_ALL PATH; do
+    [ -n "${!name:-}" ] && printf '%s\n' "--setenv=$name=${!name}"
+  done
+  return 0
+}
+
+if [ "$DETACH" = 1 ] && [ "$ASK_ONLY" != 1 ]; then
+  self="$(readlink -f "$0")"
+  mapfile -t envs < <(env_args)
+  if [ "$RESUME" = 1 ]; then args=(--resume --timeout "$TIMEOUT" --socket "$SOCK")
+  else args=(--from "$FROM" --to "$TO" --timeout "$TIMEOUT" --exit-wait "$EXIT_WAIT" --socket "$SOCK"); fi
+  # KillMode=process: whatever the helper starts is never stopped together with the helper's unit
+  if command -v systemd-run >/dev/null 2>&1 &&
+     systemd-run --user --collect --quiet --unit="clipsd-update-$$" --property=KillMode=process "${envs[@]}" \
+       "$self" "${args[@]}" 2>/dev/null; then
+    exit 0
+  fi
+  setsid -f "$self" "${args[@]}" >/dev/null 2>&1 </dev/null
+  exit 0
+fi
+
+# Ask the running program to quit: prints ok | busy | none (no socket, no answer, no tool to ask).
+# python3 is on practically every desktop; without it the old (running, known good) version's own
+# entry point answers the same question (clipsd --quit-for-update), then the new one's.
+ask_quit() {
+  local reply="" bin
+  if [ ! -S "$SOCK" ]; then echo none; return; fi
+  if command -v python3 >/dev/null 2>&1; then
+    reply="$(timeout 15 python3 -I -S -c '
+import socket, sys
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.settimeout(10)
+data = b""
+try:
+    s.connect(sys.argv[1])
+    s.sendall(b"quit-for-update")
+    while b"\n" not in data and len(data) < 64:
+        chunk = s.recv(64)
+        if not chunk:
+            break
+        data += chunk
+except OSError:
+    pass
+print(data.decode("ascii", "replace").strip() or "none")
+' "$SOCK" 2>/dev/null)"
+  else
+    for bin in ${FROM:+"$APP/versions/$FROM/clipsd"} ${TO:+"$APP/versions/$TO/clipsd"} "$BIN"; do
+      [ -x "$bin" ] || continue
+      reply="$(timeout 15 "$bin" --quit-for-update 2>/dev/null | tail -n 1)"
+      [ -n "$reply" ] && break
+    done
+  fi
+  # busy carries the reason after a colon: busy:unsaved, busy:text, busy:selector, busy:dialog
+  case "$reply" in ok|busy|busy:[a-z]*) echo "$reply" ;; *) echo none ;; esac
+}
+
+# 0 while something accepts connections on the socket (a program that has not quit yet). Connecting
+# without a command is ignored by ClipSD. Without python3 the socket file alone counts.
+sock_alive() {
+  [ -S "$SOCK" ] || return 1
+  command -v python3 >/dev/null 2>&1 || return 0
+  timeout 5 python3 -I -S -c '
+import socket, sys
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.settimeout(2)
+try:
+    s.connect(sys.argv[1])
+except OSError:
+    sys.exit(1)
+' "$SOCK" 2>/dev/null
+}
+
+if [ "$ASK_ONLY" = 1 ]; then
+  # "ok" is printed once the program has quit (nothing answers on the socket), at most 30 s later
+  answer="$(ask_quit)"
+  if [ "$answer" = ok ]; then
+    i=0; while sock_alive && [ "$i" -lt 60 ]; do sleep 0.5; i=$((i + 1)); done
+  fi
+  echo "$answer"
+  exit 0
+fi
+
+# Single helper at a time
+mkdir -p "$STATE"
+LOCK="$STATE/update.lock"
+# 0 while the helper that holds the lock is alive: its pid is in the lock, and that process is a clipsd-switch.
+# A lock without a pid (an older helper) counts as alive for 10 minutes.
+lock_alive() {
+  local pid
+  pid="$(cat "$LOCK/pid" 2>/dev/null)"
+  if [[ "$pid" =~ ^[0-9]+$ ]]; then
+    kill -0 "$pid" 2>/dev/null && tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -q 'clipsd-switch'
+    return
+  fi
+  [ -z "$(find "$LOCK" -maxdepth 0 -mmin +10 2>/dev/null)" ]
+}
+if ! mkdir "$LOCK" 2>/dev/null; then
+  if lock_alive; then result error lock_busy; exit 2; fi
+  # Take over a stale lock without a race: only the helper that creates $LOCK.takeover (mkdir is atomic) may
+  # remove and recreate the lock, and it checks again inside. A takeover folder left by a helper that died in
+  # these few lines is older than a minute and removed first.
+  [ -z "$(find "$LOCK.takeover" -maxdepth 0 -mmin +1 2>/dev/null)" ] || rmdir "$LOCK.takeover" 2>/dev/null
+  mkdir "$LOCK.takeover" 2>/dev/null || { result error lock_busy; exit 2; }
+  if lock_alive; then rmdir "$LOCK.takeover"; result error lock_busy; exit 2; fi
+  log "stale lock of a helper that is gone (reboot, killed): taken over"
+  rm -rf "$LOCK"
+  if ! mkdir "$LOCK" 2>/dev/null; then rmdir "$LOCK.takeover"; result error lock_busy; exit 2; fi
+  echo "$$" > "$LOCK/pid"
+  rmdir "$LOCK.takeover"
+fi
+echo "$$" > "$LOCK/pid"
+trap 'rm -rf "$LOCK"' EXIT
+
+[ -x "$APP/versions/$TO/clipsd" ] || { result error missing_version; exit 2; }
+
+# The program folder as written ($HOME may be a symbolic link) and as resolved: /proc shows the
+# resolved path of the executable, a command line may show either.
+APP_REAL="$(readlink -f "$APP" 2>/dev/null || printf '%s' "$APP")"
+
+# pids of processes that run from versions/$1, without this helper: the executable itself lies there
+# (/proc/<pid>/exe, the PyInstaller program), or a shell or Python runs a script from there as its first
+# argument (/proc/<pid>/cmdline). A command that only mentions the folder (an editor with a file of it) is no match.
+pids_of() {
+  local base dir pid arg0 arg1
+  for base in "$APP" "$APP_REAL"; do
+    dir="$base/versions/$1"
+    find /proc -maxdepth 2 -path '/proc/[0-9]*/exe' -lname "$dir/*" 2>/dev/null | sed -n 's#^/proc/\([0-9]*\)/exe$#\1#p'
+    if command -v pgrep >/dev/null 2>&1; then
+      for pid in $(pgrep -u "$(id -u)" -f -- "$dir/" 2>/dev/null); do
+        { IFS= read -r -d '' arg0; IFS= read -r -d '' arg1; } < "/proc/$pid/cmdline" 2>/dev/null || true
+        case "$arg0" in "$dir"/*) echo "$pid"; continue ;; esac
+        # this helper and its subshells (bash .../clipsd-switch ...) are never the program
+        case "$(basename -- "${arg1:-x}")" in clipsd-switch|install.sh|uninstall.sh) continue ;; esac
+        case "$(basename -- "${arg0:-x}")" in
+          bash|sh|dash|python|python3|python3.*) case "$arg1" in "$dir"/*) echo "$pid" ;; esac ;;
+        esac
+      done
+    fi
+    [ "$APP_REAL" != "$APP" ] || break
+  done | grep -vx "$$" | sort -u
+}
+wait_exit() {  # $1 version, $2 seconds
+  local i=0 max=$(( $2 * 2 ))
+  while [ -n "$(pids_of "$1")" ] && [ "$i" -lt "$max" ]; do sleep 0.5; i=$((i + 1)); done
+  [ -z "$(pids_of "$1")" ]
+}
+quit_done() { [ -z "$(pids_of "$FROM")" ] && ! sock_alive; }
+wait_quit() {  # $1 seconds: until no process of FROM is left and nothing answers on the socket
+  local i=0 max=$(( $1 * 2 ))
+  while ! quit_done && [ "$i" -lt "$max" ]; do sleep 0.5; i=$((i + 1)); done
+  quit_done
+}
+have_unit() { [ -f "$UNIT_FILE" ] && command -v systemctl >/dev/null 2>&1; }
+set_current() {  # atomic: temporary link + rename over `current`
+  local tmp="$APP/.current.$$"
+  ln -sfn "versions/$1" "$tmp" && mv -T "$tmp" "$APP/current"
+}
+start_program() {
+  if have_unit; then
+    systemctl --user restart "$UNIT" >/dev/null 2>&1 && return 0
+    log "systemctl restart failed, starting directly"
+  fi
+  # Inside a systemd unit (systemd-run started this helper) a child would be stopped with the unit: the
+  # program gets its own transient service. Otherwise (setsid) a new session is enough.
+  if [ -n "${INVOCATION_ID:-}" ] && command -v systemd-run >/dev/null 2>&1; then
+    local envs
+    mapfile -t envs < <(env_args)
+    systemd-run --user --collect --quiet --unit="clipsd-app-$(date +%s)-$$" "${envs[@]}" "$BIN" \
+      >/dev/null 2>&1 </dev/null && { log "started as service clipsd-app-*"; return 0; }
+    log "systemd-run for the program failed, starting in a new session"
+  fi
+  setsid nohup "$BIN" >/dev/null 2>&1 </dev/null &
+}
+stop_version() {  # $1 version: stop whatever still runs from it
+  have_unit && systemctl --user stop "$UNIT" >/dev/null 2>&1
+  wait_exit "$1" 5 && return 0
+  local p; for p in $(pids_of "$1"); do kill "$p" 2>/dev/null; done
+  wait_exit "$1" 5 || for p in $(pids_of "$1"); do kill -9 "$p" 2>/dev/null; done
+}
+
+finish_ok() {  # the new version confirmed its start: old versions go only now
+  local d v f
+  for d in "$APP"/versions/*/; do
+    v="$(basename "$d")"
+    [ "$v" = "$TO" ] || rm -rf "$APP/versions/$v"
+  done
+  for f in "$STATE"/started-*; do
+    [ -e "$f" ] && [ "$(basename "$f")" != "started-$TO" ] && rm -f "$f"
+  done
+  rm -f "$PENDING"
+  # menu entry, icons and the package's GNOME extension come from the new version, as install.sh does
+  if [ -f "$APP/versions/$TO/install.sh" ]; then
+    bash "$APP/versions/$TO/install.sh" --refresh-integration >> "$STATE/update.log" 2>&1 ||
+      log "refresh of the menu entry and the extension failed (not critical)"
+  fi
+  result ok started
+  exit 0
+}
+roll_back() {
+  log "no start mark for $TO within ${TIMEOUT}s, rolling back to $FROM"
+  stop_version "$TO"
+  if [ -d "$APP/versions/$FROM" ] && set_current "$FROM"; then
+    sync
+    rm -f "$PENDING"
+    start_program
+    result rolled_back no_start_mark
+  else
+    rm -f "$PENDING"
+    result error cannot_return
+  fi
+  exit 3
+}
+wait_mark() {  # 0 when started-$TO appears within TIMEOUT seconds
+  local i=0 max=$(( TIMEOUT * 2 ))
+  while [ "$i" -lt "$max" ]; do
+    [ -f "$STATE/started-$TO" ] && return 0
+    sleep 0.5; i=$((i + 1))
+  done
+  return 1
+}
+
+if [ "$RESUME" = 1 ]; then
+  # a switch was cut (power loss, the helper killed): current may already point at the new version
+  if [ "$(readlink "$APP/current" 2>/dev/null)" != "versions/$TO" ]; then
+    log "resume: current is not versions/$TO, the switch never happened; nothing to do"
+    rm -f "$PENDING"; exit 0
+  fi
+  log "resume from=$FROM to=$TO: waiting for the start mark"
+  wait_mark && finish_ok
+  roll_back
+fi
+
+log "start from=$FROM to=$TO"
+
+# 1. ask the program to quit; never stop it while it may hold unsaved work. The socket is asked
+#    whenever it exists: a process that pids_of does not recognise must still be asked, not killed.
+if [ -S "$SOCK" ] || [ -n "$(pids_of "$FROM")" ]; then
+  answer="$(ask_quit)"
+  log "quit-for-update: $answer"
+  case "$answer" in busy*) result deferred busy; exit 4 ;; esac
+  if ! wait_quit "$EXIT_WAIT"; then
+    # still running: no answer at first (starting up, or quitting on its own), or a new edit began
+    # right after "ok". One more question before any force.
+    answer="$(ask_quit)"
+    log "quit-for-update (again): $answer"
+    case "$answer" in busy*) result deferred busy; exit 4 ;; esac
+    [ "$answer" = ok ] && wait_quit 10
+    if ! quit_done; then
+      # last resort: hung (no answer on the socket) or said ok but did not exit for ${EXIT_WAIT}s
+      log "program $FROM still running after ${EXIT_WAIT}s (answer: $answer), stopping it"
+      stop_version "$FROM"
+    fi
+  fi
+fi
+
+# 2. atomic switch; switch-pending first, both on disk before the link changes (a power loss in between leaves a
+#    pending switch that the next start finishes or rolls back)
+rm -f "$STATE/started-$TO"
+printf '%s %s\n' "$FROM" "$TO" > "$PENDING.tmp" && mv -f "$PENDING.tmp" "$PENDING"
+sync
+if ! set_current "$TO"; then rm -f "$PENDING"; result error cannot_switch; exit 2; fi
+sync
+
+# 3. start
+start_program
+
+# 4. wait for the start mark: 5a success or 5b rollback
+wait_mark && finish_ok
+roll_back

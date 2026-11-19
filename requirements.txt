@@ -1,0 +1,7 @@
+# ClipSD: what a run from source needs (python3 -m clipshot). Builds use the exact pinned lists with hashes:
+# packaging/requirements-build-linux.txt and packaging/requirements-build-windows.txt.
+PyQt6>=6.5
+python-xlib>=0.33; sys_platform == "linux"
+fonttools>=4.40; sys_platform == "linux"
+# signature check of the update channel (clipshot/update_channel.py)
+cryptography>=41

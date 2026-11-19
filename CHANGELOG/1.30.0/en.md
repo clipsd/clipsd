@@ -1,0 +1,5 @@
+- ClipSD now updates itself. Once a day it checks for a new version and offers to install it: "Update", "Later" or "Skip this version". To check right away: tray icon menu, "Check for updates". Automatic checks can be turned off in Settings, section "Start".
+- Updates are verified by a digital signature and a checksum. If a new version does not start, the previous one comes back by itself.
+- With unsaved marks in the editor the update waits until the editor is closed.
+- Linux: a ready-made build, no sudo and no internet needed to install; Python and Qt are inside.
+- Settings of the previous version are taken over automatically (as a copy; the original stays).

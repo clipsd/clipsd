@@ -1,0 +1,3 @@
+{
+  "grab.wayland_failed": "Impossibile catturare lo schermo con Wayland: GNOME Shell e il portale degli screenshot hanno rifiutato, e non sono disponibili strumenti esterni (grim, spectacle, gnome-screenshot)."
+}

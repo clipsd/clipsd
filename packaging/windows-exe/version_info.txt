@@ -1,0 +1,18 @@
+VSVersionInfo(
+  ffi=FixedFileInfo(filevers=(1, 31, 0, 0), prodvers=(1, 31, 0, 0), mask=0x3f, flags=0x0, OS=0x40004,
+                    fileType=0x1, subtype=0x0, date=(0, 0)),
+  kids=[
+    StringFileInfo([
+      StringTable('041904B0', [
+        StringStruct('CompanyName', 'Sergey Dayneko'),
+        StringStruct('FileDescription', 'ClipSD - снимки экрана с редактором'),
+        StringStruct('FileVersion', '1.31.0'),
+        StringStruct('InternalName', 'ClipSD'),
+        StringStruct('LegalCopyright', '(C) 2026 Sergey Dayneko, GPL-3.0-or-later'),
+        StringStruct('OriginalFilename', 'ClipSD-app.exe'),
+        StringStruct('ProductName', 'ClipSD'),
+        StringStruct('ProductVersion', '1.31.0')])
+    ]),
+    VarFileInfo([VarStruct('Translation', [0x0419, 1200])])
+  ]
+)

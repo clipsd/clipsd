@@ -1,0 +1,39 @@
+/* ClipSD launcher resources. Copyright (C) 2026 Sergey Dayneko. SPDX-License-Identifier: GPL-3.0-or-later
+ * Compiled by rc.exe from build.ps1 with /I pointing at this folder and at the folder with clipsd.ico.
+ * Keep this file ASCII: rc.exe reads it in the ANSI code page.
+ */
+#include <windows.h>
+#include "launcher_version.h"
+
+1 ICON "clipsd.ico"
+
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "clipsd_launcher.manifest"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION    LAUNCHER_VER_MAJOR, LAUNCHER_VER_MINOR, LAUNCHER_VER_PATCH, LAUNCHER_VER_BUILD
+ PRODUCTVERSION LAUNCHER_VER_MAJOR, LAUNCHER_VER_MINOR, LAUNCHER_VER_PATCH, LAUNCHER_VER_BUILD
+ FILEFLAGSMASK  VS_FFI_FILEFLAGSMASK
+ FILEFLAGS      0x0L
+ FILEOS         VOS_NT_WINDOWS32
+ FILETYPE       VFT_APP
+ FILESUBTYPE    VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName",      "Sergey Dayneko"
+            VALUE "FileDescription",  "ClipSD"
+            VALUE "FileVersion",      LAUNCHER_VER_STR
+            VALUE "InternalName",     "ClipSD launcher"
+            VALUE "LegalCopyright",   "(C) 2026 Sergey Dayneko, GPL-3.0-or-later"
+            VALUE "OriginalFilename", "ClipSD.exe"
+            VALUE "ProductName",      "ClipSD"
+            VALUE "ProductVersion",   LAUNCHER_VER_STR
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

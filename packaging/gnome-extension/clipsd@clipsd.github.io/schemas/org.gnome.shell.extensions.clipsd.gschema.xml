@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ClipSD: горячие клавиши. (C) 2026 Sergey Dayneko, GPL-3.0-or-later -->
+<schemalist>
+  <schema id="org.gnome.shell.extensions.clipsd" path="/org/gnome/shell/extensions/clipsd/">
+    <key name="region-hotkey" type="as">
+      <default>['&lt;Alt&gt;w', '&lt;Alt&gt;Cyrillic_tse']</default>
+      <summary>Снимок области: все варианты сочетания (латинская и русская раскладка)</summary>
+    </key>
+    <key name="full-hotkey" type="as">
+      <default>[]</default>
+      <summary>Снимок всего экрана</summary>
+    </key>
+    <key name="command" type="s">
+      <default>''</default>
+      <summary>Команда ClipSD (пусто: ~/.local/bin/clipsd)</summary>
+    </key>
+  </schema>
+</schemalist>

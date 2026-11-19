@@ -1,0 +1,1 @@
+ClipSD: marker of a complete staging copy written by the installer (see packaging/windows-exe/ClipSD.iss).

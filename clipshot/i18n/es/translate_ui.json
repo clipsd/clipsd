@@ -1,0 +1,72 @@
+{
+  "translate_ui.all_copied": "Todas las traducciones copiadas",
+  "translate_ui.all_done_screen": "Toda la pantalla ya está traducida",
+  "translate_ui.all_done_snapshot": "Toda la captura ya está traducida",
+  "translate_ui.already_running": "Ya hay una traducción en curso",
+  "translate_ui.ask_screen": {
+    "one": "En la pantalla hay {need} carácter, hoy quedan {left}",
+    "other": "En la pantalla hay {need} caracteres, hoy quedan {left}"
+  },
+  "translate_ui.ask_snapshot": {
+    "one": "En la captura hay {need} carácter, hoy quedan {left}",
+    "other": "En la captura hay {need} caracteres, hoy quedan {left}"
+  },
+  "translate_ui.banner_tip": "Seleccione el texto con el ratón; la traducción se puede arrastrar a un lado.\n{usage}",
+  "translate_ui.busy": "Traduciendo…",
+  "translate_ui.close_esc": "Cerrar (Esc)",
+  "translate_ui.command_copied": "Comando copiado",
+  "translate_ui.connect_google": "Conectar Google…",
+  "translate_ui.copied": "Traducción copiada al portapapeles",
+  "translate_ui.copy_all": "Copiar todo",
+  "translate_ui.copy_all_menu": "Copiar todas las traducciones",
+  "translate_ui.copy_command": "Copiar comando",
+  "translate_ui.done_count": {
+    "one": "Traducido: {m} párrafo",
+    "other": "Traducidos: {m} párrafos"
+  },
+  "translate_ui.email_button": "Indicar correo: 50 000 al día",
+  "translate_ui.email_menu": "Indicar correo: 50 000 al día…",
+  "translate_ui.email_short": "50 000 al día…",
+  "translate_ui.esc_cancel": "Esc: cancelar",
+  "translate_ui.failed": "No se pudo traducir",
+  "translate_ui.full_wait_screen": "Traduciendo toda la pantalla…",
+  "translate_ui.full_wait_snapshot": "Traduciendo toda la captura…",
+  "translate_ui.head_long": "Pantalla: seleccione texto con el ratón",
+  "translate_ui.head_mid": "Traducción de pantalla: seleccione texto",
+  "translate_ui.head_short": "Seleccione con el ratón",
+  "translate_ui.hint_exit": "Salir: Esc o «Cerrar»",
+  "translate_ui.hint_select": "Seleccione con el ratón el texto que quiere traducir",
+  "translate_ui.lang_auto": "El del sistema ({lang})",
+  "translate_ui.lang_auto_ui": "Igual que el idioma del programa ({lang})",
+  "translate_ui.left_month": "Quedan {left} de {limit} este mes",
+  "translate_ui.left_today": "Quedan {left} de {limit} hoy",
+  "translate_ui.left_unknown": "Se desconoce el límite restante",
+  "translate_ui.link_copied": "Enlace copiado",
+  "translate_ui.more": "Más",
+  "translate_ui.no_registration": "No hace falta registrarse ni confirmar el correo.",
+  "translate_ui.no_second_engine": "El segundo servicio de traducción no está conectado: «Cancelar» no gasta el límite.",
+  "translate_ui.not_found_screen": "No se encontró texto en la pantalla",
+  "translate_ui.not_found_snapshot": "No se encontró texto en la captura",
+  "translate_ui.original": "Original",
+  "translate_ui.partial": {
+    "one": "Traducido hasta donde alcanzó el límite: {m} párrafo",
+    "other": "Traducidos hasta donde alcanzó el límite: {m} párrafos"
+  },
+  "translate_ui.partial_of": {
+    "one": "El límite solo permitió traducir {m} de {k} párrafo",
+    "other": "El límite solo permitió traducir {m} de {k} párrafos"
+  },
+  "translate_ui.service": "Servicio: {name}",
+  "translate_ui.setup_note": "Pulse «Conectar Google…»: se abrirá una ventana con los pasos y un campo para la clave. O traduzca con MyMemory.",
+  "translate_ui.to_lang": "A: {lang}",
+  "translate_ui.translate_more": "Traducir otro fragmento",
+  "translate_ui.translate_partial": "Traducir lo que alcance",
+  "translate_ui.translation": "Traducción",
+  "translate_ui.unexpected_error": "Error inesperado de traducción",
+  "translate_ui.use_mymemory": "Traducir con MyMemory",
+  "translate_ui.via_mymemory": "Traduciendo con MyMemory…",
+  "translate_ui.view_card": "En tarjeta",
+  "translate_ui.view_overlay": "Sobre el texto",
+  "translate_ui.window_title": "ClipSD: traducción",
+  "translate_ui.with_skipped": "{text}. {skipped}"
+}

@@ -1,0 +1,72 @@
+{
+  "translate_ui.all_copied": "Toutes les traductions sont copiées",
+  "translate_ui.all_done_screen": "Tout l'écran est déjà traduit",
+  "translate_ui.all_done_snapshot": "Toute la capture est déjà traduite",
+  "translate_ui.already_running": "Une traduction est déjà en cours",
+  "translate_ui.ask_screen": {
+    "one": "L'écran contient {need} caractère, il en reste {left} pour aujourd'hui",
+    "other": "L'écran contient {need} caractères, il en reste {left} pour aujourd'hui"
+  },
+  "translate_ui.ask_snapshot": {
+    "one": "La capture contient {need} caractère, il en reste {left} pour aujourd'hui",
+    "other": "La capture contient {need} caractères, il en reste {left} pour aujourd'hui"
+  },
+  "translate_ui.banner_tip": "Sélectionnez du texte à la souris ; vous pouvez déplacer la traduction.\n{usage}",
+  "translate_ui.busy": "Traduction en cours…",
+  "translate_ui.close_esc": "Fermer (Esc)",
+  "translate_ui.command_copied": "Commande copiée",
+  "translate_ui.connect_google": "Connecter Google…",
+  "translate_ui.copied": "Traduction copiée dans le presse-papiers",
+  "translate_ui.copy_all": "Tout copier",
+  "translate_ui.copy_all_menu": "Copier toutes les traductions",
+  "translate_ui.copy_command": "Copier la commande",
+  "translate_ui.done_count": {
+    "one": "Traduit : {m} paragraphe",
+    "other": "Traduit : {m} paragraphes"
+  },
+  "translate_ui.email_button": "E-mail : 50 000 par jour",
+  "translate_ui.email_menu": "Indiquer l'e-mail : 50 000 par jour…",
+  "translate_ui.email_short": "50 000/jour…",
+  "translate_ui.esc_cancel": "Esc : annuler",
+  "translate_ui.failed": "La traduction a échoué",
+  "translate_ui.full_wait_screen": "Traduction de tout l'écran…",
+  "translate_ui.full_wait_snapshot": "Traduction de toute la capture…",
+  "translate_ui.head_long": "Traduction d'écran : sélectionnez le texte",
+  "translate_ui.head_mid": "Traduction : sélectionnez le texte",
+  "translate_ui.head_short": "Sélectionnez le texte",
+  "translate_ui.hint_exit": "Quitter : Esc ou « Fermer »",
+  "translate_ui.hint_select": "Sélectionnez à la souris le texte à traduire",
+  "translate_ui.lang_auto": "Comme le système ({lang})",
+  "translate_ui.lang_auto_ui": "Langue du programme ({lang})",
+  "translate_ui.left_month": "Il reste {left} sur {limit} ce mois-ci",
+  "translate_ui.left_today": "Il reste {left} sur {limit} aujourd'hui",
+  "translate_ui.left_unknown": "Le reste de la limite est inconnu",
+  "translate_ui.link_copied": "Lien copié",
+  "translate_ui.more": "Plus",
+  "translate_ui.no_registration": "Pas besoin de vous inscrire ni de confirmer l'e-mail.",
+  "translate_ui.no_second_engine": "Le second service de traduction n'est pas connecté : « Annuler » ne consomme pas la limite.",
+  "translate_ui.not_found_screen": "Aucun texte trouvé à l'écran",
+  "translate_ui.not_found_snapshot": "Aucun texte trouvé sur la capture",
+  "translate_ui.original": "Original",
+  "translate_ui.partial": {
+    "one": "Traduit dans la limite disponible : {m} paragraphe",
+    "other": "Traduit dans la limite disponible : {m} paragraphes"
+  },
+  "translate_ui.partial_of": {
+    "one": "Traduction limitée par le quota : {m} sur {k} paragraphe",
+    "other": "Traduction limitée par le quota : {m} sur {k} paragraphes"
+  },
+  "translate_ui.service": "Service : {name}",
+  "translate_ui.setup_note": "Cliquez sur « Connecter Google… » : une fenêtre s'ouvre avec les étapes et le champ pour la clé. Ou traduisez via MyMemory.",
+  "translate_ui.to_lang": "En {lang}",
+  "translate_ui.translate_more": "Traduire un autre passage",
+  "translate_ui.translate_partial": "Traduire jusqu'à la limite",
+  "translate_ui.translation": "Traduction",
+  "translate_ui.unexpected_error": "Erreur de traduction inattendue",
+  "translate_ui.use_mymemory": "Traduire via MyMemory",
+  "translate_ui.via_mymemory": "Traduction via MyMemory…",
+  "translate_ui.view_card": "Carte",
+  "translate_ui.view_overlay": "Sur le texte",
+  "translate_ui.window_title": "ClipSD : traduction",
+  "translate_ui.with_skipped": "{text}. {skipped}"
+}
