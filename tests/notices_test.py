@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """THIRD-PARTY-NOTICES of the builds: packaging/linux/system_libs.py (prune, notices, glibc) on real libraries of
 this machine in a temporary folder, packaging/make_notices.py (texts, Windows DLL check). No build is made.
 The Linux part is skipped where readelf, ldconfig or dpkg are missing.

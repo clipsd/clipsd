@@ -1,6 +1,8 @@
 ClipSD: screenshots with an editor (Linux, ready-made build)
 Copyright (C) 2026 Sergey Dayneko. Licence: GNU GPL v3 or later, official text in the file LICENSE
   (a plain-language Russian summary is in LICENSE.ru.txt). По-русски: README.txt.
+  The name ClipSD and the program icon: modified versions by others use another name and not the ClipSD icon;
+  saying "based on ClipSD" is fine. Details: the file TRADEMARKS.txt (additional terms under section 7 of the GPL).
 
 Install (Ubuntu, Debian, Fedora, Mint and others; GNOME, KDE, XFCE; X11 or Wayland)
   1. Unpack the archive and open a terminal in the folder clipsd-<version>.

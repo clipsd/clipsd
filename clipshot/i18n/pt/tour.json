@@ -1,5 +1,9 @@
 {
+  "tour.alltools_text": "O botão «⋯» abre todas as ferramentas por grupo com as respetivas teclas. Útil quando a janela é estreita e os grupos estão recolhidos, e para aprender as teclas.",
+  "tour.alltools_title": "Todas as ferramentas",
   "tour.back": "Voltar",
+  "tour.bell_text": "Aparece um ponto no sino quando há novidades: saiu uma nova versão (botão «Atualizar»), o que há de novo na versão instalada, mensagens curtas do programa como «limite diário de tradução atingido».",
+  "tour.bell_title": "Notificações",
   "tour.canvas_text": "Desenhe direto na captura. O objeto que você acabou de desenhar continua selecionado: dá para movê-lo, arrastar as alças brancas, mudar a cor e a espessura.\n\nClique direito em um objeto: menu (cor, preenchimento, duplicar, trazer para a frente, excluir). Clique duplo no texto: editar. Delete: excluir. Esc: desmarcar.",
   "tour.canvas_title": "Captura",
   "tour.capture_text": "{hotkey} em qualquer programa: a tela congela, selecione uma área com o mouse e ela se abre aqui. Um clique simples sem seleção captura o monitor inteiro, Esc cancela.\n\nVocê pode trocar {hotkey} por qualquer atalho que preferir nas configurações; o botão abaixo as abre na hora.\n\nNa próxima vez que você pressionar {hotkey}, a área anterior fica destacada: Enter ou um clique dentro captura o mesmo lugar.\n\nO ícone do ClipSD na bandeja, perto do relógio: o clique direito abre um menu onde você pode repetir este tour.",
@@ -22,7 +26,7 @@
   "tour.step": "Passo {i} de {total}",
   "tour.text_color_text": "A cor do algarismo em um número e do texto em um balão. “Auto” escolhe branco ou preto conforme a cor de preenchimento.",
   "tour.text_color_title": "Cor do texto",
-  "tour.tools_text": "Da esquerda para a direita: seleção, balão, texto, número, setas (simples, dupla, à mão livre), linha suave, linha, retângulo, elipse, forma livre, marca-texto, lápis, desfoque, borracha, recorte. Cada ferramenta tem um atalho de uma letra, mostrado na dica ao passar o mouse.\n\nVocê pode reordenar os botões: pegue um com o mouse e arraste para um novo lugar. Um clique direito na fileira restaura a ordem padrão.",
+  "tour.tools_text": "As ferramentas estão agrupadas: setas e linhas, formas, textos, desenho, ocultar e apagar, texto da imagem. «Selecionar e mover», «Número» e «Recorte» têm sempre o seu próprio botão.\n\nUm clique no ícone de um grupo ativa a última ferramenta usada nele; a pequena seta ▾ à direita abre as restantes. Numa janela estreita os grupos recolhem-se num só botão e as teclas de letra funcionam sempre: aparecem na dica.\n\nA ordem muda-se arrastando: um grupo inteiro ou uma ferramenta dentro do seu grupo. Clique direito: ferramenta predefinida e ordem padrão.",
   "tour.tools_title": "Ferramentas",
   "tour.undo_text": "As setas para trás e para a frente desfazem e refazem (Ctrl+Z e Ctrl+Y).\n\nO botão com a imagem coloca outra imagem sobre a captura: da área de transferência (Ctrl+V), de um arquivo ou uma nova captura de uma área da tela. Você também pode simplesmente arrastar um arquivo para a janela.",
   "tour.undo_title": "Desfazer e inserir imagem"

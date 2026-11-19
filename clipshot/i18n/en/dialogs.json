@@ -1,5 +1,6 @@
 {
   "dialogs.close_tip": "Close (Esc)",
+  "dialogs.ok": "Got it",
   "dialogs.paste": "Paste",
   "dialogs.paste_tip": "Paste from the clipboard"
 }

@@ -1,6 +1,7 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later. Распространяется по лицензии GNU GPL v3 или более поздней,
 # без каких-либо гарантий; полный текст: файл LICENSE или <https://www.gnu.org/licenses/gpl-3.0.html>.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Иконки редактора, нарисованные кодом: не зависят от темы значков системы."""
 
 import math
@@ -245,8 +246,21 @@ def _draw(name: str, p: QPainter, c: str):
         p.setFont(font)
         p.setPen(QColor(c))
         p.drawText(QRectF(0, 0, SIZE, SIZE), Qt.AlignmentFlag.AlignCenter, "?")
+    elif name == "update":   # обновления: круговая стрелка
+        p.setPen(_pen(c, 2))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawArc(QRectF(4, 4, 16, 16), 40 * 16, 270 * 16)
+        _arrow_head(p, QPointF(18.6, 6.2), math.radians(40), 5, c)
+    elif name == "info":   # о программе: «i» в круге
+        p.setPen(_pen(c, 2))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawEllipse(QPointF(12, 12), 9.5, 9.5)
+        p.drawLine(QPointF(12, 11), QPointF(12, 17))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(c))
+        p.drawEllipse(QPointF(12, 7.4), 1.3, 1.3)
     elif name == "globe":   # выбор языка (1.31): узнаётся без чтения подписи
-        p.setPen(_pen(c, 1.7))
+        p.setPen(_pen(c, GLOBE_LINE))
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawEllipse(QPointF(12, 12), 9.5, 9.5)
         p.drawEllipse(QRectF(7.6, 2.5, 8.8, 19))
@@ -297,6 +311,31 @@ def _draw(name: str, p: QPainter, c: str):
         p.drawEllipse(center, 7.5, 7.5)
         p.setBrush(QColor("#ffffff") if c != "#ffffff" else QColor("#1e78ff"))
         p.drawEllipse(center, 3.2, 3.2)
+    elif name == "more":   # «⋯ Все инструменты» (1.32): три точки
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(c))
+        for x in (5, 12, 19):
+            p.drawEllipse(QPointF(x, 12), 2.1, 2.1)
+    elif name == "fit":   # «Вписать» значком (1.32, узкое окно): уголки рамки и стрелка по диагонали в обе стороны
+        p.setPen(_pen(c, 1.8))
+        for x, y, dx, dy in ((3, 3, 1, 1), (21, 3, -1, 1), (3, 21, 1, -1), (21, 21, -1, -1)):
+            p.drawPolyline(QPolygonF([QPointF(x, y + 4.5 * dy), QPointF(x, y), QPointF(x + 4.5 * dx, y)]))
+        p.drawLine(QPointF(9.5, 14.5), QPointF(14.5, 9.5))
+        _arrow_head(p, QPointF(16.8, 7.2), -math.pi / 4, 5, c)
+        _arrow_head(p, QPointF(7.2, 16.8), math.pi * 3 / 4, 5, c)
+    elif name == "bell":   # колокольчик уведомлений (1.32)
+        p.setPen(_pen(c, 1.8))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        path = QPainterPath(QPointF(5.5, 16.5))
+        path.lineTo(5.5, 11)
+        path.cubicTo(QPointF(5.5, 6.6), QPointF(8.4, 4), QPointF(12, 4))
+        path.cubicTo(QPointF(15.6, 4), QPointF(18.5, 6.6), QPointF(18.5, 11))
+        path.lineTo(18.5, 16.5)
+        path.lineTo(20, 18.5)
+        path.lineTo(4, 18.5)
+        path.closeSubpath()
+        p.drawPath(path)
+        p.drawArc(QRectF(9.6, 18.6, 4.8, 4.2), 180 * 16, 180 * 16)
     elif name == "save":
         p.setPen(_pen(c, 1.8))
         p.setBrush(Qt.BrushStyle.NoBrush)
@@ -312,7 +351,8 @@ def _draw(name: str, p: QPainter, c: str):
 ICON_COLOR = "#2e3436"   # цвет линий значков; оформление меняет его (светлый на тёмной теме)
 
 
-GLOBE_COLOR = "#3a9be8"   # глобус выбора языка: один голубой во всех окнах и темах
+GLOBE_COLOR = "#3a9be8"   # глобус выбора языка: один голубой во всех окнах и темах (themes.GLOBE)
+GLOBE_LINE = 2.0          # 1.32: линии глобуса толще (было 1.7): лучше читается
 
 
 def icon(name: str, color: str = None) -> QIcon:
@@ -386,3 +426,167 @@ def app_icon() -> QIcon:
     for size in (16, 22, 24, 32, 48, 64, 128, 256):
         icon.addPixmap(logo_pixmap(size))
     return icon
+
+
+# --- флаги языков (1.32): 24x16 со скруглением, как на сайте clipsd.github.io; рисуются кодом, без внешних файлов ---
+
+FLAG_W, FLAG_H, FLAG_R = 24, 16, 3
+
+
+def _star(cx, cy, r, rot=-90):
+    pts = []
+    for i in range(10):
+        ang = math.radians(rot + i * 36)
+        rr = r if i % 2 == 0 else r * 0.382
+        pts.append(QPointF(cx + rr * math.cos(ang), cy + rr * math.sin(ang)))
+    return QPolygonF(pts)
+
+
+def _flag_paint(p: QPainter, code: str):
+    """Флаг в прямоугольнике 24x16 (координаты как в SVG сайта)."""
+    def rect(x, y, w, h, color):
+        p.fillRect(QRectF(x, y, w, h), QColor(color))
+
+    def stripes_h(a, b, c):
+        for i, color in enumerate((a, b, c)):
+            rect(0, i * FLAG_H / 3, FLAG_W, FLAG_H / 3 + 0.01, color)
+
+    def stripes_v(a, b, c):
+        for i, color in enumerate((a, b, c)):
+            rect(i * 8, 0, 8.01, FLAG_H, color)
+
+    if code == "en":
+        rect(0, 0, 24, 16, "#1d3f94")
+        for color, width in (("#ffffff", 3.2), ("#c8102e", 1.1)):
+            p.setPen(QPen(QColor(color), width))
+            p.drawLine(QPointF(0, 0), QPointF(24, 16))
+            p.drawLine(QPointF(24, 0), QPointF(0, 16))
+        for color, width in (("#ffffff", 5), ("#c8102e", 3)):
+            p.setPen(QPen(QColor(color), width))
+            p.drawLine(QPointF(12, 0), QPointF(12, 16))
+            p.drawLine(QPointF(0, 8), QPointF(24, 8))
+    elif code == "ru":
+        stripes_h("#ffffff", "#1c57a5", "#d52b1e")
+    elif code == "uk":
+        rect(0, 0, 24, 8, "#0057b8")
+        rect(0, 8, 24, 8, "#ffd700")
+    elif code == "bg":
+        stripes_h("#ffffff", "#00966e", "#d62612")
+    elif code == "de":
+        stripes_h("#111111", "#dd0000", "#ffce00")
+    elif code == "fr":
+        stripes_v("#0055a4", "#ffffff", "#ef4135")
+    elif code == "es":
+        rect(0, 0, 24, 16, "#aa151b")
+        rect(0, 4, 24, 8, "#f1bf00")
+    elif code == "it":
+        stripes_v("#009246", "#ffffff", "#ce2b37")
+    elif code == "pt":
+        rect(0, 0, 24, 16, "#ff0000")
+        rect(0, 0, 9.6, 16, "#006600")
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#ffcc00"))
+        p.drawEllipse(QPointF(9.6, 8), 3, 3)
+        p.setBrush(QColor("#ffffff"))
+        p.drawEllipse(QPointF(9.6, 8), 1.7, 1.7)
+    elif code == "pl":
+        rect(0, 0, 24, 8, "#ffffff")
+        rect(0, 8, 24, 8, "#dc143c")
+    elif code == "tr":
+        rect(0, 0, 24, 16, "#e30a17")
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#ffffff"))
+        p.drawEllipse(QPointF(9, 8), 4, 4)
+        p.setBrush(QColor("#e30a17"))
+        p.drawEllipse(QPointF(10.2, 8), 3.2, 3.2)
+        p.setBrush(QColor("#ffffff"))
+        p.drawPolygon(_star(13.6, 8, 2.1))
+    elif code == "zh":
+        rect(0, 0, 24, 16, "#de2910")
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#ffde00"))
+        for cx, cy, r, rot in ((5, 5, 3, -90), (10, 2.2, 1, -70), (12, 4.4, 1, -50), (12, 7.2, 1, -10), (10, 9.4, 1, -35)):
+            p.drawPolygon(_star(cx, cy, r, rot))
+    # 1.32: языки перевода, которых нет среди языков интерфейса (меню «На: … ▾», «Переводить на», «Запасной язык»)
+    elif code == "el":   # Греция: 9 полос и крест в углу
+        h = FLAG_H / 9
+        for i in range(9):
+            rect(0, i * h, FLAG_W, h + 0.01, "#0d5eaf" if i % 2 == 0 else "#ffffff")
+        rect(0, 0, 5 * h, 5 * h, "#0d5eaf")
+        rect(0, 2 * h, 5 * h, h, "#ffffff")
+        rect(2 * h, 0, h, 5 * h, "#ffffff")
+    elif code == "ro":
+        stripes_v("#002b7f", "#fcd116", "#ce1126")
+    elif code == "sr":   # Сербия: триколор без герба (на 24x16 он не читается)
+        stripes_h("#c6363c", "#0c4076", "#ffffff")
+    elif code == "nl":
+        stripes_h("#ae1c28", "#ffffff", "#21468b")
+    elif code == "cs":   # Чехия: белое и красное поле, синий клин до середины
+        rect(0, 0, 24, 8, "#ffffff")
+        rect(0, 8, 24, 8, "#d7141a")
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#11457e"))
+        p.drawPolygon(QPolygonF([QPointF(0, 0), QPointF(12, 8), QPointF(0, 16)]))
+    elif code == "ja":
+        rect(0, 0, 24, 16, "#ffffff")
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#bc002d"))
+        p.drawEllipse(QPointF(12, 8), 4.8, 4.8)
+    elif code == "ko":   # Корея: тхэгык и четыре триграммы, упрощённо
+        rect(0, 0, 24, 16, "#ffffff")
+        p.setPen(Qt.PenStyle.NoPen)
+        p.save()
+        p.translate(12, 8)
+        p.rotate(33.7)
+        p.setBrush(QColor("#cd2e3a"))
+        p.drawPie(QRectF(-4, -4, 8, 8), 0, 180 * 16)
+        p.setBrush(QColor("#0047a0"))
+        p.drawPie(QRectF(-4, -4, 8, 8), 180 * 16, 180 * 16)
+        p.setBrush(QColor("#cd2e3a"))
+        p.drawEllipse(QPointF(-2, 0), 2, 2)
+        p.setBrush(QColor("#0047a0"))
+        p.drawEllipse(QPointF(2, 0), 2, 2)
+        p.restore()
+        p.setPen(QPen(QColor("#000000"), 0.7))
+        for cx, cy, ang in ((4, 3.2, 33.7), (20, 3.2, -33.7), (4, 12.8, -33.7), (20, 12.8, 33.7)):
+            p.save()
+            p.translate(cx, cy)
+            p.rotate(ang + 90)
+            for k in (-1.1, 0, 1.1):
+                p.drawLine(QPointF(-1.6, k), QPointF(1.6, k))
+            p.restore()
+
+
+FLAG_CODES = ("en", "ru", "uk", "bg", "de", "fr", "es", "it", "pt", "pl", "tr", "zh",
+              "el", "ro", "sr", "nl", "cs", "ja", "ko")   # арабский (ar): глобус, у языка нет флага одной страны
+_flag_cache = {}
+
+
+def flag_icon(code: str) -> QIcon:
+    """Флаг языка 24x16 со скруглением и тонкой рамкой; «Как в системе» (auto) и неизвестный код: глобус."""
+    if code not in FLAG_CODES:
+        return icon("globe")
+    if code in _flag_cache:
+        return _flag_cache[code]
+    k = 4
+    pix = QPixmap(FLAG_W * k, FLAG_H * k)
+    pix.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pix)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.scale(k, k)
+    clip = QPainterPath()
+    clip.addRoundedRect(QRectF(0, 0, FLAG_W, FLAG_H), FLAG_R, FLAG_R)
+    p.setClipPath(clip)
+    _flag_paint(p, code)
+    p.setClipping(False)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.setPen(QPen(QColor(40, 30, 20, 46), 1))
+    p.drawRoundedRect(QRectF(0.5, 0.5, FLAG_W - 1, FLAG_H - 1), FLAG_R - 0.5, FLAG_R - 0.5)
+    p.end()
+    pix.setDevicePixelRatio(k)
+    _flag_cache[code] = QIcon(pix)
+    return _flag_cache[code]
+
+
+def flag_pixmap(code: str, scale: float = 1.0) -> QPixmap:
+    return flag_icon(code).pixmap(round(FLAG_W * scale), round(FLAG_H * scale))

@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """1.30 wiring of updates (from 2.0 integration_test): the updater starts with the program, the tray menu has
 «Проверить обновления», quit-for-update quits, settings of 1.x are copied once into the package folder.
 Runs offscreen in a temporary HOME.

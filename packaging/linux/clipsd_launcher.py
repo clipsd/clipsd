@@ -1,5 +1,6 @@
 # ClipSD: entry point of the self-contained Linux build (PyInstaller). Copyright (C) 2026 Sergey Dayneko
 # SPDX-License-Identifier: GPL-3.0-or-later.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Same fast path as `python -m clipshot`, plus internal commands used by install.sh.
 
 Internal commands (never shown to the user):

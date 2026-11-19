@@ -1,0 +1,18 @@
+{
+  "seltour.s1_text": "Drag with the mouse around the part you need. A finished frame can be resized by its corners and sides, or moved by dragging inside it.",
+  "seltour.s1_title": "Select an area",
+  "seltour.s2_text": "The screenshot goes straight to the clipboard and the window closes. Paste it into a messenger or a document. Ctrl+Enter does the same.",
+  "seltour.s2_title": "Copy and close",
+  "seltour.s3_text": "Opens the screenshot in the editor: arrows, numbers, frames, text, blur. Enter or a click inside the frame does the same.",
+  "seltour.s3_title": "Edit",
+  "seltour.s4_text": "Removes the frame so you can select another place. The R and Delete keys do the same.",
+  "seltour.s4_title": "Select again",
+  "seltour.s5_text": "Top row: record a screen video, take a screenshot of the whole screen, and copy text from the picture (recognition).",
+  "seltour.s5_title": "Video, full screen, text",
+  "seltour.s6_text": "\"Translate selection\" translates the text in the frame. \"Select and translate\" waits until you outline the place. The translation appears in a separate small window.",
+  "seltour.s6_title": "Translation",
+  "seltour.s7_text": "At the bottom: the program language and the settings gear (hotkey, screenshot folder, magnifier).",
+  "seltour.s7_title": "Language and settings",
+  "seltour.s8_text": "The cross on the corner of the panel or Esc closes the window without a screenshot. You can repeat this tour from the tray icon menu near the clock.",
+  "seltour.s8_title": "Close the window"
+}

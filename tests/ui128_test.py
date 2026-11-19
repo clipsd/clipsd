@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Интерфейс 1.28: два действия перевода («выделенное» и «весь экран / весь снимок»), вопрос про лимит, отмена по Esc,
 всплывающие подсказки действий вместо мелкой строки. Сеть подменяется (лимит не тратится); распознавание настоящее
 (нужен Tesseract).
@@ -618,7 +619,11 @@ base_w = round(MAIN_WIDTH_300x160 * _adv / 604)   # 604: the sample in Noto Sans
 growth = ed.width() - base_w
 check(growth <= 90, f"окно редактора на снимке 300x160: {ed.width()} против {base_w} в main (981 при Noto Sans, "
                     f"шрифт {QFontInfo(_f).family()}; +{growth}, допустимо до +90)")
-check(ed.width() > 800 and ed.isVisible(), f"ширина измерена по настоящему показанному окну ({ed.width()})")
+# 1.32: узкое окно по самому узкому виду панелей (группы свёрнуты, без больших кнопок, внизу значки), а не 981
+check(ed.width() == ed.min_content_width() + ed._rim()[0] and ed.width() < 800 and ed.isVisible(),
+      f"ширина измерена по настоящему показанному окну ({ed.width()}): узкое окно")
+ed.resize(1500, ed.height())   # сдвоенная кнопка перевода видна в широком окне
+settle()
 check(ed.tr_all_button.text() == "Перевести всё" and ed.tr_button.text() == "Выделенное", "сдвоенная кнопка: «Перевести всё» и «Выделенное»")
 check(ed.tr_all_button.toolTip() == "Перевести весь снимок (Shift+Y)" and ed.tr_button.toolTip() == "Перевести выделенное: выделите мышью текст (Y)",
       "всплывающие подсказки половин полные")

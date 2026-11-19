@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Разложить исходники в структуру, которую ждёт packaging/build.ps1 (сборка Windows-установщика).
 
 Запуск: python packaging/stage_windows.py <папка>   (облако GitHub и build_dist.sh)
@@ -37,6 +38,9 @@ def stage(out: Path):
     shutil.copy2(win / "clipsd.ico", out / "clipsd.ico")
     shutil.copy2(ROOT / "LICENSE", out / "LICENSE")
     text_for_windows(ROOT / "LICENSE.ru.txt", out / "LICENSE.ru.txt")
+    # name and icon: additional terms under GPLv3 section 7, installed next to LICENSE (ClipSD.iss [Files])
+    text_for_windows(ROOT / "TRADEMARKS.md", out / "TRADEMARKS.txt")
+    text_for_windows(ROOT / "TRADEMARKS.ru.md", out / "TRADEMARKS.ru.txt")
     sys.path.insert(0, str(ROOT / "packaging"))
     import make_notices
     notices = out / "THIRD-PARTY-NOTICES.txt"
@@ -45,6 +49,7 @@ def stage(out: Path):
     text_for_windows(ROOT / "packaging" / "README.txt", out / "README.txt")
     text_for_windows(ROOT / "packaging" / "README.en.txt", out / "README.en.txt")
     stage_whats_new(out)
+    stage_changelog(out)
     if (ROOT / "clipshot" / "_preview_build.py").exists():
         # a preview installer carries this mark next to the program: tools/release.sh assemble refuses it (innoextract)
         (out / "PREVIEW").write_text("ClipSD preview build (proba channel): never a release.\n", encoding="utf-8")
@@ -53,6 +58,18 @@ def stage(out: Path):
 def app_version() -> str:
     text = (ROOT / "clipshot" / "__init__.py").read_text(encoding="utf-8")
     return re.search(r'^__version__ = "([^"]+)"', text, re.M).group(1)
+
+
+def stage_changelog(out: Path):
+    """CHANGELOG/<version>/<lang>.md next to the sources: build.ps1 puts the folder into the program
+    (--add-data CHANGELOG), so "What's new" of the editor bell has the notes on a fresh install too, not only
+    after an update (clipshot/notifications.py looks in <sys._MEIPASS>/CHANGELOG)."""
+    src = ROOT / "CHANGELOG"
+    if not src.is_dir():
+        return
+    def not_notes(folder, names):   # only the notes: no CRITICAL marks or other files
+        return [n for n in names if not n.endswith(".md") and not (Path(folder) / n).is_dir()]
+    shutil.copytree(src, out / "CHANGELOG", ignore=not_notes)
 
 
 def stage_whats_new(out: Path):

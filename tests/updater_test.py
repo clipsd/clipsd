@@ -1,6 +1,7 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later. Распространяется по лицензии GNU GPL v3 или более поздней,
 # без каких-либо гарантий; полный текст: файл LICENSE или <https://www.gnu.org/licenses/gpl-3.0.html>.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Update module test: signature, expiry, rollback, keys, schedule with a fake clock, downloads, install.
 
 No network: the channel is a fake fetch function, files come from http.server on 127.0.0.1.
@@ -284,15 +285,22 @@ check(up.should_notify(cfg, "2.0.3", NOW + timedelta(days=30)), "окно: сл�
 check(up.should_notify(cfg, "2.0.2", NOW + timedelta(days=30), critical=True), "окно: исправление безопасности несмотря на пропуск")
 check(up.next_check_delay_ms({}, NOW) == up.STARTUP_DELAY_MS, "первая проверка через 60 с после запуска")
 
-# 30 days of hourly ticks, a new ordinary version every day: requests once a day, window at most weekly
+# 30 days of hourly ticks, a new ordinary version every day: requests once a day. 1.32 (the owner's decision
+# 19.11.2026): the window is not shown by the check itself; the bell lights up, the window comes 3 days after the
+# discovery (or 20 shots) in a quiet minute, "Later" postpones it for 3 more days (update_prompt.poll every half hour)
+from clipshot import update_prompt as upr  # noqa: E402
 u, ctx, ui, ch, clock = make()
 request_times, offered_at = [], []
-for hour in range(30 * 24):
-    clock.now = NOW + timedelta(hours=hour)
-    if hour % 24 == 0:
-        ch.publish(f"2.0.{hour // 24 + 1}")
+for half in range(30 * 48):
+    clock.now = NOW + timedelta(minutes=30 * half)
+    if half % 48 == 0:
+        ch.publish(f"2.0.{half // 48 + 1}")
     before_req, before_off = ch.requests, len(ui.offers)
-    u.tick()
+    if half % 2 == 0:
+        u.tick()
+    upr.poll(u)
+    clock.now += timedelta(seconds=61)
+    upr.poll(u)
     if ch.requests > before_req:
         request_times.append(clock.now)
     if len(ui.offers) > before_off:
@@ -301,8 +309,9 @@ gaps = [b - a for a, b in zip(request_times, request_times[1:])]
 check(len(request_times) == 30 and all(g >= timedelta(days=1) for g in gaps),
       f"30 дней: {len(request_times)} тихих проверок, раз в сутки")
 wgaps = [b[0] - a[0] for a, b in zip(offered_at, offered_at[1:])]
-check(len(offered_at) == 5 and all(g >= timedelta(days=7) for g in wgaps),
-      f"30 дней: обычное окно {len(offered_at)} раз, не чаще раза в 7 дней")
+check(bool(offered_at) and offered_at[0][0] - NOW >= upr.DELAY and all(g >= upr.DELAY for g in wgaps)
+      and 8 <= len(offered_at) <= 10,
+      f"30 дней: окно не при проверке, а через 3 дня, «Позже» ещё на 3 дня: {len(offered_at)} раз")
 check(all(v == f"2.0.{(t - NOW).days + 1}" for t, v in offered_at), "каждый раз предложена самая новая версия")
 check(not any(ui.critical), "обычные версии предлагаются как обычные")
 
@@ -320,15 +329,15 @@ u, ctx, ui, ch, clock = make()
 u.tick()
 clock.now += timedelta(minutes=5)
 u.tick()
-check(ch.requests == 2 and len(ui.offers) == 1, "автопроверка: второй раз через 5 минут не ходит")
-check(u.check_now(manual=True) and len(ui.offers) == 2, "ручная проверка сразу после автоматической показывает окно")
+check(ch.requests == 2 and len(ui.offers) == 0, "автопроверка: второй раз через 5 минут не ходит, окна нет (1.32: колокольчик)")
+check(u.check_now(manual=True) and len(ui.offers) == 1, "ручная проверка сразу после автоматической показывает окно")
 u, ctx, ui, ch, clock = make(installed="2.0.1")
 u.check_now(manual=True)
 check(ui.infos and "2.0.1" in ui.infos[-1] and not ui.offers, "ручная проверка: «у вас последняя версия»")
 
 # skip / later / rollback memory / errors
 u, ctx, ui, ch, clock = make(answer="skip")
-u.check_now(manual=False)
+u.check_now(manual=True)
 check(ctx.config["update_skipped"] == ["2.0.1"], "«Пропустить эту версию» запоминается")
 check(ctx.config["update_last_seen_version"] == "2.0.1", "последняя виденная версия запоминается")
 ch.publish("2.0.0")
@@ -1064,6 +1073,7 @@ check(pu3.ui.errors == [up.error_text("bad_signature")] and not pu3.ui.offers,
 # a preview build's about window carries the mark and the channel folder
 from types import SimpleNamespace  # noqa: E402
 from PyQt6.QtGui import QIcon  # noqa: E402
+from PyQt6.QtWidgets import QLabel, QTextBrowser  # noqa: E402
 from clipshot import app as app_mod  # noqa: E402
 _about = app_mod.Clipshot.build_about(SimpleNamespace(icon=QIcon()))
 check(tr("app.preview_build") in _about.title.text(), "окно «О программе»: «Пробная сборка» у версии")
@@ -1075,11 +1085,11 @@ check(not build_info.is_preview() and up.channel_of({}) == "stable", "обрат
 # --- windows of the program (offscreen) -----------------------------------------------------------
 manifest = load(doc, signed(doc))
 offer = up.OfferDialog(manifest, "2.0.0")
-labels = " ".join(w.text() for w in offer.findChildren(up.QLabel))
+labels = " ".join(w.text() for w in offer.findChildren(QLabel))
 check(tr("updater.offer.heading", version="2.0.1") in labels and "2.0.0" in labels, "окно: «Доступна версия 2.0.1» на языке программы")
 check([offer.update_button.text(), offer.later_button.text(), offer.skip_button.text()] ==
       [tr("updater.button.update"), tr("updater.button.later"), tr("updater.button.skip")], "окно: кнопки Обновить, Позже, Пропустить эту версию")
-browser = offer.findChildren(up.QTextBrowser)[0]
+browser = offer.findChildren(QTextBrowser)[0]
 check(NOTES_SHOWN in browser.toPlainText(), "окно: изменения на языке программы")
 offer.show()
 offer.grab().save(os.path.join(out, "offer-ru.png"))
@@ -1087,7 +1097,7 @@ offer.skip_button.click()
 check(offer.choice == "skip", "окно: нажатие «Пропустить эту версию»")
 check(not offer.critical and offer.windowTitle() == tr("updater.offer.title"), "окно обычной версии: обычный заголовок")
 crit_offer = up.OfferDialog(manifest, "2.0.0", critical=True)
-crit_labels = " ".join(w.text() for w in crit_offer.findChildren(up.QLabel))
+crit_labels = " ".join(w.text() for w in crit_offer.findChildren(QLabel))
 check(crit_offer.windowTitle() == tr("updater.offer.title_security") and tr("updater.offer.security") in crit_labels
       and tr("updater.button.later") in crit_labels and crit_offer.skip_button.isHidden(),
       "окно исправления безопасности: «Срочное обновление», текст о безопасности, без «Пропустить эту версию»")
@@ -1097,7 +1107,7 @@ check(up.notes_in({"en": "English notes", "de": "Deutsch"}, "ru") == "English no
       "нет изменений по-русски: показан английский")
 progress = up.ProgressDialog("2.0.1", lambda: None)
 progress.set_progress(512 * 1024, 1024 * 1024)
-check(progress.bar.value() == 50 and tr("updater.download.progress", done="0.5", total="1.0") == progress.status.text(), "полоса загрузки: 50%")
+check(progress.bar.value() == 50 and tr("updater.download.progress_pct", done="0.5", total="1.0", percent=50) == progress.status.text(), "полоса загрузки: 50%")
 progress.show()
 progress.grab().save(os.path.join(out, "progress-ru.png"))
 news = up.WhatsNewDialog("2.0.1", "- Русские изменения")
@@ -1111,6 +1121,124 @@ menu.addAction("Выход")
 action = up.install_menu(menu, Ctx())
 texts = [a.text() for a in menu.actions()]
 check(texts == ["О программе", tr("updater.menu.check"), "", "Выход"], "меню трея: «Проверить обновления» перед «Выход»")
+
+# --- 1.32: the window of an ordinary update comes later (update_prompt), the bell at once ----------------------------
+from clipshot import notifications as notes  # noqa: E402
+up.drop_critical("stable")
+
+
+def prompt_case(answer="later", **cfg):
+    pu_, pctx_, pui_, pch_, pclock_ = make(answer=answer, config=cfg)
+    pctx_.editors, pctx_.selector = [], None
+    return pu_, pctx_, pui_, pch_, pclock_
+
+
+def quiet_minute(pu_, pclock_):
+    """Две проверки таймера с минутой спокойствия между ними; True, если окно показано при любой из них."""
+    first = upr.poll(pu_)
+    pclock_.now += timedelta(seconds=61)
+    return upr.poll(pu_) or first
+
+
+# found by the automatic check: no window, the bell shows the version, the count starts
+pu, pctx, pui, pch, pclock = prompt_case()
+pu.check_now(manual=False)
+st = upr.state(pctx.config)
+check(not pui.offers and st.get("version") == "2.0.1" and st.get("shots") == 0 and st.get("since") == up.uc.format_utc(NOW),
+      "обычное обновление при автопроверке: окна нет, отсчёт с момента обнаружения")
+check(notes.available_update(pctx.config, "2.0.0") == "2.0.1", "колокольчик: «Доступна версия 2.0.1»")
+check(getattr(pu, "_prompt_timer", None) is not None and pu._prompt_timer.isActive(), "таймер ждёт спокойной минуты")
+pclock.now = NOW + timedelta(days=2, hours=23)
+check(not quiet_minute(pu, pclock) and not pui.offers, "через 2 дня 23 часа и 0 снимков: рано")
+# 3 days: only in a quiet minute (no selection, no editor, nothing blocks)
+pclock.now = NOW + timedelta(days=3)
+pctx.editors = ["editor"]
+check(not quiet_minute(pu, pclock) and not pui.offers, "3 дня прошло, но открыт редактор: окна нет")
+pctx.editors, pctx.selector = [], "selector"
+check(not quiet_minute(pu, pclock), "открыто окно выделения: окна нет")
+pctx.selector = None
+pctx.quit_blocker = lambda: "dialog"
+check(not quiet_minute(pu, pclock), "открыто другое окно (quit_blocker): окна нет")
+pctx.quit_blocker = lambda: ""
+upr.poll(pu)
+pclock.now += timedelta(seconds=30)
+check(not upr.poll(pu) and not pui.offers, "спокойно только 30 секунд: ещё ждём")
+pclock.now += timedelta(seconds=31)
+check(upr.poll(pu) and pui.offers == ["2.0.1"] and pui.critical == [False], "3 дня и спокойная минута: окно-предложение")
+st = upr.state(pctx.config)
+check(st.get("since") == up.uc.format_utc(pclock.now) and st.get("shots") == 0 and not pu.busy,
+      "«Позже»: отсчёт заново (ещё 3 дня или 20 снимков)")
+pclock.now += timedelta(days=2)
+check(not quiet_minute(pu, pclock) and len(pui.offers) == 1, "после «Позже» через 2 дня окна нет")
+# 20 shots win over 3 days
+for _ in range(19):
+    upr.note_shot(pctx.config)
+check(not quiet_minute(pu, pclock), "19 снимков: рано")
+upr.note_shot(pctx.config)
+check(quiet_minute(pu, pclock) and len(pui.offers) == 2, "20 снимков раньше трёх дней: окно")
+# a newer version while waiting: the count goes on, the number changes
+since_before = upr.state(pctx.config).get("since")
+pch.publish("2.0.5")
+pclock.now += timedelta(days=1, hours=1)
+pu.tick()
+st = upr.state(pctx.config)
+check(st.get("version") == "2.0.5" and st.get("since") == since_before and len(pui.offers) == 2,
+      "нашлась версия новее, пока ждём: номер новый, отсчёт не сбрасывается, окна нет")
+pclock.now += timedelta(days=2)
+check(quiet_minute(pu, pclock) and pui.offers[-1] == "2.0.5", "окно предлагает самую новую версию")
+# "Skip this version": no window and no bell for it, later checks are silent
+pu, pctx, pui, pch, pclock = prompt_case(answer="skip")
+pu.check_now(manual=False)
+pclock.now = NOW + timedelta(days=3)
+check(quiet_minute(pu, pclock) and pui.offers == ["2.0.1"], "окно через 3 дня (ответ «Пропустить»)")
+check(not upr.state(pctx.config) and "2.0.1" in pctx.config["update_skipped"]
+      and notes.available_update(pctx.config, "2.0.0") == "", "«Пропустить»: отсчёт снят, колокольчик для 2.0.1 погас")
+pclock.now += timedelta(days=2)
+pu.tick()
+pclock.now += timedelta(days=4)
+quiet_minute(pu, pclock)
+check(pui.offers == ["2.0.1"] and not upr.state(pctx.config), "пропущенная версия больше не предлагается")
+# "Update": the download starts, the count is gone
+pu, pctx, pui, pch, pclock = prompt_case(answer="update")
+started = []
+pu.start_download = lambda m, trace_id="": started.append(m.version)
+pu.check_now(manual=False)
+pclock.now = NOW + timedelta(days=3)
+check(quiet_minute(pu, pclock) and started == ["2.0.1"] and not upr.state(pctx.config), "«Обновить» в окне: загрузка, отсчёт снят")
+# the bell button and "Check for updates" are manual: the window at once; "Later" there starts the count
+pu, pctx, pui, pch, pclock = prompt_case(answer="later")
+pu.check_now(manual=False)
+pclock.now = NOW + timedelta(hours=2)
+check(pu.check_now(manual=True) and pui.offers == ["2.0.1"], "ручная «Проверить обновления» (и «Обновить» в колокольчике): окно сразу")
+check(upr.state(pctx.config).get("since") == up.uc.format_utc(pclock.now), "«Позже» в ручном окне: отсчёт с этой минуты")
+pu.installed = "2.0.1"
+pclock.now = NOW + timedelta(days=5)
+check(not quiet_minute(pu, pclock) and not upr.state(pctx.config), "версия уже установлена: отсчёт снят, окна нет")
+# security fix: the window at once, the count is not used
+pu, pctx, pui, pch, pclock = prompt_case()
+pch.publish("2.0.1", critical=True)
+pu.tick()
+check(pui.offers == ["2.0.1"] and pui.critical == [True] and not upr.state(pctx.config),
+      "срочное исправление безопасности: окно сразу, без отсчёта")
+up.drop_critical("stable")
+# restart: the count lives in config; the window comes after the next check of the channel in a quiet minute
+pu, pctx, pui, pch, pclock = prompt_case(update_prompt={"version": "2.0.1", "since": up.uc.format_utc(NOW - timedelta(days=4)),
+                                                       "shots": 3})
+check(not quiet_minute(pu, pclock) and not pui.offers, "после перезапуска документа канала в памяти нет: окно ждёт проверки")
+pu.tick()
+check(not pui.offers and quiet_minute(pu, pclock) and pui.offers == ["2.0.1"], "проверка канала после перезапуска: окно в спокойную минуту")
+# the clock moved back a lot: the count starts again
+cfgx = {"update_prompt": {"version": "2.0.1", "since": up.uc.format_utc(NOW + timedelta(days=10)), "shots": 0}}
+check(not upr.due(cfgx, NOW) and cfgx["update_prompt"]["since"] == up.uc.format_utc(NOW), "часы переведены назад: отсчёт заново")
+# shots are counted only while an update waits
+cfgy = {}
+upr.note_shot(cfgy)
+check(cfgy == {}, "снимок без ожидающего обновления: счётчика нет")
+# app: each finished capture counts
+_src = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "clipshot", "app.py"),
+            encoding="utf-8").read()
+check("update_prompt.note_shot(self.config)" in _src.split("def _region_done", 1)[1].split("\n    def ", 1)[0],
+      "приложение считает каждый снимок (Clipshot._region_done)")
 
 # tools/channel_sign.py itself (sign, refresh, refusals): tests/channel_sign_test.py
 

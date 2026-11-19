@@ -1,0 +1,16 @@
+{
+  "notifications.empty": "Não há notificações novas",
+  "notifications.read_all": "Marcar tudo como lido",
+  "notifications.title": "Notificações",
+  "notifications.translate_quota": "Tradução: limite diário atingido",
+  "notifications.translate_quota_month": "Tradução: limite mensal do Google atingido",
+  "notifications.translate_quota_month_sub": "O MyMemory continua se estiver definido como serviço de reserva",
+  "notifications.translate_quota_sub": "O serviço de tradução não aceita mais texto até amanhã",
+  "notifications.unread": "Não lidas: {n}",
+  "notifications.update_button": "Atualizar",
+  "notifications.update_sub": "Uma nova versão do ClipSD está pronta para instalar",
+  "notifications.update_title": "A versão {version} está disponível",
+  "notifications.whatsnew_installed": "Versão instalada: o que mudou",
+  "notifications.whatsnew_past": "Atualização anterior",
+  "notifications.whatsnew_title": "Novidades da versão {version}"
+}

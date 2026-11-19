@@ -1,0 +1,18 @@
+{
+  "seltour.s1_text": "Circonda con il mouse la parte che ti serve. La cornice pronta si regola dagli angoli e dai lati, oppure si sposta trascinandola dall'interno.",
+  "seltour.s1_title": "Seleziona un'area",
+  "seltour.s2_text": "Lo screenshot va subito negli appunti e la finestra si chiude. Resta da incollarlo in un messenger o in un documento. Ctrl+Invio fa lo stesso.",
+  "seltour.s2_title": "Copia e chiudi",
+  "seltour.s3_text": "Apre lo screenshot nell'editor: frecce, numeri, cornici, testo, sfocatura. Invio o un clic dentro la cornice fanno lo stesso.",
+  "seltour.s3_title": "Modifica",
+  "seltour.s4_text": "Toglie la cornice e puoi scegliere un altro punto. I tasti R e Canc fanno lo stesso.",
+  "seltour.s4_title": "Seleziona di nuovo",
+  "seltour.s5_text": "Riga superiore: registrare un video dello schermo, catturare l'intero schermo e copiare il testo dall'immagine (riconoscimento).",
+  "seltour.s5_title": "Video, schermo intero, testo",
+  "seltour.s6_text": "\"Traduci selezione\" traduce il testo nella cornice. \"Seleziona e traduci\" aspetta che tu circondi il punto. La traduzione appare in una finestrella a parte.",
+  "seltour.s6_title": "Traduzione",
+  "seltour.s7_text": "In basso: la lingua del programma e l'ingranaggio delle impostazioni (scorciatoia, cartella degli screenshot, lente).",
+  "seltour.s7_title": "Lingua e impostazioni",
+  "seltour.s8_text": "La croce all'angolo del pannello o Esc chiude la finestra senza screenshot. Puoi ripetere questa presentazione dal menu dell'icona vicino all'orologio.",
+  "seltour.s8_title": "Chiudi la finestra"
+}

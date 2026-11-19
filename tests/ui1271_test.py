@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Интерфейс 1.27.1: поля тени сообщаются оконному менеджеру (_GTK_FRAME_EXTENTS), панель окна выделения и полоса
 перевода переносятся мышью, курсор «перемещение» над шапкой и свободными местами редактора.
 

@@ -1,5 +1,6 @@
 # ClipSD: install, update, failure and uninstall test on Windows (run by .github/workflows/windows.yml, pwsh 7).
 # Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко). SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 #
 #   -Setup      installer of the version under test
 #   -SetupNext  installer of the same code with another version number (9.9.9), the "next release"
@@ -141,7 +142,8 @@ if (-not $CfgBefore) {
     if ($got -ne "de") { Fail "installer-language: '$got', ожидали de (/LANG=de)" }
     Write-Host "    installer-language: $got"
 } else { Write-Warning "config.json уже был до установки: installer-language не проверяется" }
-foreach ($f in $Launcher, $AppExe, (Join-Path $Dir "LICENSE"), (Join-Path $Dir "LICENSE.ru.txt")) {
+foreach ($f in $Launcher, $AppExe, (Join-Path $Dir "LICENSE"), (Join-Path $Dir "LICENSE.ru.txt"),
+             (Join-Path $Dir "TRADEMARKS.txt"), (Join-Path $Dir "TRADEMARKS.ru.txt")) {
     if (-not (Test-Path $f)) { Fail "Не установлен $f" }
 }
 foreach ($d in $Staging, $Previous) { if (Test-Path $d) { Fail "После первой установки есть $d" } }

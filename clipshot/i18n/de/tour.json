@@ -1,5 +1,9 @@
 {
+  "tour.alltools_text": "Die Schaltfläche „⋯“ öffnet alle Werkzeuge nach Gruppen samt ihren Tasten. Praktisch, wenn das Fenster schmal ist und die Gruppen eingeklappt sind, und zum Lernen der Tasten.",
+  "tour.alltools_title": "Alle Werkzeuge",
   "tour.back": "Zurück",
+  "tour.bell_text": "Auf der Glocke erscheint ein Punkt, wenn es Neues gibt: eine neue Version ist da (Schaltfläche „Aktualisieren“), Neuigkeiten der installierten Version, kurze Meldungen des Programms wie „Tageslimit der Übersetzung erreicht“.",
+  "tour.bell_title": "Benachrichtigungen",
   "tour.canvas_text": "Zeichnen Sie direkt auf dem Screenshot. Das gerade gezeichnete Objekt bleibt ausgewählt: Sie können es verschieben, an den weißen Griffen ziehen, Farbe und Stärke ändern.\n\nRechtsklick auf ein Objekt: Menü (Farbe, Füllung, duplizieren, in den Vordergrund, löschen). Doppelklick auf Text: bearbeiten. Delete: löschen. Esc: Auswahl aufheben.",
   "tour.canvas_title": "Screenshot",
   "tour.capture_text": "{hotkey} in jedem Programm: Der Bildschirm friert ein, wählen Sie mit der Maus einen Bereich aus, und er öffnet sich hier. Ein einfacher Klick ohne Auswahl nimmt den ganzen Monitor auf, Esc bricht ab.\n\nDie Tastenkombination {hotkey} lässt sich in den Einstellungen durch jede beliebige andere ersetzen, die Schaltfläche unten öffnet diese sofort.\n\nBeim nächsten {hotkey} wird der vorherige Bereich hervorgehoben: Enter oder ein Klick hinein nimmt dieselbe Stelle auf.\n\nDas ClipSD-Symbol im Infobereich neben der Uhr: Ein Rechtsklick öffnet ein Menü, in dem Sie diese Einführung wiederholen können.",
@@ -22,7 +26,7 @@
   "tour.step": "Schritt {i} von {total}",
   "tour.text_color_text": "Die Farbe der Ziffer in einer Nummer und des Texts in einer Sprechblase. „Auto“ wählt passend zur Füllfarbe Weiß oder Schwarz.",
   "tour.text_color_title": "Textfarbe",
-  "tour.tools_text": "Von links nach rechts: Auswahl, Sprechblase, Text, Nummer, Pfeile (einfach, Doppelpfeil, freihand), glatte Linie, Linie, Rechteck, Ellipse, Freihandform, Textmarker, Stift, Weichzeichnen, Radierer, Zuschneiden. Jedes Werkzeug hat eine Buchstabentaste, die beim Darüberfahren im Tooltip angezeigt wird.\n\nDie Reihenfolge der Schaltflächen lässt sich ändern: Fassen Sie eine Schaltfläche mit der Maus und ziehen Sie sie an eine neue Stelle. Ein Rechtsklick auf die Leiste stellt die Standardreihenfolge wieder her.",
+  "tour.tools_text": "Die Werkzeuge sind gruppiert: Pfeile und Linien, Formen, Beschriftungen, Zeichnen, Verbergen und radieren, Text aus Bild. „Auswählen und verschieben“, „Nummer“ und „Zuschneiden“ haben immer eigene Schaltflächen.\n\nEin Klick auf das Symbol einer Gruppe schaltet ihr zuletzt benutztes Werkzeug ein, der kleine Pfeil ▾ rechts öffnet die übrigen. In einem schmalen Fenster werden Gruppen zu einer Schaltfläche, die Buchstabentasten funktionieren immer: Sie stehen im Tooltip.\n\nDie Reihenfolge ändern Sie durch Ziehen: eine ganze Gruppe oder ein Werkzeug innerhalb seiner Gruppe. Rechtsklick: Standardwerkzeug und Standardreihenfolge.",
   "tour.tools_title": "Werkzeuge",
   "tour.undo_text": "Die Pfeile zurück und vor: rückgängig und wiederholen (Strg+Z und Strg+Y).\n\nDie Schaltfläche mit dem Bild legt ein weiteres Bild über den Screenshot: aus der Zwischenablage (Strg+V), aus einer Datei oder als neuer Screenshot eines Bildschirmbereichs. Sie können eine Datei auch einfach ins Fenster ziehen.",
   "tour.undo_title": "Rückgängig und Bild einfügen"

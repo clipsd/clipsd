@@ -1,6 +1,7 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later. Распространяется по лицензии GNU GPL v3 или более поздней,
 # без каких-либо гарантий; полный текст: файл LICENSE или <https://www.gnu.org/licenses/gpl-3.0.html>.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Автотест настроек ClipSD. Системные настройки не трогает: GNOME подменяется словарём.
 
 Запуск: QT_QPA_PLATFORM=offscreen python3 tests/settings_test.py [проект] [временная_папка]
@@ -199,7 +200,8 @@ ed.present()
 app.processEvents()
 ed.grab().save(os.path.join(tmp, "editor_theme.png"))
 from clipshot.editor import chrome_params
-check("#2db400" in ed.styleSheet() and ed.shell.params["fill"].name() == chrome_params(qapp_ctx.config)["fill"].name()
+from clipshot import themes as _themes   # 1.32: кнопка с белым текстом берёт акцент, затемнённый до 4,5:1
+check(_themes.blue_button("#2db400")[0] in ed.styleSheet() and ed.shell.params["fill"].name() == chrome_params(qapp_ctx.config)["fill"].name()
       and QColor("#b0b4ba").lightness() < ed.shell.params["fill"].lightness() and ed.frame_px == 12,
       "редактор открылся с выбранными цветами и толщиной рамки")
 opened = []

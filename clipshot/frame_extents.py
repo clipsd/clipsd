@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Сообщить оконному менеджеру X11 (Mutter через XWayland), где видимая часть безрамочного окна.
 
 У окон ClipSD с прозрачным полем под тень оконный менеджер считал границей окна внешний край поля, и

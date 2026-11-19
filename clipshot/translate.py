@@ -1,6 +1,7 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later. Распространяется по лицензии GNU GPL v3 или более поздней,
 # без каких-либо гарантий; полный текст: файл LICENSE или <https://www.gnu.org/licenses/gpl-3.0.html>.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Перевод текста с картинки, как в переводчике с камеры: язык определяется сам, перевод ложится поверх текста.
 
 Сервисы (только официальные открытые API):
@@ -947,6 +948,7 @@ class TranslateJob(QThread):
         self.image = image.copy()
         self.cfg = dict(cfg)
         self.help = None
+        self.quota = ""   # 1.32: кончился лимит сервиса: код сообщения для колокольчика редактора (notifications)
         self.check_limit = check_limit
         self.cancelled = False
         self._reply = None
@@ -988,6 +990,7 @@ class TranslateJob(QThread):
             if left == 0:
                 # лимит на сегодня исчерпан: вопрос не нужен, сразу то же окно про почту или «обновится завтра»
                 email = self.cfg.get("translate_email", "")
+                self.quota = "translate_quota"
                 if email.strip():
                     self.done.emit([], tr("translate.err_mm_quota_tomorrow"))
                 else:
@@ -1023,6 +1026,12 @@ class TranslateJob(QThread):
             self.done.emit([], msg)
         except TranslateError as exc:
             self.help = exc.help
+            key = getattr(exc, "key", "") or ""
+            if isinstance(exc.help, EmailNeeded) or key.startswith("translate.err_mm_quota") \
+                    or key == "translate.err_quota_and_key":
+                self.quota = "translate_quota"
+            elif key == "translate.err_google_quota":
+                self.quota = "translate_quota_month"
             self.done.emit([], str(exc))
         except Exception as exc:   # noqa: BLE001 — любая неожиданность должна дойти до человека
             self.done.emit([], tr("translate.err_unexpected", error=exc))
@@ -1058,6 +1067,9 @@ def start(image: QImage, cfg: dict, on_done, confirm=None, full=False):
         res = ResultList(results)
         res.skipped = job.skipped
         res.total = job.total
+        if job.quota:   # 1.32: лимит кончился: короткое сообщение в колокольчик редактора (один раз за день)
+            from . import notifications
+            notifications.post(job.quota)
         # получатель сам проверяет, что его окно не удалено (sip.isdeleted), и пропускает только этот случай
         on_done(res, error, job.help)
 

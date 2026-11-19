@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- ClipSD: горячие клавиши. (C) 2026 Sergey Dayneko, GPL-3.0-or-later -->
+<!-- Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md. -->
 <schemalist>
   <schema id="org.gnome.shell.extensions.clipsd" path="/org/gnome/shell/extensions/clipsd/">
     <key name="region-hotkey" type="as">

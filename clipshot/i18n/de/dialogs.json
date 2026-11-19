@@ -1,5 +1,6 @@
 {
   "dialogs.close_tip": "Schließen (Esc)",
+  "dialogs.ok": "Verstanden",
   "dialogs.paste": "Einfügen",
   "dialogs.paste_tip": "Aus der Zwischenablage einfügen"
 }

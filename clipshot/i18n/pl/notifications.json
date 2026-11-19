@@ -1,0 +1,16 @@
+{
+  "notifications.empty": "Brak nowych powiadomień",
+  "notifications.read_all": "Oznacz wszystkie jako przeczytane",
+  "notifications.title": "Powiadomienia",
+  "notifications.translate_quota": "Tłumaczenie: dzienny limit wyczerpany",
+  "notifications.translate_quota_month": "Tłumaczenie: miesięczny limit Google wyczerpany",
+  "notifications.translate_quota_month_sub": "Tłumaczenie przejmie MyMemory, jeśli jest ustawiony jako zapasowy",
+  "notifications.translate_quota_sub": "Usługa tłumaczenia nie przyjmie tekstu do jutra",
+  "notifications.unread": "Nieprzeczytane: {n}",
+  "notifications.update_button": "Aktualizuj",
+  "notifications.update_sub": "Nowa wersja ClipSD jest gotowa do instalacji",
+  "notifications.update_title": "Dostępna jest wersja {version}",
+  "notifications.whatsnew_installed": "Zainstalowana wersja: co się zmieniło",
+  "notifications.whatsnew_past": "Wcześniejsza aktualizacja",
+  "notifications.whatsnew_title": "Co nowego w {version}"
+}

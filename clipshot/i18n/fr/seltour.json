@@ -1,0 +1,18 @@
+{
+  "seltour.s1_text": "Entourez à la souris l'endroit voulu. Le cadre terminé s'ajuste par les coins et les côtés, ou se déplace en le tirant de l'intérieur.",
+  "seltour.s1_title": "Sélectionner une zone",
+  "seltour.s2_text": "La capture va directement dans le presse-papiers et la fenêtre se ferme. Il reste à la coller dans une messagerie ou un document. Ctrl+Entrée fait pareil.",
+  "seltour.s2_title": "Copier et fermer",
+  "seltour.s3_text": "Ouvre la capture dans l'éditeur : flèches, numéros, cadres, texte, flou. Entrée ou un clic dans le cadre font pareil.",
+  "seltour.s3_title": "Modifier",
+  "seltour.s4_text": "Retire le cadre pour en choisir un autre endroit. Les touches R et Suppr font pareil.",
+  "seltour.s4_title": "Sélectionner à nouveau",
+  "seltour.s5_text": "Rangée du haut : enregistrer une vidéo de l'écran, capturer tout l'écran et copier le texte de l'image (reconnaissance).",
+  "seltour.s5_title": "Vidéo, plein écran, texte",
+  "seltour.s6_text": "« Traduire la sélection » traduit le texte du cadre. « Sélectionner et traduire » attend que vous entouriez l'endroit. La traduction apparaît dans une petite fenêtre à part.",
+  "seltour.s6_title": "Traduction",
+  "seltour.s7_text": "En bas : la langue du programme et la roue dentée des réglages (raccourci, dossier des captures, loupe).",
+  "seltour.s7_title": "Langue et réglages",
+  "seltour.s8_text": "La croix au coin du panneau ou Échap ferme la fenêtre sans capture. Vous pouvez refaire cette visite depuis le menu de l'icône près de l'horloge.",
+  "seltour.s8_title": "Fermer la fenêtre"
+}

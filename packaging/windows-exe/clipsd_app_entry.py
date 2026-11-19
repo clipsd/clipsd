@@ -1,5 +1,6 @@
 # ClipSD: entry point of ClipSD-app.exe (PyInstaller). Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 # Shortcuts start the C launcher {app}\ClipSD.exe (launcher/clipsd_launcher.c), which starts this program.
 #
 # Internal command (never shown to the user, used by build.ps1 and CI):

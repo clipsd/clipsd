@@ -1,5 +1,6 @@
 # ClipSD: exact build dependencies for the self-contained Linux build (packaging/linux/build_linux.sh, ADR-0009).
 # Copyright (C) 2026 Sergey Dayneko. SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 # Installed with: pip install --require-hashes --only-binary :all: -r requirements-build-linux.txt
 # Python 3.12 x86_64, glibc 2.35 and newer (ubuntu-22.04 in .github/workflows/linux.yml). Every package of the
 # closure is listed (pip refuses an unlisted one with --require-hashes). Hashes: every PyPI wheel of the pinned

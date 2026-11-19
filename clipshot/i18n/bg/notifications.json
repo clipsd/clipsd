@@ -1,0 +1,16 @@
+{
+  "notifications.empty": "Няма нови известия",
+  "notifications.read_all": "Маркирай всички като прочетени",
+  "notifications.title": "Известия",
+  "notifications.translate_quota": "Превод: дневният лимит е изчерпан",
+  "notifications.translate_quota_month": "Превод: месечният лимит на Google е изчерпан",
+  "notifications.translate_quota_month_sub": "Преводът продължава с MyMemory, ако е включен като резервен",
+  "notifications.translate_quota_sub": "Услугата за превод не приема текст до утре",
+  "notifications.unread": "Непрочетени: {n}",
+  "notifications.update_button": "Обнови",
+  "notifications.update_sub": "Нова версия на ClipSD е готова за инсталиране",
+  "notifications.update_title": "Налична е версия {version}",
+  "notifications.whatsnew_installed": "Инсталираната версия: какво се промени",
+  "notifications.whatsnew_past": "Предишно обновяване",
+  "notifications.whatsnew_title": "Какво ново във {version}"
+}

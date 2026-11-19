@@ -1,0 +1,10 @@
+- New editor. Tools are grouped (arrows and lines, shapes, labels, drawing and more). The “All tools” button shows all of them at once, together with their keys. For a narrow screenshot the editor window is narrow too: groups fold up, and every tool stays at hand.
+- Right-click menu. The menu of a selected object no longer covers its frame and handles: it opens next to the object.
+- Notifications bell. The editor has a bell, “Notifications”: a new version with the “Update” button, what's new in the installed version, and short messages from the program. A new version is announced by the bell first; the window offering the update appears later, if you haven't updated by then.
+- Selection window tour. On your first screenshot the window shows step by step what the panel buttons do. To see it again, open the menu of the icon next to the clock: “Selection window tour”.
+- Language names now have flags. A language chosen in the settings applies at once, without closing the window.
+- Settings are split into sections. A list on the left (General, Screenshot, Editor, Text and translation, Updates, About) with search above it. The window remembers which section was open.
+- Rate ClipSD. You can rate ClipSD from 1 to 5 stars and leave a review: the icon menu or “?” in the editor, “Rate ClipSD”. Now and then the program offers to rate it itself, but only when you are not taking a screenshot or working in the editor.
+- Sharper screenshots on scaled displays. On scaled displays (125%, 150%, 200%) screenshots are sharper: the editor shows them without blur. On Linux, browsers and documents paste them at their original size, not stretched. In the settings, section “Screenshot”, you can choose the “Screenshot size”: full resolution or as on screen.
+- A calmer look for windows. A calmer look and easier-to-read text: labels and buttons have more contrast, the main green button is darker, and the editor window has a thin frame by default.
+- The About window. The “About” window now has the terms of use for the ClipSD name and icon and a link to news on Telegram.

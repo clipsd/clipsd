@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """What the person sees when an update does not go in, or waits (1.31.2, after the 19.11.2026 case where 1.31.0
 said nothing for 10 minutes and then only "did not finish").
 
@@ -126,7 +127,8 @@ for lang in ("ru", "en", "de", "zh"):
     urls = []
     d = up.FailedDialog("1.31.1", report, title, open_url=urls.append)
     text = d.findChild(QLabel, "text").text()
-    check(text == tr("updater.failed.text", version="1.31.1") and "1.31.1" in text
+    check(text == tr("updater.failed.text") and d.title.text() == tr("updater.failed.title", version="1.31.1")
+          and "1.31.1" in d.title.text()
           and d.retry_button.text() == tr("updater.button.retry") and d.report_button.text() == tr("updater.button.report")
           and d.close_button.text() == tr("updater.button.close") and d.retry_button.isDefault(),
           f"failure window ({lang}): text with the version, Retry (default), Send an error report, Close")
@@ -140,7 +142,7 @@ for lang in ("ru", "en", "de", "zh"):
 i18n.set_language("ru")
 urls = []
 r = up.ReportDialog(report, title, open_url=urls.append, endpoint="")
-check(r.text.toPlainText() == report and r.text.isReadOnly(), "report window: the exact report text, read-only")
+check(r.text_view.toPlainText() == report and r.text_view.isReadOnly(), "report window: the exact report text, read-only")
 check(r.send_button.isHidden() and not r.copy_button.isHidden(), "report window: no «Send» without the receiver")
 r.copy_button.click()
 check(QGuiApplication.clipboard().text() == report and r.status.text() == tr("updater.report.copied"),
@@ -162,9 +164,9 @@ check(not r3.send() and r3.status.text() == tr("updater.report.send_failed"), "S
 
 # --- success, progress, waiting messages (real widgets) -------------------------------------------------------
 w = up.WhatsNewDialog("1.31.1", "- notes")
-check(w.findChild(QLabel, "installed").text() == "<b>" + tr("updater.whatsnew.installed", version="1.31.1") + "</b>"
-      and "ClipSD 1.31.1" in tr("updater.whatsnew.installed", version="1.31.1"),
-      "What's new starts with «Update installed: ClipSD 1.31.1 is ready»")
+check(w.title.text() == tr("updater.whatsnew.head", version="1.31.1") and "1.31.1" in w.title.text()
+      and w.ok.text() == tr("updater.button.done"),
+      "What's new starts with «ClipSD is updated to version 1.31.1» and ends with «Done»")
 ui = up.UpdaterUI()
 ui.progress_start("1.31.1", lambda: None)
 ui.progress_update(50, 100)
@@ -179,8 +181,8 @@ ui.deferred_notice(tr("updater.wait.unsaved", version="1.31.1"), lambda: restart
 box = ui._notice
 check(ui.progress is None and box is not None and not box.isModal() and box.property(up.CLOSABLE),
       "waiting message: non-modal, does not block quitting, replaces the progress window")
-restart = [b for b in box.buttons() if b.text() == tr("updater.button.restart_now")]
-check(box.text() == tr("updater.wait.unsaved", version="1.31.1") and restart, "waiting message has «Restart now»")
+restart = [box.restart_button] if box.restart_button.text() == tr("updater.button.restart_now") else []
+check(box.message_text == tr("updater.wait.unsaved", version="1.31.1") and restart, "waiting message has «Restart now»")
 if restart:
     restart[0].click()
     for _ in range(5):

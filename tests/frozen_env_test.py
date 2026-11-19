@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """The 19.11.2026 case: ClipSD 1.31.0 (PyInstaller package) on Ubuntu 26.04 downloaded and unpacked 1.31.1, and
 nothing was switched. The running program has LD_LIBRARY_PATH = <versions/1.31.0>/_internal (the bootloader puts it
 there); systemd-run inherited it and did not start ("OPENSSL_3.4.0 not found"), the helper started instead in a new

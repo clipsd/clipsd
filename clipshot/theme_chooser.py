@@ -1,13 +1,15 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later. Распространяется по лицензии GNU GPL v3 или более поздней,
 # без каких-либо гарантий; полный текст: файл LICENSE или <https://www.gnu.org/licenses/gpl-3.0.html>.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Выбор оформления при первом запуске: карточки-превью, клик сразу перекрашивает программу."""
 
 from PyQt6.QtCore import QPoint, Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap
-from PyQt6.QtWidgets import QDialog, QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout
 
 from . import themes
+from .dialogs import PALETTES, ClipDialog, style
 from .i18n import tr
 
 
@@ -53,13 +55,14 @@ class Card(QFrame):
         self.key = key
         self.setObjectName("themeCard")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         box = QVBoxLayout(self)
         box.setContentsMargins(12, 12, 12, 12)
         box.setSpacing(6)
         image = QLabel()
         image.setPixmap(pixmap)
         box.addWidget(image, 0, Qt.AlignmentFlag.AlignHCenter)   # превью по центру карточки
+        self.setFixedWidth(round(pixmap.width() / pixmap.devicePixelRatio()) + 30)   # обе карточки точно одной ширины
         # название крупно, пояснение в скобках мелкой строкой: подписи одинаковой высоты у обеих карточек
         full = themes.title(key)
         name, _sep, note = full.partition(" (")
@@ -78,41 +81,40 @@ class Card(QFrame):
         self.clicked.emit(self.key)
 
 
-class ThemeChooser(QDialog):
-    """Клик по карточке: оформление применяется сразу (окно редактора за диалогом перекрашивается)."""
+class ThemeChooser(ClipDialog):
+    """Клик по карточке: оформление применяется сразу (окно редактора за диалогом перекрашивается).
+    1.32: окно-карточка в общем стиле ClipSD, зелёная «Продолжить», карточка сама темнеет вместе с оформлением."""
 
     def __init__(self, ctx, parent=None, on_change=None):
-        super().__init__(parent)
+        t = themes.tokens(ctx.config)
+        super().__init__(parent, tr("theme_chooser.head"), tr("theme_chooser.sub"), "info", 700, dark=t["dark"], logo=True)
         self.ctx = ctx
         self.on_change = on_change
         self.setWindowTitle(tr("theme_chooser.window_title"))
-        root = QVBoxLayout(self)
-        root.setContentsMargins(22, 18, 22, 18)
-        root.setSpacing(12)
-        head = QLabel(tr("theme_chooser.head"))
-        head.setObjectName("head")
-        sub = QLabel(tr("theme_chooser.sub"))
-        sub.setWordWrap(True)
-        root.addWidget(head)
-        root.addWidget(sub)
+        if parent is not None:
+            self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, False)
+        self.setModal(True)
         row = QHBoxLayout()
         row.setSpacing(16)
+        row.addStretch(1)
         self.cards = {}
         for key in themes.THEMES:
             card = Card(key, preview(ctx, key))
             card.clicked.connect(self.choose)
             self.cards[key] = card
-            row.addWidget(card, 1)   # карточки одинаковой ширины
-        root.addLayout(row)
-        buttons = QHBoxLayout()
-        buttons.addStretch(1)
-        self.ok = QPushButton(tr("theme_chooser.ok"))
-        self.ok.setObjectName("primary")
-        self.ok.setDefault(True)
+            row.addWidget(card)   # карточки точно одной ширины, по центру окна
+        row.addStretch(1)
+        self.body.addLayout(row)
+        self.ok = self.primary(tr("theme_chooser.ok"))
         self.ok.clicked.connect(self.accept)
-        buttons.addWidget(self.ok)
-        root.addLayout(buttons)
         self._restyle()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self.parentWidget() is not None:
+            frame = self.frameGeometry()
+            frame.moveCenter(self.parentWidget().frameGeometry().center())
+            self.move(frame.topLeft())
 
     def choose(self, key):
         self.ctx.config["ui_theme"] = key
@@ -126,16 +128,13 @@ class ThemeChooser(QDialog):
     def _restyle(self):
         t = themes.tokens(self.ctx.config)
         current = themes.name(self.ctx.config)
-        self.setStyleSheet(f"""
-QDialog {{ background: {t['dialog_bg']}; }}
-QLabel {{ color: {t['text']}; }}
-QLabel#head {{ font-size: 20px; font-weight: bold; }}
+        self.dark = bool(t["dark"])
+        c = PALETTES[self.dark]
+        self.setStyleSheet(style(self.dark) + f"""
 QLabel#cardTitle {{ font-size: 16px; font-weight: bold; }}
-QLabel#cardNote {{ font-size: 14px; color: {t['text_dim']}; }}
-QFrame#themeCard {{ background: {t['card_bg']}; border: 3px solid {t['card_border']}; border-radius: 14px; }}
-QFrame#themeCard:hover {{ border-color: {t['ui_accent']}; }}
-QPushButton#primary {{ background: {t['ui_accent']}; color: white; border: none; border-radius: 8px;
-    font-weight: bold; font-size: 14px; min-height: 36px; padding: 0 24px; }}
+QLabel#cardNote {{ font-size: 14px; color: {c['muted']}; }}
+QFrame#themeCard {{ background: {c['note_bg']}; border: 2px solid {c['edge']}; border-radius: 10px; }}
+QFrame#themeCard:hover {{ border-color: {c['accent']}; }}
 """)
         for key, card in self.cards.items():
-            card.setStyleSheet(f"QFrame#themeCard {{ border: 3px solid {t['ui_accent']}; }}" if key == current else "")
+            card.setStyleSheet(f"QFrame#themeCard {{ border: 3px solid {c['accent']}; }}" if key == current else "")

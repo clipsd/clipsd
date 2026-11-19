@@ -1,5 +1,9 @@
 {
+  "tour.alltools_text": "“⋯” düğmesi tüm araçları tuşlarıyla birlikte gruplara göre açar. Pencere dar olup gruplar katlandığında ve tuşları öğrenmek için kullanışlıdır.",
+  "tour.alltools_title": "Tüm araçlar",
   "tour.back": "Geri",
+  "tour.bell_text": "Yeni bir şey olduğunda zilde bir nokta belirir: yeni sürüm çıktı (Güncelle düğmesi), kurulu sürümdeki yenilikler, “günlük çeviri sınırı doldu” gibi kısa program iletileri.",
+  "tour.bell_title": "Bildirimler",
   "tour.canvas_text": "Doğrudan ekran görüntüsünün üzerine çizin. Az önce çizdiğiniz nesne seçili kalır: taşıyabilir, beyaz tutamaçlardan sürükleyebilir, rengini ve kalınlığını değiştirebilirsiniz.\n\nNesneye sağ tık: menü (renk, dolgu, çoğalt, öne getir, sil). Metne çift tık: düzenleme. Delete: sil. Esc: seçimi kaldır.",
   "tour.canvas_title": "Ekran görüntüsü",
   "tour.capture_text": "Herhangi bir programda {hotkey}: ekran donar, fareyle bir alan seçin, burada açılır. Seçim yapmadan basit bir tıklama tüm monitörü yakalar, Esc iptal eder.\n\n{hotkey} kısayolunu ayarlardan istediğiniz başka bir kısayolla değiştirebilirsiniz; aşağıdaki düğme ayarları hemen açar.\n\nBir sonraki {hotkey} kullanımında önceki alan vurgulanır: Enter veya içine tıklama aynı yeri yakalar.\n\nClipSD simgesi saatin yanındaki sistem tepsisindedir: sağ tıklayarak menüyü açabilir ve bu turu tekrarlayabilirsiniz.",
@@ -22,7 +26,7 @@
   "tour.step": "Adım {i} / {total}",
   "tour.text_color_text": "Numaradaki rakamın ve belirtme çizgisindeki metnin rengi. “Otomatik” dolgu rengine göre beyaz veya siyahı kendisi seçer.",
   "tour.text_color_title": "Metin rengi",
-  "tour.tools_text": "Soldan sağa: seçim, belirtme çizgisi, metin, numara, oklar (düz, çift yönlü, serbest), düzgün çizgi, çizgi, dikdörtgen, elips, serbest şekil, vurgulayıcı, kalem, bulanıklaştırma, silgi, kırpma. Her birinin bir harf tuşu vardır, üzerine gelince ipucunda görünür.\n\nDüğmelerin sırasını değiştirebilirsiniz: bir düğmeyi fareyle tutun ve yeni bir yere sürükleyin. Satıra sağ tıklamak varsayılan sırayı geri getirir.",
+  "tour.tools_text": "Araçlar gruplandırıldı: oklar ve çizgiler, şekiller, yazılar, çizim, gizle ve sil, görüntüden metin. “Seç ve taşı”, “Numara” ve “Kırpma” her zaman ayrı düğmelerdir.\n\nBir grubun simgesine tıklamak son kullanılan aracını açar, sağdaki küçük ▾ ok diğerlerini gösterir. Dar pencerede gruplar tek düğmeye katlanır, harf tuşları ise her zaman çalışır: ipucunda görünürler.\n\nSıra sürükleyerek değişir: grubun tamamı veya kendi grubu içindeki bir araç. Sağ tık: varsayılan araç ve standart sıra.",
   "tour.tools_title": "Araçlar",
   "tour.undo_text": "Geri ve ileri okları: geri al ve yinele (Ctrl+Z ve Ctrl+Y).\n\nGörüntü simgeli düğme ekran görüntüsünün üzerine başka bir görüntü koyar: panodan (Ctrl+V), dosyadan veya yeni bir ekran alanı görüntüsü olarak. Bir dosyayı pencereye sürükleyip bırakmanız da yeterli.",
   "tour.undo_title": "Geri alma ve görüntü ekleme"

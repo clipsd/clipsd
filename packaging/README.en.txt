@@ -1,6 +1,8 @@
-ClipSD 1.31.2: screenshots with an editor
+ClipSD 1.32.0: screenshots with an editor
 Copyright (C) 2026 Sergey Dayneko. Licence: GNU GPL v3 or later, official text in the file LICENSE
   (a plain-language Russian summary is in LICENSE.ru.txt). По-русски: README.txt.
+  The name ClipSD and the program icon: modified versions by others use another name and not the ClipSD icon;
+  saying "based on ClipSD" is fine. Details: the file TRADEMARKS.txt (additional terms under section 7 of the GPL).
 
 What it does
   Alt+W: the screen freezes, you select an area with the mouse, and the editor opens with the screenshot in the

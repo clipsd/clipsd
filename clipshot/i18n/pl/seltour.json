@@ -1,0 +1,18 @@
+{
+  "seltour.s1_text": "Obrysuj myszą potrzebne miejsce. Gotową ramkę można zmieniać za rogi i boki albo przesuwać, przeciągając od środka.",
+  "seltour.s1_title": "Zaznacz obszar",
+  "seltour.s2_text": "Zrzut trafia od razu do schowka, a okno się zamyka. Zostaje wkleić go do komunikatora lub dokumentu. Ctrl+Enter robi to samo.",
+  "seltour.s2_title": "Kopiuj i zamknij",
+  "seltour.s3_text": "Otwiera zrzut w edytorze: strzałki, numery, ramki, tekst, rozmycie. To samo robi Enter i kliknięcie wewnątrz ramki.",
+  "seltour.s3_title": "Edytuj",
+  "seltour.s4_text": "Usuwa ramkę, można obrysować inne miejsce. To samo robią klawisze R i Delete.",
+  "seltour.s4_title": "Zaznacz od nowa",
+  "seltour.s5_text": "Górny rząd: nagranie wideo ekranu, zrzut całego ekranu i kopiowanie tekstu z obrazu (rozpoznawanie).",
+  "seltour.s5_title": "Wideo, cały ekran, tekst",
+  "seltour.s6_text": "\"Przetłumacz zaznaczone\" tłumaczy tekst w ramce. \"Zaznacz i przetłumacz\" czeka, aż obrysujesz miejsce. Tłumaczenie pojawia się w osobnym małym oknie.",
+  "seltour.s6_title": "Tłumaczenie",
+  "seltour.s7_text": "Na dole: język programu i koło zębate ustawień (skrót klawiszowy, folder zrzutów, lupa).",
+  "seltour.s7_title": "Język i ustawienia",
+  "seltour.s8_text": "Krzyżyk w rogu panelu lub Esc zamyka okno bez zrzutu. Ten przewodnik można powtórzyć z menu ikony przy zegarze.",
+  "seltour.s8_title": "Zamknij okno"
+}

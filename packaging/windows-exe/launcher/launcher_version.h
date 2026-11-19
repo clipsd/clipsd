@@ -1,4 +1,5 @@
 /* ClipSD launcher version. Copyright (C) 2026 Sergey Dayneko. SPDX-License-Identifier: GPL-3.0-or-later
+ * Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
  *
  * This is the version of the launcher itself, not of ClipSD. The installer replaces
  * {app}\ClipSD.exe only when this version changes, so bump it on every change of the

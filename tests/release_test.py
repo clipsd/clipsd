@@ -1,4 +1,5 @@
 # ClipSD. Copyright (C) 2026 Sergey Dayneko. SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """tools/release.sh in a temporary copy of the project: checks, --dry-run, commit, tag, no push.
 
 The copy is a fresh git repository (no remote), so a push would fail loudly; the real repository is not touched.
@@ -198,6 +199,22 @@ uc_text = uc_file.read_text(encoding="utf-8")
 uc_file.write_text(uc_text.replace('"TODO-test-channel-public-key"', repr(fake_key)), encoding="utf-8")
 rc = subprocess.run([sys.executable, "tools/release_check.py"], cwd=repo, capture_output=True, text=True)
 check("release_check: ключ proba в TEST_PUBLIC_KEYS: ошибка", rc.returncode != 0 and "proba" in rc.stdout)
+
+# name and icon (GPLv3 section 7): a source header without the notice of TRADEMARKS.md, then no TRADEMARKS.md
+tm_repo = make_repo("trademark")
+tm_file = tm_repo / "clipshot" / "keys.py"
+tm_text = tm_file.read_text(encoding="utf-8")
+tm_file.write_text("\n".join(l for l in tm_text.split("\n") if "TRADEMARKS.md" not in l), encoding="utf-8")
+rc = subprocess.run([sys.executable, "tools/release_check.py"], cwd=tm_repo, capture_output=True, text=True)
+rs = subprocess.run([sys.executable, "tools/release_check.py", "--strict"], cwd=tm_repo, capture_output=True, text=True)
+check("release_check: исходник без строки о TRADEMARKS.md: предупреждение, с --strict ошибка",
+      "::warning::name and icon notice: clipshot/keys.py" in rc.stdout
+      and rs.returncode != 0 and "::error::name and icon notice: clipshot/keys.py" in rs.stdout)
+subprocess.run([sys.executable, "tools/trademark_notice.py"], cwd=tm_repo, capture_output=True, text=True)
+check("trademark_notice.py возвращает строку в заголовок", tm_file.read_text(encoding="utf-8") == tm_text)
+(tm_repo / "TRADEMARKS.md").unlink()
+rs = subprocess.run([sys.executable, "tools/release_check.py", "--strict"], cwd=tm_repo, capture_output=True, text=True)
+check("release_check --strict: нет TRADEMARKS.md: ошибка", rs.returncode != 0 and "TRADEMARKS.md is missing" in rs.stdout)
 
 
 # --- step 2: assemble (files, SHA256SUMS, latest.json, signature) ---------------------------------------

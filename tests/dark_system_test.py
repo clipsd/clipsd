@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Windows or GNOME in a dark theme: the windows of ClipSD stay readable (1.31.2).
 
 19.11.2026, Windows in the dark theme: in the tour (language step) the language buttons, «Как в системе», «Назад» and
@@ -204,7 +205,7 @@ for theme in ("standard", "pro"):
         ed = EditorWindow(image, ctx, QPoint(0, 0))
         ed.present()
         settle()
-        ed.start_tour()
+        ed.start_tour(language=True)   # шаг выбора языка: как при самом первом знакомстве
         settle()
         tour = ed.tour
         check(not tour.back.isVisible(), f"{tag}: first step of the tour: no «Back» button (not a pale disabled one)")
@@ -253,9 +254,10 @@ for theme in ("standard", "pro"):
             audit(ui._notice, f"{tag} update window: waiting")
             ui._notice.close()
         ui.progress_close()
-        # About (ClipDialog: white card in both themes)
+        # About (ClipDialog, 1.32: the card follows the theme: white in Standard, dark in Professional)
         about = appmod.Clipshot.build_about(ctx)
         about.show()
+        check(about.dark == (theme == "pro"), f"{tag} About: the card follows the theme (dark={about.dark})")
         audit(about, f"{tag} About")
         about.close()
 

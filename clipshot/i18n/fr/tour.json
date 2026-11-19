@@ -1,5 +1,9 @@
 {
+  "tour.alltools_text": "Le bouton « ⋯ » ouvre tous les outils par groupe avec leurs touches. Pratique quand la fenêtre est étroite et les groupes repliés, et pour retenir les touches.",
+  "tour.alltools_title": "Tous les outils",
   "tour.back": "Précédent",
+  "tour.bell_text": "Un point apparaît sur la cloche quand il y a du nouveau : une nouvelle version est sortie (bouton « Mettre à jour »), les nouveautés de la version installée, de courts messages du programme comme « limite quotidienne de traduction atteinte ».",
+  "tour.bell_title": "Notifications",
   "tour.canvas_text": "Dessinez directement sur la capture. L'objet que vous venez de dessiner reste sélectionné : vous pouvez le déplacer, faire glisser les poignées blanches, changer sa couleur et son épaisseur.\n\nClic droit sur un objet : menu (couleur, remplissage, dupliquer, premier plan, supprimer). Double-clic sur un texte : le modifier. Delete : supprimer. Esc : désélectionner.",
   "tour.canvas_title": "Capture",
   "tour.capture_text": "{hotkey} dans n'importe quel programme : l'écran se fige, sélectionnez une zone avec la souris et elle s'ouvre ici. Un simple clic sans sélection capture tout le moniteur, Esc annule.\n\nVous pouvez remplacer {hotkey} par le raccourci de votre choix dans les paramètres ; le bouton ci-dessous les ouvre directement.\n\nLa prochaine fois que vous appuierez sur {hotkey}, la zone précédente sera mise en évidence : Enter ou un clic à l'intérieur capture le même endroit.\n\nL'icône ClipSD dans la zone de notification, près de l'horloge : un clic droit ouvre un menu où vous pouvez relancer cette visite guidée.",
@@ -22,7 +26,7 @@
   "tour.step": "Étape {i} sur {total}",
   "tour.text_color_text": "La couleur du chiffre d'un numéro et du texte d'une légende. « Auto » choisit le blanc ou le noir selon la couleur de remplissage.",
   "tour.text_color_title": "Couleur du texte",
-  "tour.tools_text": "De gauche à droite : sélection, légende, texte, numéro, flèches (simple, double, à main levée), ligne lissée, ligne, rectangle, ellipse, forme libre, surligneur, crayon, flou, gomme, rognage. Chaque outil a un raccourci d'une seule lettre, visible dans l'info-bulle au survol.\n\nVous pouvez réorganiser les boutons : saisissez-en un avec la souris et faites-le glisser à un nouvel endroit. Un clic droit sur la rangée rétablit l'ordre par défaut.",
+  "tour.tools_text": "Les outils sont regroupés : flèches et lignes, formes, textes, dessin, masquer et effacer, texte de l'image. « Sélection et déplacement », « Numéro » et « Rognage » ont toujours leur propre bouton.\n\nUn clic sur l'icône d'un groupe active son dernier outil utilisé, la petite flèche ▾ à droite ouvre les autres. Dans une fenêtre étroite, les groupes se replient en un seul bouton, et les touches-lettres fonctionnent toujours : elles figurent dans l'info-bulle.\n\nL'ordre se change par glisser-déposer : un groupe entier ou un outil dans son groupe. Clic droit : outil par défaut et ordre standard.",
   "tour.tools_title": "Outils",
   "tour.undo_text": "Les flèches arrière et avant annulent et rétablissent (Ctrl+Z et Ctrl+Y).\n\nLe bouton avec une image place une autre image par-dessus la capture : depuis le presse-papiers (Ctrl+V), depuis un fichier ou une nouvelle capture d'une zone de l'écran. Vous pouvez aussi simplement faire glisser un fichier dans la fenêtre.",
   "tour.undo_title": "Annuler et insérer une image"

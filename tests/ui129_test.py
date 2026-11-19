@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Интерфейс 1.29: панель окна выделения (два ряда, плитки, цвет у главных кнопок, три ширины без обрезки подписей),
 перевод кусок за куском в окне выделения, редактор при переводе (строка «Перевод» сверху, бирюзовая полоса снизу),
 инструмент по умолчанию (галочка, меню, config). Сеть и распознавание подменены.
@@ -194,7 +195,7 @@ def close_to(c, hexcolor, tol=14):
     return abs(c.red() - t.red()) + abs(c.green() - t.green()) + abs(c.blue() - t.blue()) <= tol * 3
 
 
-check(close_to(px(rects["copy"], 0.93, 0.5), "#1f9d55"), f"«Скопировать и закрыть» зелёная ({px(rects['copy'], 0.93, 0.5).name()})")
+check(close_to(px(rects["copy"], 0.93, 0.5), themes.GREEN), f"«Скопировать и закрыть» зелёная ({px(rects['copy'], 0.93, 0.5).name()})")   # 1.32: #157a40
 check(close_to(px(rects["manual"], 0.93, 0.5), "#e6f0fd"), f"«Выделить заново» голубая ({px(rects['manual'], 0.93, 0.5).name()})")
 check(close_to(px(rects["edit"], 0.93, 0.5), "#ffffff"), f"«Редактировать» белая ({px(rects['edit'], 0.93, 0.5).name()})")
 check(all(close_to(px(rects[k], 0.04, 0.5), "#f5f6f8") for k in EXPECT_ORDER[:5]), "у плиток нейтральный фон")
@@ -374,7 +375,7 @@ img = sel.grab().toImage()
 ratio = img.width() / sel.width()
 rects = {k: r for k, _t, _s, r in sel._bar_layout()[0]}
 c_copy = img.pixelColor(int((rects["copy"].left() + rects["copy"].width() * 0.93) * ratio), int(rects["copy"].center().y() * ratio))
-check(not close_to(c_copy, "#1f9d55", 30) and c_copy.green() > 170, f"«Скопировать и закрыть» в режиме перевода бледная ({c_copy.name()})")
+check(not close_to(c_copy, themes.GREEN, 30) and c_copy.green() > 150, f"«Скопировать и закрыть» в режиме перевода бледная ({c_copy.name()})")
 for key in ("copy", "edit", "save", "ocr", "record", "full"):
     QTest.mouseClick(sel, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, rects[key].center())
 check(sel.translate_mode and not fin and sel.action == "edit", "бледные кнопки в режиме перевода ничего не делают")
@@ -811,7 +812,8 @@ check(texts == ["Сделать прямоугольник инструмент�
 shown = []
 real_exec = QMenu.exec
 QMenu.exec = lambda self, *a, **k: (shown.append([x.text() for x in self.actions() if not x.isSeparator()]), None)[1]
-pos = ed.tool_buttons[RECT].mapTo(ed.tool_strip, ed.tool_buttons[RECT].rect().center())
+rect_w = ed.tool_strip.visible_widget(RECT)   # 1.32: в узком окне прямоугольник на значке группы «Фигуры»
+pos = rect_w.mapTo(ed.tool_strip, rect_w.rect().center())
 ed._tool_strip_menu(pos)
 QMenu.exec = real_exec
 check(shown and shown[0][0] == "Сделать прямоугольник инструментом по умолчанию", f"правая кнопка по инструменту открывает меню этого инструмента: {shown}")

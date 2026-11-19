@@ -1,5 +1,6 @@
 {
   "dialogs.close_tip": "关闭（Esc）",
+  "dialogs.ok": "知道了",
   "dialogs.paste": "粘贴",
   "dialogs.paste_tip": "从剪贴板粘贴"
 }

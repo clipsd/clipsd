@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Перевод с картинки: нарезка, второй сервис при лимите, подключение Google, расход, окошки перевода, перевод в редакторе.
 Сеть подменяется (лимит не тратится); распознавание настоящее, где есть Tesseract.
 
@@ -437,6 +438,8 @@ if ocr.engine_name() == "tesseract":
     app.processEvents(); QTest.qWait(30); app.processEvents()
     c = ed.canvas
     ed.select_tool(RECT)
+    ed.resize(1500, ed.height())   # 1.32: большие кнопки второго ряда только в широком окне
+    app.processEvents(); QTest.qWait(30); app.processEvents()
     check(TRANSLATE in ed.tool_buttons and ed.tr_button.isVisible(), "в редакторе есть «Перевести» (инструмент и кнопка)")
     QTest.mouseClick(ed.tr_button, Qt.MouseButton.LeftButton)
     layer = ed.tr_layer

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ClipSD: install for the current Linux user. No sudo, no internet, no Python on the machine needed.
 # Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко). SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 #
 # Layout:  ~/.local/share/clipsd/versions/<version>/   program folder (this archive)
 #          ~/.local/share/clipsd/current -> versions/<version>

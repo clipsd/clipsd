@@ -1,6 +1,7 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later. Распространяется по лицензии GNU GPL v3 или более поздней,
 # без каких-либо гарантий; полный текст: файл LICENSE или <https://www.gnu.org/licenses/gpl-3.0.html>.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Окно настроек: горячие клавиши, выделение, трей, сохранение, автозапуск."""
 
 import ast
@@ -11,15 +12,15 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QPoint, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QFontMetrics, QGuiApplication, QKeySequence
-from PyQt6.QtWidgets import (QApplication, QCheckBox, QColorDialog, QComboBox, QDialog, QFileDialog, QFrame, QGridLayout,
+from PyQt6.QtWidgets import (QApplication, QButtonGroup, QSizePolicy, QStackedWidget, QCheckBox, QColorDialog, QComboBox, QDialog, QFileDialog, QFrame, QGridLayout,
                              QHBoxLayout, QLabel, QLineEdit, QKeySequenceEdit, QPushButton, QScrollArea, QStyle, QVBoxLayout,
                              QWidget)
 
 from .i18n import tr
 from .i18n import keys as i18n_keys
-from .sysenv import child_env
+from .sysenv import child_env, open_url
 
 # Русская раскладка → латинская по месту клавиши: сочетание работает при любой раскладке.
 _RU = "йцукенгшщзхъфывапролджэячсмитьбю"
@@ -341,10 +342,13 @@ class HotkeyEditor(QWidget):
 
     def __init__(self, value=""):
         super().__init__()
-        row = QHBoxLayout(self)
+        self.row = QGridLayout(self)
+        row = self.row
         row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(4)
+        row.setHorizontalSpacing(4)
+        row.setVerticalSpacing(6)
         self.mod_buttons = {}
+        self._parts = []
         for mod, label in self.MODS:
             label = i18n_keys(label)   # de: «Strg»
             button = QPushButton(label)
@@ -352,26 +356,57 @@ class HotkeyEditor(QWidget):
             # Ширина по тексту: при крупном системном шрифте «Shift» не обрезается.
             f14 = QFont()
             f14.setPixelSize(14)   # в карточках буквы 14 px: ширина считается по ним, а не по шрифту до стиля
-            button.setMinimumWidth(QFontMetrics(f14).horizontalAdvance(label) + 36)
+            button.setMinimumWidth(QFontMetrics(f14).horizontalAdvance(label) + 22)
             button.setToolTip(tr("settings.mod_tip", name=label))
             self.mod_buttons[mod] = button
-            row.addWidget(button)
-        plus = QLabel("+")
-        row.addWidget(plus)
+            self._parts.append(button)
+        self._parts.append(QLabel("+"))
         self.key = QComboBox()
         self.key.addItem(tr("settings.key_none"), "")
         for key, label in _key_choices():
             self.key.addItem(label, key)
         self.key.setToolTip(tr("settings.key_tip"))
-        row.addWidget(self.key, 1)
-        record = QPushButton(tr("settings.record"))
-        record.setToolTip(tr("settings.record_tip"))
-        record.clicked.connect(self.record)
-        row.addWidget(record)
-        off = QPushButton(tr("settings.off"))
-        off.clicked.connect(lambda: self.set_hotkey(""))
-        row.addWidget(off)
+        self._parts.append(self.key)
+        self.record_button = QPushButton(tr("settings.record"))
+        self.record_button.setToolTip(tr("settings.record_tip"))
+        self.record_button.clicked.connect(self.record)
+        self.off_button = QPushButton(tr("settings.off"))
+        self.off_button.clicked.connect(lambda: self.set_hotkey(""))
+        self._tail = [self.record_button, self.off_button]
+        self._narrow = None
+        self._arrange(False)
         self.set_hotkey(value)
+
+    def _arrange(self, narrow: bool):
+        """Широко: всё в одну строку. Узко (150% на 1280x720): «Записать…» и «Выключить» переходят во вторую строку,
+        ряд не даёт горизонтальной прокрутки."""
+        if narrow == self._narrow:
+            return
+        self._narrow = narrow
+        for w in self._parts + self._tail:
+            self.row.removeWidget(w)
+        for i, w in enumerate(self._parts):
+            self.row.addWidget(w, 0, i)
+        keycol = len(self._parts) - 1
+        self.row.setColumnStretch(keycol, 1)
+        if narrow:
+            self.row.addWidget(self._tail[0], 1, 0, 1, 3)
+            self.row.addWidget(self._tail[1], 1, 3, 1, keycol - 2)
+        else:
+            self.row.addWidget(self._tail[0], 0, len(self._parts))
+            self.row.addWidget(self._tail[1], 0, len(self._parts) + 1)
+        self.updateGeometry()
+
+    def _wide_width(self) -> int:
+        widgets = self._parts + self._tail
+        return sum(max(w.minimumSizeHint().width(), w.sizeHint().width() if w is not self.key else 110) for w in widgets) + 4 * len(widgets)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._arrange(event.size().width() < self._wide_width())
+
+    def minimumSizeHint(self):
+        return QSize(sum(w.minimumSizeHint().width() for w in self._parts) + 4 * len(self._parts), 36)
 
     def set_hotkey(self, value: str):
         *mods, key = (value or "").split("+") if value else [""]
@@ -409,10 +444,84 @@ class HotkeyEditor(QWidget):
                 self.set_hotkey(value)
 
 
+class WrapCheck(QCheckBox):
+    """Флажок с подписью, которая переносится по строкам (длинные подписи на 12 языках не раздвигают окно)."""
+
+    def __init__(self, text="", parent=None):
+        super().__init__(parent)
+        self._text = text
+        box = QHBoxLayout(self)
+        box.setContentsMargins(26, 0, 0, 0)
+        self.label = QLabel(text)
+        self.label.setWordWrap(True)
+        self.label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)   # щелчок по подписи ставит флажок
+        box.addWidget(self.label)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+
+    def text(self):
+        return self._text
+
+    def setText(self, text):
+        self._text = text
+        self.label.setText(text)
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, w):
+        return max(22, self.layout().heightForWidth(w))
+
+    def sizeHint(self):
+        s = self.layout().sizeHint()
+        return QSize(s.width(), max(22, s.height()))
+
+    def minimumSizeHint(self):
+        return QSize(120, max(22, self.layout().minimumSize().height()))
+
+
 # --- окно ---------------------------------------------------------------------
+
+def _luminance(c) -> float:
+    def ch(v):
+        v /= 255
+        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+    return 0.2126 * ch(c.red()) + 0.7152 * ch(c.green()) + 0.0722 * ch(c.blue())
+
+
+def _readable(fg, bg, need: float = 4.5):
+    """Цвет fg, затемнённый (на светлом фоне) или осветлённый (на тёмном), пока контраст к bg не станет не ниже need."""
+    from PyQt6.QtGui import QColor
+    lb = _luminance(bg)
+    dark_bg = lb < 0.18
+    c = QColor(fg)
+    for _ in range(40):
+        lf = _luminance(c)
+        hi, lo = max(lf, lb), min(lf, lb)
+        if (hi + 0.05) / (lo + 0.05) >= need:
+            break
+        c = c.lighter(108) if dark_bg else c.darker(108)
+    return c
+
 
 def settings_style(t) -> str:
     r = 10 if not t["dark"] else 3
+    from PyQt6.QtGui import QColor as _C
+    base, accent = _C(t["dialog_bg"]), _C(t["ui_accent"])
+    t = dict(t)
+    t["nav_bg"] = (base.lighter(112) if t["dark"] else base.darker(104)).name()
+    t["nav_hover"] = f"rgba(128,128,128,{0.18 if t['dark'] else 0.12})"
+    alpha = 0.28 if t["dark"] else 0.15
+    t["nav_sel"] = f"rgba({accent.red()},{accent.green()},{accent.blue()},{alpha})"
+    # Подпись выбранного раздела цветом акцента, но не бледнее 4,5:1 к своему фону (акцент поверх меню): на светлом
+    # акцент темнеет, на тёмном светлеет (контраст текста 1.32; акцент #1e78ff на этом фоне давал 2,6:1)
+    nav = _C(t["nav_bg"])
+    sel_bg = _C(*(round(a * alpha + b * (1 - alpha)) for a, b in ((accent.red(), nav.red()), (accent.green(), nav.green()),
+                                                                 (accent.blue(), nav.blue()))))
+    t["nav_sel_text"] = _readable(accent, sel_bg).name()
+    # кнопки с белым текстом (выбранный модификатор, «Сохранить»): синий по правилу контраста 4,5:1, не акцент
+    from . import themes as _themes
+    t["blue_bg"], t["blue_hover"], t["blue_border"] = _themes.blue_button(t["ui_accent"])
+    t["found_bg"] = "rgba(255,210,63,0.45)" if not t["dark"] else "rgba(255,210,63,0.30)"
     return f"""
 QDialog {{ background: {t['dialog_bg']}; color: {t['text']}; }}
 QLabel, QCheckBox {{ color: {t['text']}; font-size: 14px; }}
@@ -423,60 +532,133 @@ QFrame#card {{ background: {t['card_bg']}; border: 1px solid {t['card_border']};
 QKeySequenceEdit, QLineEdit, QComboBox {{ min-height: 32px; font-size: 14px; }}
 QLineEdit, QComboBox {{ background: {t['input_bg']}; color: {t['text']}; border: 1px solid {t['button_border']};
     border-radius: {min(r, 4)}px; padding: 0 6px; }}
-HotkeyEditor QPushButton:checked {{ background: {t['ui_accent']}; color: white; border-color: {t['ui_accent']};
+HotkeyEditor QPushButton {{ padding: 0 8px; }}
+HotkeyEditor QPushButton:checked {{ background: {t['blue_bg']}; color: white; border-color: {t['blue_border']};
     font-weight: bold; }}
+HotkeyEditor QPushButton:checked:hover {{ background: {t['blue_hover']}; border-color: {t['blue_border']}; }}
 QPushButton {{ min-height: 32px; font-size: 14px; padding: 0 14px; border-radius: {min(r, 6)}px; border: 1px solid {t['button_border']};
     background: {t['button_bg']}; color: {t['button_text']}; }}
 QPushButton:hover {{ background: {t['button_hover']}; border-color: {t['ui_accent']}; }}
-QPushButton#primary {{ background: {t['ui_accent']}; color: white; border: 1px solid {t['ui_accent']}; font-weight: bold; }}
+QFrame#nav {{ background: {t['nav_bg']}; border-right: 1px solid {t['card_border']}; }}
+QLineEdit#search {{ min-height: 30px; border-radius: 15px; padding: 0 12px; }}
+QPushButton#navItem {{ text-align: left; min-height: 36px; padding: 0 10px; border: none; border-radius: 8px;
+    background: transparent; color: {t['text']}; }}
+QPushButton#navItem:hover {{ background: {t['nav_hover']}; border: none; }}
+QPushButton#navItem:checked {{ background: {t['nav_sel']}; color: {t['nav_sel_text']}; font-weight: bold; border: none; }}
+QLabel[found="true"], QCheckBox[found="true"], QPushButton[found="true"] {{ background: {t['found_bg']}; border-radius: 4px; }}
+QFrame#card[found="true"] {{ border: 2px solid {t['ui_accent']}; }}
+QPushButton#primary {{ background: {t['blue_bg']}; color: white; border: 1px solid {t['blue_border']}; font-weight: bold; }}
+QPushButton#primary:hover {{ background: {t['blue_hover']}; border-color: {t['blue_border']}; }}
 """
 
 
 class SettingsDialog(QDialog):
+    language_rebuilt = pyqtSignal()   # окно перестроено на новом языке (после смены в списке)
+
     def __init__(self, config: dict, parent=None):
         super().__init__(parent)
+        self.config = config
+        self._parent = parent
+        self.update_ctx = None   # приложение (ставит open_settings): без него кнопка ничего не запускает
+        self._found_widgets = []
+        self._build(config)
+
+    def _build(self, config: dict):
+        """Строит содержимое окна; при смене языка окно строится заново на новом языке (_language_chosen)."""
         from . import __author__, __version__
         self.config = config
         self.setWindowTitle(tr("settings.title"))
         from . import themes as _themes
         self.setStyleSheet(settings_style(_themes.tokens(config)))
-        # Карточки прокручиваются: на низком экране окно не выше экрана, а «Отмена» и «Сохранить» всегда видны
+        # 1.32: слева меню разделов с поиском, справа страница выбранного раздела; страницы прокручиваются,
+        # «Отмена» и «Сохранить» всегда видны
+        from . import icons
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 14)
-        outer.setSpacing(6)
-        content = QWidget()
-        content.setObjectName("settingsContent")
-        root = QVBoxLayout(content)
-        root.setContentsMargins(18, 14, 18, 4)
-        root.setSpacing(6)
-        self.scroll = QScrollArea()
-        self.scroll.setObjectName("settingsScroll")
-        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.scroll.viewport().setAutoFillBackground(False)
-        outer.addWidget(self.scroll, 1)
+        outer.setSpacing(10)
+        body = QHBoxLayout()
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(0)
+        outer.addLayout(body, 1)
+        self.nav = QFrame()
+        self.nav.setObjectName("nav")
+        self.nav.setFixedWidth(224)
+        nav_box = QVBoxLayout(self.nav)
+        nav_box.setContentsMargins(10, 12, 10, 10)
+        nav_box.setSpacing(4)
+        self.search = QLineEdit()
+        self.search.setObjectName("search")
+        self.search.setPlaceholderText(tr("settings.search"))
+        self.search.setClearButtonEnabled(True)
+        self.search.setAccessibleName(tr("settings.search"))
+        nav_box.addWidget(self.search)
+        nav_box.addSpacing(6)
+        self.nav_group = QButtonGroup(self)
+        self.nav_buttons = {}
+        self.pages = {}       # ключ раздела -> (область прокрутки, раскладка страницы)
+        self._cards = []      # (ключ раздела, заголовок карточки, ключ синонимов, рамка карточки)
+        self.stack = QStackedWidget()
+        self.stack.setObjectName("pages")
+        # значки разделов: светлое: TILE_SUB (5,2:1, прежний серый был бледнее), тёмное: приглушённый текст
+        nav_icon = _themes.TILE_SUB if not _themes.tokens(config)["dark"] else _themes.tokens(config)["text_dim"]
+        for key, title_key, icon_name in self.SECTIONS:
+            button = QPushButton(tr(title_key))
+            button.setObjectName("navItem")
+            button.setCheckable(True)
+            button.setIcon(icons.icon(icon_name, nav_icon))
+            button.setIconSize(QSize(20, 20))
+            button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.nav_group.addButton(button)
+            self.nav_buttons[key] = button
+            nav_box.addWidget(button)
+            button.clicked.connect(lambda _c=False, k=key: self.show_section(k))
+            scroll = QScrollArea()
+            scroll.setObjectName("settingsScroll")
+            scroll.setFrameShape(QFrame.Shape.NoFrame)
+            scroll.setWidgetResizable(True)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            scroll.viewport().setAutoFillBackground(False)
+            content = QWidget()
+            content.setObjectName("settingsContent")
+            page = QVBoxLayout(content)
+            page.setContentsMargins(18, 14, 18, 8)
+            page.setSpacing(6)
+            scroll.setWidget(content)
+            self.stack.addWidget(scroll)
+            self.pages[key] = (scroll, page)
+        self.search_none = QLabel(tr("settings.search_none"))
+        self.search_none.setObjectName("hint")
+        self.search_none.setWordWrap(True)
+        self.search_none.hide()
+        nav_box.addWidget(self.search_none)
+        nav_box.addStretch(1)
+        body.addWidget(self.nav)
+        body.addWidget(self.stack, 1)
+        pg = {key: layout for key, (_scroll, layout) in self.pages.items()}
+        self._root_key = {id(layout): key for key, layout in pg.items()}
 
         # Язык (1.31): первым разделом, с глобусом; языки на самих себе
         from . import icons, language
-        grid = self._card(root, language.menu_title())
+        grid = self._card(pg["general"], language.menu_title(), "language")
         globe = QLabel()
         globe.setPixmap(icons.icon("globe").pixmap(20, 20))
         grid.addWidget(globe, 0, 0)
         self.language = QComboBox()
+        self.language.setIconSize(QSize(24, 16))
         for code, label in language.entries():
-            self.language.addItem(label, code)
+            self.language.addItem(icons.flag_icon(code), label, code)
         self.language.setCurrentIndex(max(0, self.language.findData(language.current_choice(self))))
         self.language.setAccessibleName(tr("settings.language"))
+        self.language.currentIndexChanged.connect(self._language_chosen)   # 1.32: язык меняется сразу
         grid.addWidget(self.language, 0, 1, 1, 2)
 
         # Обновления (1.31.1): отдельный заметный блок: версия, «Проверить обновления», автопроверка
         from . import build_info
-        grid = self._card(root, tr("settings.sec_updates"))
+        grid = self._card(pg["updates"], tr("settings.sec_updates"), "updates")
         self.version_label = QLabel(tr("settings.version_line", version=build_info.version_label(__version__)))
         self.version_label.setObjectName("versionLine")
         grid.addWidget(self.version_label, 0, 0, 1, 2)
-        self.update_ctx = None   # приложение (ставит open_settings): без него кнопка ничего не запускает
         self.check_updates = QPushButton(tr("updater.menu.check"))
         self.check_updates.clicked.connect(self._check_updates_now)
         grid.addWidget(self.check_updates, 0, 2, Qt.AlignmentFlag.AlignRight)
@@ -484,19 +666,19 @@ class SettingsDialog(QDialog):
         self.update_check.setToolTip(tr("settings.update_check_tip"))
 
         # Горячие клавиши
-        grid = self._card(root, tr("settings.sec_hotkeys"))
+        grid = self._card(pg["general"], tr("settings.sec_hotkeys"), "hotkeys")
         self.key_region = self._hotkey_row(grid, 0, tr("settings.hotkey_region"), config.get("hotkey_region", ""))
         self.key_full = self._hotkey_row(grid, 1, tr("settings.hotkey_full"), config.get("hotkey_fullscreen", ""))
-        self.both_layouts = QCheckBox(tr("settings.both_layouts"))
+        self.both_layouts = WrapCheck(tr("settings.both_layouts"))
         self.both_layouts.setChecked(bool(config.get("hotkey_both_layouts", True)))
-        grid.addWidget(self.both_layouts, 3, 0, 1, 3)
+        grid.addWidget(self.both_layouts, 5, 0, 1, 3)
         hint = QLabel(tr("settings.hotkey_hint"))
         hint.setObjectName("hint")
         hint.setWordWrap(True)
-        grid.addWidget(hint, 2, 0, 1, 3)
+        grid.addWidget(hint, 4, 0, 1, 3)
 
         # Выделение
-        grid = self._card(root, tr("settings.sec_select"))
+        grid = self._card(pg["shot"], tr("settings.sec_select"), "select")
         self.show_zoom = self._check(grid, 0, tr("settings.show_zoom"), config.get("show_zoom", True))
         self.show_size = self._check(grid, 1, tr("settings.show_size"), config.get("show_size", True))
         self.remember = self._check(grid, 2, tr("settings.remember"),
@@ -504,7 +686,7 @@ class SettingsDialog(QDialog):
 
         # Текст с картинки
         from . import ocr
-        grid = self._card(root, tr("settings.sec_ocr"))
+        grid = self._card(pg["text"], tr("settings.sec_ocr"), "ocr")
         self.ocr_enabled = self._check(grid, 0, tr("settings.ocr_enable"),
                                        config.get("ocr_enabled", True))
         grid.addWidget(QLabel(tr("settings.ocr_mode")), 1, 0)
@@ -543,7 +725,7 @@ class SettingsDialog(QDialog):
 
         # Перевод с картинки
         from . import translate
-        grid = self._card(root, tr("settings.sec_translate"))
+        grid = self._card(pg["text"], tr("settings.sec_translate"), "translate")
         self.tr_enabled = self._check(grid, 0, tr("settings.tr_enable"),
                                       config.get("translate_enabled", True))
         names = translate.LANG_NAMES
@@ -551,10 +733,13 @@ class SettingsDialog(QDialog):
         self.tr_to = QComboBox()
         grid.addWidget(QLabel(tr("settings.tr_alt")), 2, 0)
         self.tr_alt = QComboBox()
-        self.tr_to.addItem(translate.auto_label(config), "auto")
-        for code in translate.TARGETS:
-            self.tr_to.addItem(names[code], code)
-            self.tr_alt.addItem(names[code], code)
+        from . import icons
+        self.tr_to.addItem(icons.flag_icon("auto"), translate.auto_label(config), "auto")
+        for code in translate.TARGETS:   # 1.32: флаги языков, как в списке языка интерфейса
+            self.tr_to.addItem(icons.flag_icon(code), names[code], code)
+            self.tr_alt.addItem(icons.flag_icon(code), names[code], code)
+        for box in (self.tr_to, self.tr_alt):
+            box.setIconSize(QSize(24, 16))
         self.tr_to.setCurrentIndex(max(0, self.tr_to.findData(config.get("translate_to", "auto") or "auto")))
         self.tr_alt.setCurrentIndex(max(0, self.tr_alt.findData(config.get("translate_alt", "en"))))
         grid.addWidget(self.tr_to, 1, 1, 1, 2)
@@ -594,7 +779,7 @@ class SettingsDialog(QDialog):
             self.tr_enabled.toggled.connect(widget.setEnabled)
 
         # Трей
-        grid = self._card(root, tr("settings.sec_tray"))
+        grid = self._card(pg["general"], tr("settings.sec_tray"), "tray")
         grid.addWidget(QLabel(tr("settings.tray_click")), 0, 0)
         self.tray_click = QComboBox()
         self.tray_click.addItem(tr("settings.tray_region"), "region")
@@ -603,7 +788,7 @@ class SettingsDialog(QDialog):
         grid.addWidget(self.tray_click, 0, 1, 1, 2)
 
         # Сохранение
-        grid = self._card(root, tr("settings.sec_save"))
+        grid = self._card(pg["shot"], tr("settings.sec_save"), "save")
         grid.addWidget(QLabel(tr("settings.save_dir")), 0, 0)
         self.save_dir = QLineEdit(config.get("save_dir", ""))
         grid.addWidget(self.save_dir, 0, 1)
@@ -625,12 +810,36 @@ class SettingsDialog(QDialog):
         browse_auto = QPushButton(tr("settings.browse"))
         browse_auto.clicked.connect(lambda: self._browse(self.auto_save_dir, tr("settings.browse_auto")))
         grid.addWidget(browse_auto, 4, 2)
+        # Экраны с масштабом (125–200 %): размер снимка и вставка в исходном размере
+        from . import hidpi
+        # 1.32: в списке короткие пункты, пояснение выбранного строкой под списком с переносом по словам: длинные
+        # пункты обрезались в окне по разделам на экране 1280x720 при 150% (и шире шрифт, например DejaVu Sans)
+        grid.addWidget(QLabel(tr("settings.snapshot_size")), 5, 0)
+        self.snapshot_size = QComboBox()
+        self.snapshot_size.addItem(tr("settings.size_full"), hidpi.SIZE_FULL)
+        self.snapshot_size.addItem(tr("settings.size_screen"), hidpi.SIZE_SCREEN)
+        self.snapshot_size_hint = QLabel()
+        self.snapshot_size_hint.setObjectName("hint")
+        self.snapshot_size_hint.setWordWrap(True)
+        hints = {hidpi.SIZE_FULL: tr("settings.size_full_hint"), hidpi.SIZE_SCREEN: tr("settings.size_screen_hint")}
+
+        def size_hint(_index=None):
+            text = hints.get(self.snapshot_size.currentData(), "")
+            self.snapshot_size_hint.setText(text)
+            self.snapshot_size.setToolTip(f"{self.snapshot_size.currentText()}: {text}" if text else "")
+        self.snapshot_size.currentIndexChanged.connect(size_hint)
+        self.snapshot_size.setCurrentIndex(max(0, self.snapshot_size.findData(hidpi.size_mode(config))))
+        size_hint()
+        grid.addWidget(self.snapshot_size, 5, 1, 1, 2)
+        grid.addWidget(self.snapshot_size_hint, 6, 1, 1, 2)
+        self.clip_html = self._check(grid, 7, tr("settings.clip_html"), hidpi.html_enabled(config))
+        self.clip_html.setToolTip(tr("settings.clip_html_tip"))
 
         # Оформление
         from .editor import THEME_DEFAULTS, theme
         self.theme_defaults = THEME_DEFAULTS
         current = theme(config)
-        grid = self._card(root, tr("settings.sec_theme"))
+        grid = self._card(pg["editor"], tr("settings.sec_theme"), "theme")
         grid.addWidget(QLabel(tr("settings.style")), 0, 0)
         self.ui_theme = QComboBox()
         for key, preset in _themes.THEMES.items():
@@ -674,19 +883,49 @@ class SettingsDialog(QDialog):
         self._frame_style_changed()
 
         # Запуск
-        grid = self._card(root, tr("settings.sec_start"))
+        grid = self._card(pg["general"], tr("settings.sec_start"), "start")
         self.autostart = self._check(grid, 0, tr("settings.autostart"), autostart_enabled())
+        # О программе: версия, лицензия, ссылка, оба знакомства
+        grid = self._card(pg["about"], tr("settings.nav_about"), "about")
         self.want_tour = False
+        self.want_selector_tour = False
+        about = QLabel(f"ClipSD {build_info.version_label(__version__)}\n© 2026 {__author__}\n" + tr("app.about_license"))
+        about.setWordWrap(True)
+        about.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        grid.addWidget(about, 0, 0, 1, 3)
+        site = QLabel('<a href="https://clipsd.github.io">clipsd.github.io</a>')
+        site.linkActivated.connect(open_url)   # not Qt's own opener: see sysenv.open_url
+        grid.addWidget(site, 1, 0, 1, 3)
+        # Название и значок (TRADEMARKS.md, раздел 7 GPLv3): та же ссылка, что в окне «О программе»
+        from html import escape
+        from .i18n import current
+        page = f"https://clipsd.github.io/{'ru' if current() == 'ru' else 'en'}/trademarks.html"
+        terms = QLabel(f'<a href="{page}">{escape(tr("app.about_trademark"))}</a>')
+        terms.setWordWrap(True)
+        terms.linkActivated.connect(open_url)
+        grid.addWidget(terms, 2, 0, 1, 3)
+        from . import links   # канал Telegram с новостями (1.32), как в окне «О программе»
+        telegram = QLabel(f'<a href="{links.TELEGRAM_URL}">{escape(tr("links.telegram_about", url=links.TELEGRAM_SHORT))}</a>')
+        telegram.setWordWrap(True)
+        telegram.setToolTip(tr("links.telegram_tip"))
+        telegram.linkActivated.connect(open_url)
+        grid.addWidget(telegram, 3, 0, 1, 3)
         tour = QPushButton(tr("settings.tour_again"))
         tour.clicked.connect(self._request_tour)
-        grid.addWidget(tour, 1, 0, 1, 3, Qt.AlignmentFlag.AlignLeft)
+        grid.addWidget(tour, 4, 0, 1, 3, Qt.AlignmentFlag.AlignLeft)
+        tour_sel = QPushButton(tr("app.menu_tour_selector"))
+        tour_sel.clicked.connect(self._request_selector_tour)
+        grid.addWidget(tour_sel, 5, 0, 1, 3, Qt.AlignmentFlag.AlignLeft)
+        self.tour_button, self.tour_selector_button = tour, tour_sel
 
-        footer = QLabel(f"ClipSD {build_info.version_label(__version__)} · © 2026 {__author__} · GNU GPL v3")
-        footer.setObjectName("footer")
-        footer.setWordWrap(True)
-        root.addSpacing(4)
-        root.addWidget(footer)
-        self.scroll.setWidget(content)
+        for box in self.findChildren(QComboBox):   # ширина по полю, а не по самому длинному пункту
+            box.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+            box.setMinimumContentsLength(10)
+        for label in self.stack.findChildren(QLabel):   # подписи переносятся, длинная подпись не раздвигает окно
+            if label.pixmap().isNull() and label.textFormat() != Qt.TextFormat.RichText:
+                label.setWordWrap(True)
+        for layout in pg.values():
+            layout.addStretch(1)
         buttons = QHBoxLayout()
         buttons.setContentsMargins(18, 0, 18, 0)
         buttons.addStretch(1)
@@ -699,7 +938,146 @@ class SettingsDialog(QDialog):
         buttons.addWidget(cancel)
         buttons.addWidget(save)
         outer.addLayout(buttons)
-        self._fit_to_screen(content, parent)
+        self.search.textChanged.connect(self._search_changed)
+        first = config.get("settings_page")
+        self.show_section(first if first in self.pages else "general")
+        self._fit_to_screen(self._parent)
+
+    # --- разделы и поиск (1.32) --------------------------------------------
+
+    SECTIONS = (("general", "settings.nav_general", "settings"), ("shot", "settings.nav_shot", "region"),
+                ("editor", "settings.nav_editor", "pencil"), ("text", "settings.nav_text", "translate"),
+                ("updates", "settings.nav_updates", "update"), ("about", "settings.nav_about", "info"))
+    # английские слова для поиска: находят раздел и карточку и на русском интерфейсе
+    SYNONYMS = {
+        "language": "language lang locale", "updates": "update upgrade version check release",
+        "hotkeys": "hotkey shortcut keyboard key combination alt ctrl shift win", "tray": "tray icon click notification area",
+        "start": "startup autostart launch login boot", "select": "selection area zoom magnifier size remember region capture",
+        "save": "save folder directory format png jpg jpeg file autosave size scale scaling resolution dpi hidpi clipboard", "theme": "theme style appearance color dark light frame border editor",
+        "ocr": "ocr text recognition tesseract languages", "translate": "translate translation engine google mymemory email key limit",
+        "about": "about license version tour intro help gpl site telegram news channel trademark name icon terms",
+    }
+    SECTION_WORDS = {"general": "main general language hotkeys tray startup", "shot": "screenshot capture save folder format",
+                     "editor": "editor theme style appearance", "text": "text ocr translate translation recognition",
+                     "updates": "updates update version", "about": "about license tour"}
+
+    @property
+    def scroll(self):
+        """Область прокрутки открытой страницы."""
+        return self.pages[self.current_section()][0]
+
+    def current_section(self) -> str:
+        return next((k for k, (sc, _l) in self.pages.items() if sc is self.stack.currentWidget()), "general")
+
+    def show_section(self, key: str):
+        if key not in self.pages:
+            return
+        self.stack.setCurrentWidget(self.pages[key][0])
+        self.nav_buttons[key].setChecked(True)
+        self.config["settings_page"] = key   # окно помнит последний раздел
+
+    def _search_changed(self, _text=None):
+        """Поиск по названиям и подсказкам на языке интерфейса и по английским словам: меню показывает разделы с
+        совпадениями, найденное подсвечивается."""
+        query = self.search.text().strip().casefold()
+        hits = self.search_hits(query)
+        for w in self._found_widgets:
+            w.setProperty("found", False)
+            w.style().unpolish(w)
+            w.style().polish(w)
+        self._found_widgets = []
+        for key, button in self.nav_buttons.items():
+            button.setVisible(not query or key in hits)
+        self.search_none.setVisible(bool(query) and not hits)
+        if not query or not hits:
+            return
+        for widgets in hits.values():
+            for w in widgets:
+                w.setProperty("found", True)
+                w.style().unpolish(w)
+                w.style().polish(w)
+                self._found_widgets.append(w)
+        if self.current_section() not in hits:
+            self.show_section(next(k for k, _l, _i in self.SECTIONS if k in hits))
+        shown = hits[self.current_section()]
+        if shown:
+            QTimer.singleShot(0, lambda: self._reveal(shown[0]))
+
+    def _reveal(self, widget):
+        try:
+            bar = self.scroll.verticalScrollBar()
+            bar.setValue(max(0, widget.mapTo(self.scroll.widget(), QPoint(0, 0)).y() - 36))
+        except RuntimeError:
+            pass
+
+    def search_hits(self, query: str) -> dict:
+        """{раздел: [найденные виджеты]} для запроса (регистр не важен); пустой запрос: пусто."""
+        out = {}
+        if not query:
+            return out
+        for key, title_key, _icon in self.SECTIONS:
+            words = (tr(title_key) + " " + self.SECTION_WORDS.get(key, "")).casefold()
+            if query in words:
+                out.setdefault(key, [])
+        for section, title, syn, card in self._cards:
+            matched = []
+            if query in (title + " " + self.SYNONYMS.get(syn, "")).casefold():
+                matched.append(card)
+            for w in card.findChildren(QWidget):
+                if isinstance(w, HotkeyEditor):
+                    if query in w.hotkey().casefold() and getattr(w, "label", None) is not None:
+                        matched.append(w.label)
+                    continue
+                if isinstance(w, (QLabel, QCheckBox, QPushButton)) and w.objectName() != "navItem":
+                    text = (w.text() if not isinstance(w, QLabel) or w.textFormat() != Qt.TextFormat.RichText else "")
+                    if query in (text + " " + w.toolTip()).casefold().replace("&", ""):
+                        matched.append(w)
+            if matched:
+                out.setdefault(section, []).extend(matched)
+        for widgets in out.values():   # сначала карточки (совпал заголовок), потом отдельные строки
+            widgets.sort(key=lambda w: 0 if isinstance(w, QFrame) else 1)
+        return out
+
+    def _request_selector_tour(self):
+        self.want_selector_tour = True
+        self.accept()
+
+    def _fit_to_screen(self, parent):
+        """Окно не больше 860x620 и не больше экрана (150% на 1280x720: меньше, страницы прокручиваются)."""
+        screen = (parent.screen() if parent is not None else None) or QApplication.primaryScreen()
+        area = screen.availableGeometry() if screen is not None else None
+        width, height = 860, 620
+        if area is not None:
+            width, height = min(width, area.width() - 40), min(height, area.height() - 60)
+        self.setMinimumSize(0, 0)
+        self.resize(width, height)
+
+    def _language_chosen(self, _index=None):
+        """Язык выбран в списке: применяется сразу (как глобус в редакторе), окно настроек перестраивается на новом
+        языке без закрытия, несохранённые правки остаются. «Отмена» язык не откатывает: он остаётся выбранным."""
+        from . import language
+        code = self.language.currentData()
+        if code == language.current_choice(self):
+            return
+        pending = self.values()
+        language.change(self.update_ctx if self.update_ctx is not None else self, code)
+        cfg = dict(self.config)
+        cfg.update(pending)
+        cfg["language"] = code
+        QTimer.singleShot(0, lambda: self._rebuild(cfg, pending))   # список, из которого пришёл сигнал, удаляется позже
+
+    def _rebuild(self, cfg: dict, pending: dict):
+        size, section, query = self.size(), self.current_section(), self.search.text()
+        old = QWidget()
+        old.setLayout(self.layout())   # старое содержимое уходит вместе с временным окном
+        old.deleteLater()
+        self._found_widgets = []
+        self._build(cfg)
+        self.resize(size)
+        self.autostart.setChecked(bool(pending.get("autostart")))
+        self.show_section(section)
+        self.search.setText(query)
+        self.language_rebuilt.emit()
 
     def _email_min_width(self):
         """Подсказка в поле почты видна целиком на любом языке и при любой ширине экрана (шрифт после стилей окна)."""
@@ -707,27 +1085,9 @@ class SettingsDialog(QDialog):
         text = self.tr_email.placeholderText()
         self.tr_email.setMinimumWidth(QFontMetrics(self.tr_email.font()).horizontalAdvance(text) + 40)
 
-    def _fit_to_screen(self, content, parent):
-        """Ширина не меньше самой широкой строки (ничего не режется), от 700 точек; высота по карточкам,
-        но не выше экрана: дальше карточки прокручиваются, кнопки внизу остаются на месте."""
-        content.ensurePolished()
-        self._email_min_width()   # шрифт поля уже со стилями окна
-        bar = self.style().pixelMetric(QStyle.PixelMetric.PM_ScrollBarExtent, None, self.scroll)
-        self.scroll.setMinimumWidth(content.minimumSizeHint().width() + bar)
-        width = max(700, self.minimumSizeHint().width())
-        screen = (parent.screen() if parent is not None else None) or QApplication.primaryScreen()
-        area = screen.availableGeometry() if screen is not None else None
-        rest = self.sizeHint().height() - self.scroll.sizeHint().height()   # кнопки и поля
-        need = content.heightForWidth(width) if content.hasHeightForWidth() else -1
-        height = rest + (need if need > 0 else content.sizeHint().height())
-        if area is not None:
-            width = min(width, max(self.minimumSizeHint().width(), area.width() - 40))
-            height = min(height, area.height() - 60)
-        self.resize(width, height)
-
     # --- построение --------------------------------------------------------
 
-    def _card(self, root, title) -> QGridLayout:
+    def _card(self, root, title, syn="") -> QGridLayout:
         label = QLabel(title)
         label.setObjectName("section")
         root.addWidget(label)
@@ -739,18 +1099,21 @@ class SettingsDialog(QDialog):
         grid.setVerticalSpacing(10)
         grid.setColumnStretch(1, 1)
         root.addWidget(card)
+        self._cards.append((self._root_key[id(root)], title, syn, card))
         return grid
 
     def _check(self, grid, row, text, value) -> QCheckBox:
-        box = QCheckBox(text)
+        box = WrapCheck(text)
         box.setChecked(bool(value))
         grid.addWidget(box, row, 0, 1, 3)
         return box
 
     def _hotkey_row(self, grid, row, text, value) -> HotkeyEditor:
-        grid.addWidget(QLabel(text + ":"), row, 0)
+        label = QLabel(text + ":")
+        grid.addWidget(label, 2 * row, 0, 1, 3)      # подпись над полем: поле с кнопками широкое
         editor = HotkeyEditor(value)
-        grid.addWidget(editor, row, 1, 1, 2)
+        editor.label = label
+        grid.addWidget(editor, 2 * row + 1, 0, 1, 3)
         return editor
 
     def _check_updates_now(self):
@@ -785,10 +1148,12 @@ class SettingsDialog(QDialog):
         self.frame.setCurrentIndex(max(0, self.frame.findData(preset["ui_frame"])))
 
     def _frame_style_changed(self, _index=None):
-        """Вид «Без цветной рамки»: цвет и толщина рамки на окно не влияют, пока он выбран."""
-        plain = self.frame_style.currentData() == "plain"
-        tip = tr("settings.frame_inactive_tip") if plain else ""
-        self.frame.setEnabled(not plain)
+        """Вид «Без цветной рамки»: цвет и толщина рамки на окно не влияют, пока он выбран; «Тонкая линия» (1.32):
+        толщина не влияет (линия всегда тонкая), цвет акцента влияет."""
+        style = self.frame_style.currentData()
+        plain = style == "plain"
+        tip = tr("settings.frame_inactive_tip") if plain else (tr("settings.frame_inactive_thin_tip") if style == "thin" else "")
+        self.frame.setEnabled(style not in ("plain", "thin"))
         self.frame.setToolTip(tip)
         self.colors["ui_accent"].setToolTip(tr("settings.accent_tip") if not plain else
                                             tr("settings.accent_tip_plain"))
@@ -871,6 +1236,8 @@ class SettingsDialog(QDialog):
             "save_ask": not self.save_ask.isChecked(),
             "auto_save": self.auto_save.isChecked(),
             "auto_save_dir": self.auto_save_dir.text().strip() or self.config.get("auto_save_dir", ""),
+            "snapshot_size": self.snapshot_size.currentData(),
+            "clip_html": self.clip_html.isChecked(),
             "autostart": self.autostart.isChecked(),
             "update_check": self.update_check.isChecked(),
             "ui_accent": self.colors["ui_accent"].property("color"),
@@ -878,7 +1245,9 @@ class SettingsDialog(QDialog):
             "ui_field": self.colors["ui_field"].property("color"),
             "ui_frame": self.frame.currentData(),
             "editor_frame_style": self.frame_style.currentData(),
+            "frame_style_132": True,   # вид рамки выбран в окне настроек 1.32: «Свечение» больше не читается как «Тонкая линия»
             "editor_system_title": self.system_title.isChecked(),
             "ui_theme": self.ui_theme.currentData(),
             "language": self.language.currentData(),
+            "settings_page": self.current_section(),
         }

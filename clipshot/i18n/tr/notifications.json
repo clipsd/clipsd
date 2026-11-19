@@ -1,0 +1,16 @@
+{
+  "notifications.empty": "Yeni bildirim yok",
+  "notifications.read_all": "Tümünü okundu say",
+  "notifications.title": "Bildirimler",
+  "notifications.translate_quota": "Çeviri: günlük sınır doldu",
+  "notifications.translate_quota_month": "Çeviri: Google aylık sınırı doldu",
+  "notifications.translate_quota_month_sub": "Yedek hizmet olarak ayarlıysa MyMemory devam eder",
+  "notifications.translate_quota_sub": "Çeviri hizmeti yarına kadar metin kabul etmiyor",
+  "notifications.unread": "Okunmamış: {n}",
+  "notifications.update_button": "Güncelle",
+  "notifications.update_sub": "ClipSD'nin yeni sürümü kurulmaya hazır",
+  "notifications.update_title": "{version} sürümü hazır",
+  "notifications.whatsnew_installed": "Kurulu sürüm: neler değişti",
+  "notifications.whatsnew_past": "Önceki güncelleme",
+  "notifications.whatsnew_title": "{version} sürümündeki yenilikler"
+}

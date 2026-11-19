@@ -1,6 +1,7 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later. Распространяется по лицензии GNU GPL v3 или более поздней,
 # без каких-либо гарантий; полный текст: файл LICENSE или <https://www.gnu.org/licenses/gpl-3.0.html>.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Меню в одном стиле с окнами ClipSD: скруглённые углы, пункты с отступами 9 px, мягкая подсветка под курсором,
 сочетания клавиш справа приглушённым цветом (после табуляции в тексте пункта), тонкие разделители.
 Меню остаётся настоящим QMenu (клавиатура и поведение прежние): меняется только отрисовка."""
@@ -87,6 +88,12 @@ class ClipMenuStyle(QProxyStyle):
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(self.hover)
             painter.drawRoundedRect(QRectF(rect).adjusted(2, 0, -2, 0), 8, 8)
+        elif option.font.bold() and enabled:   # 1.32: жирный пункт = текущий (меню группы инструментов): мягкая подложка
+            soft = QColor(self.hover)
+            soft.setAlpha(max(20, soft.alpha() * 2 // 3))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(soft)
+            painter.drawRoundedRect(QRectF(rect).adjusted(2, 0, -2, 0), 8, 8)
         font = self._font(option.font)
         painter.setFont(font)
         label, shortcut = self._split(option.text)
@@ -96,13 +103,16 @@ class ClipMenuStyle(QProxyStyle):
             painter.drawText(QRect(inner.left(), rect.top(), 18, rect.height()), Qt.AlignmentFlag.AlignVCenter, "✓")
         shift = 20
         if not option.icon.isNull():   # значок пункта (цвет, размер): правее места отметки, выбранный в рамке
-            box = QRect(inner.left() + 22, rect.top() + (rect.height() - 20) // 2, 20, 20)
+            size = option.icon.actualSize(QSize(64, 64))
+            wide = size.width() > size.height() * 1.2   # флаг языка 24x16 рисуется в своём размере
+            bw, bh = (24, 16) if wide else (20, 20)
+            box = QRect(inner.left() + 22, rect.top() + (rect.height() - bh) // 2, bw, bh)
             option.icon.paint(painter, box)
             if option.checked:
                 painter.setPen(QPen(self.accent, 2))
                 painter.setBrush(Qt.BrushStyle.NoBrush)
                 painter.drawRoundedRect(QRectF(box).adjusted(-3, -3, 3, 3), 5, 5)
-            shift = 52
+            shift = 52 + (4 if wide else 0)
         painter.setPen(self.text if enabled else self.off)
         painter.drawText(QRect(inner.left() + shift, rect.top(), inner.width() - shift, rect.height()),
                          int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft), label)

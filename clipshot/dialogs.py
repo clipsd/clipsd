@@ -1,6 +1,7 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later. Распространяется по лицензии GNU GPL v3 или более поздней,
 # без каких-либо гарантий; полный текст: файл LICENSE или <https://www.gnu.org/licenses/gpl-3.0.html>.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Окна ClipSD в одном стиле: карточка со скруглёнными углами и тенью, шапка со значком, заголовком и крестиком,
 одна главная кнопка. Окно открывается по центру экрана, где мышь, перетаскивается за шапку, Esc закрывает."""
 
@@ -12,50 +13,86 @@ from PyQt6.QtWidgets import (QDialog, QFrame, QGraphicsDropShadowEffect, QHBoxLa
 from .i18n import tr
 from .frame_extents import track_frame_extents, refresh_frame_extents
 
+from .themes import GREEN, GREEN_BORDER, GREEN_DISABLED, GREEN_HOVER, GREEN_PRESSED, LINK, LINK_DARK, TEAL   # 1.32: одни токены
+
 ACCENT = "#1e78ff"
-LINK = "#1660d0"          # link text on the white card
-GREEN = "#1f9d55"
 TEXT = "#16181c"
 MUTED = "#5a6270"
-ICON_COLORS = {"warning": "#f59e0b", "mail": "#0d9488", "google": "#1e78ff", "info": "#1e78ff"}
-ICON_GLYPHS = {"warning": "!", "mail": "@", "google": "G", "info": "i"}
+# LINK (ссылка на белой карточке, #1660d0, 5,8:1) и GREEN теперь из themes: один источник для всей программы
+ICON_COLORS = {"warning": "#f59e0b", "mail": TEAL, "google": "#1e78ff", "info": "#1e78ff", "star": "#f5a623",
+               "error": "#c0392b", "ok": GREEN}   # 1.32: ошибка красным кругом, «готово» зелёным
+ICON_GLYPHS = {"warning": "!", "mail": "@", "google": "G", "info": "i", "star": "★", "error": "!", "ok": "✓"}
 
-STYLE = f"""
-QFrame#clipCard {{ background: #ffffff; border: 1px solid #d9dee6; border-radius: 14px; }}
-QLabel {{ color: {TEXT}; background: transparent; }}
-QCheckBox, QRadioButton {{ color: {TEXT}; background: transparent; }}
+PALETTES = {   # цвета карточки: светлая как раньше, тёмная по токенам тёмного оформления (win, s2, sep, t, t2)
+    False: dict(card="#ffffff", edge="#d9dee6", text=TEXT, muted=MUTED, line="#c8d0db", field="#ffffff",
+                soft="#f1f4f8", close_hover="#eef1f5", link=LINK, track="#e3e8ef", note_bg="#f5f6f8",
+                warn_bg="#fff5d6", warn_edge="#efd27e", warn_text="#4a3a06", accent=ACCENT,
+                handle="#b4bcc8", handle_hover="#8f99a8"),
+    True: dict(card="#25282c", edge="#3a3f46", text="#f1f3f5", muted="#aab1ba", line="#4a5058", field="#1d2023",
+               soft="#2f3338", close_hover="#2f3338", link=LINK_DARK, track="#3a3f46", note_bg="#2a2e33",
+               warn_bg="#3a3016", warn_edge="#6b5619", warn_text="#f5e3b0", accent="#2d8ceb",
+               handle="#5b626b", handle_hover="#7d8691"),
+}
+
+
+def style(dark: bool = False) -> str:
+    """Таблица стилей окон-карточек. dark=True: тёмная карточка для оформления «Профессиональное» (1.32);
+    старые окна ClipSD по-прежнему белые в обеих темах (STYLE)."""
+    c = PALETTES[bool(dark)]
+    return f"""
+QFrame#clipCard {{ background: {c['card']}; border: 1px solid {c['edge']}; border-radius: 14px; }}
+QLabel {{ color: {c['text']}; background: transparent; }}
+QCheckBox, QRadioButton {{ color: {c['text']}; background: transparent; }}
 QLabel#clipTitle {{ font-size: 17px; font-weight: bold; }}
-QLabel#clipSubtitle {{ color: {MUTED}; font-size: 13px; }}
-QLabel#clipNote {{ color: {MUTED}; font-size: 12px; }}
+QLabel#clipSubtitle {{ color: {c['muted']}; font-size: 13px; }}
+QLabel#clipNote {{ color: {c['muted']}; font-size: 12px; }}
 QLabel#clipFieldLabel {{ font-weight: bold; }}
-QLineEdit {{ padding: 8px 10px; border: 1px solid #c8d0db; border-radius: 8px; font-size: 14px; background: #ffffff;
-             color: {TEXT}; }}
-QLineEdit:focus {{ border: 2px solid {ACCENT}; padding: 7px 9px; }}
+QLineEdit {{ padding: 8px 10px; border: 1px solid {c['line']}; border-radius: 8px; font-size: 14px; background: {c['field']};
+             color: {c['text']}; }}
+QLineEdit:focus {{ border: 2px solid {c['accent']}; padding: 7px 9px; }}
 QPushButton#clipPrimary {{ background: {GREEN}; color: white; font-weight: bold; font-size: 14px; padding: 9px 18px;
-                           border: 1px solid #157a40; border-radius: 8px; }}
-QPushButton#clipPrimary:hover {{ background: #26b864; }}
-QPushButton#clipPrimary:disabled {{ background: #9fd3b4; border-color: #9fd3b4; }}
-QPushButton#clipSecondary {{ background: #ffffff; color: {TEXT}; font-size: 14px; padding: 9px 16px;
-                             border: 1px solid #c8d0db; border-radius: 8px; }}
-QPushButton#clipSecondary:hover {{ background: #f1f4f8; }}
-QPushButton#clipLink {{ background: transparent; color: {ACCENT}; border: none; font-size: 13px; padding: 4px 2px;
+                           border: 1px solid {GREEN_BORDER}; border-radius: 8px; }}
+QPushButton#clipPrimary:hover {{ background: {GREEN_HOVER}; }}
+QPushButton#clipPrimary:pressed {{ background: {GREEN_PRESSED}; }}
+QPushButton#clipPrimary:disabled {{ background: {GREEN_DISABLED}; border-color: {GREEN_DISABLED}; }}
+QPushButton#clipSecondary {{ background: {c['card']}; color: {c['text']}; font-size: 14px; padding: 9px 16px;
+                             border: 1px solid {c['line']}; border-radius: 8px; }}
+QPushButton#clipSecondary:hover {{ background: {c['soft']}; }}
+QPushButton#clipLink {{ background: transparent; color: {c['link']}; border: none; font-size: 13px; padding: 4px 2px;
                         text-align: left; }}
 QPushButton#clipLink:hover {{ text-decoration: underline; }}
-QToolButton#clipClose {{ background: transparent; border: none; border-radius: 15px; color: {MUTED}; font-size: 16px; }}
-QToolButton#clipClose:hover {{ background: #eef1f5; color: {TEXT}; }}
+QToolButton#clipClose {{ background: transparent; border: none; border-radius: 15px; color: {c['muted']}; font-size: 16px; }}
+QToolButton#clipClose:hover {{ background: {c['close_hover']}; color: {c['text']}; }}
+QProgressBar#clipBar {{ border: none; border-radius: 3px; background: {c['track']}; max-height: 6px; min-height: 6px;
+                        text-align: center; color: transparent; }}
+QProgressBar#clipBar::chunk {{ background: {c['accent']}; border-radius: 3px; }}
+QFrame#clipWarn {{ background: {c['warn_bg']}; border: 1px solid {c['warn_edge']}; border-radius: 8px; }}
+QFrame#clipWarn QLabel {{ color: {c['warn_text']}; }}
+QTextBrowser#clipNotes, QPlainTextEdit#clipReport {{ background: {c['note_bg']}; color: {c['text']};
+                        border: 1px solid {c['edge']}; border-radius: 8px; padding: 6px 8px; font-size: 13px; }}
+QPlainTextEdit#clipReport {{ font-family: "DejaVu Sans Mono", "Consolas", monospace; font-size: 12px; }}
+QLabel#clipBullet {{ font-size: 14px; }}
+QScrollBar:vertical {{ background: transparent; width: 12px; margin: 3px 2px 3px 0; border: none; }}
+QScrollBar::handle:vertical {{ background: {c['handle']}; border-radius: 4px; min-height: 36px; }}
+QScrollBar::handle:vertical:hover {{ background: {c['handle_hover']}; }}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; border: none; background: none; }}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: transparent; }}
 """
 
 
-def link_colored(text: str) -> str:
+STYLE = style(False)
+
+
+def link_colored(text: str, dark: bool = False) -> str:
     """Rich text for the white card: links get the colour LINK. Without it a link takes the palette colour, which in the
     Professional theme or a dark system is a light blue (3.5:1 on white); LINK reads well (5.8:1)."""
     if "<a " in text and "style=" not in text:
-        text = text.replace("<a ", f'<a style="color: {LINK};" ')
+        text = text.replace("<a ", f'<a style="color: {LINK_DARK if dark else LINK};" ')
     return text
 
 
 def icon_pixmap(kind: str, size: int = 44) -> QPixmap:
-    """Круглый значок шапки: «!» предупреждение, «@» почта, «G» Google."""
+    """Круглый значок шапки: «!» предупреждение, «@» почта, «G» Google, «★» оценка."""
     ratio = 2
     pix = QPixmap(size * ratio, size * ratio)
     pix.setDevicePixelRatio(ratio)
@@ -80,18 +117,32 @@ def icon_pixmap(kind: str, size: int = 44) -> QPixmap:
     return pix
 
 
+def logo_pixmap(size: int = 44) -> QPixmap:
+    """Значок программы для шапки окна, чётко на экранах с масштабом (рисуется с запасом ×2)."""
+    from .icons import logo_pixmap as draw_logo
+    ratio = 2
+    pix = draw_logo(size * ratio)
+    pix.setDevicePixelRatio(ratio)
+    return pix
+
+
 class ClipDialog(QDialog):
     """Основа окон ClipSD. Наполнение: self.body (QVBoxLayout), кнопки: self.footer_left / self.footer_right."""
 
     SHADOW_MARGINS = (20, 16, 20, 24)   # поля под тень: слева, сверху, справа, снизу
 
-    def __init__(self, parent=None, title: str = "", subtitle: str = "", icon: str = "info", width: int = 560):
+    def __init__(self, parent=None, title: str = "", subtitle: str = "", icon: str = "info", width: int = 560,
+                 dark: bool = None, logo: bool = False):
         super().__init__(parent, Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint
                          | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setWindowTitle("ClipSD: " + title)
-        self.setStyleSheet(STYLE)
+        if dark is None:   # 1.32: все окна-карточки следуют оформлению (тёмная карточка в «Профессиональном»)
+            from . import themes
+            dark = themes.is_dark()
+        self.dark = bool(dark)
+        self.setStyleSheet(style(self.dark))
         self._drag = None
         outer = QVBoxLayout(self)
         outer.setContentsMargins(*self.SHADOW_MARGINS)   # место под тень
@@ -113,7 +164,7 @@ class ClipDialog(QDialog):
         head.setContentsMargins(0, 0, 0, 0)
         head.setSpacing(14)
         self.icon = QLabel()
-        self.icon.setPixmap(icon_pixmap(icon))
+        self.icon.setPixmap(logo_pixmap(44) if logo else icon_pixmap(icon))
         self.icon.setFixedSize(44, 44)
         head.addWidget(self.icon, 0, Qt.AlignmentFlag.AlignTop)
         titles = QVBoxLayout()
@@ -157,7 +208,7 @@ class ClipDialog(QDialog):
     # --- наполнение -------------------------------------------------------------
 
     def text(self, text: str, name: str = None) -> QLabel:
-        label = QLabel(link_colored(text))
+        label = QLabel(link_colored(text, self.dark))
         label.setWordWrap(True)
         label.setTextFormat(Qt.TextFormat.RichText if "<" in text else Qt.TextFormat.PlainText)
         if name:
@@ -191,9 +242,10 @@ class ClipDialog(QDialog):
         self.body.addWidget(label)
         return label
 
-    @staticmethod
-    def show_status(label: QLabel, text: str, kind: str = "info"):
-        color = {"ok": "#157a40", "error": "#b42318", "info": MUTED}.get(kind, MUTED)
+    def show_status(self, label: QLabel, text: str, kind: str = "info"):
+        palette = PALETTES[self.dark]
+        ok, error = ("#5fd08a", "#ff8a80") if self.dark else ("#157a40", "#b42318")
+        color = {"ok": ok, "error": error, "info": palette["muted"]}.get(kind, palette["muted"])
         label.setStyleSheet(f"QLabel {{ color: {color}; font-weight: {'bold' if kind != 'info' else 'normal'}; }}")
         label.setText(text)
         label.setVisible(bool(text))
@@ -218,13 +270,17 @@ class ClipDialog(QDialog):
 
     # --- поведение --------------------------------------------------------------
 
-    def open_centered(self):
-        """Показать по центру экрана, где сейчас мышь, поверх всех окон."""
+    def place_centered(self):
+        """Поставить по центру экрана, где сейчас мышь (без показа: окно потом показывает exec() или show())."""
         self.adjustSize()
         track_frame_extents(self, self.frame_extents_margins)   # свойство ставится до показа окна
         screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
         area = screen.availableGeometry()
         self.move(area.center().x() - self.width() // 2, area.center().y() - self.height() // 2)
+
+    def open_centered(self):
+        """Показать по центру экрана, где сейчас мышь, поверх всех окон."""
+        self.place_centered()
         self.show()
         self.raise_()
         self.activateWindow()
@@ -259,3 +315,37 @@ class ClipDialog(QDialog):
             self.close()
             return
         super().keyPressEvent(event)
+
+
+class MessageCard(ClipDialog):
+    """Короткое сообщение в стиле окон ClipSD вместо стандартного окошка Qt с «OK» и жёлтым треугольником (1.32).
+
+    Значок, заголовок, понятный текст, одна главная кнопка (по умолчанию «Понятно»), при желании вторая спокойная.
+    После закрытия choice: "primary", "secondary" или "close" (крестик, Esc). Тёмная карточка при тёмном оформлении."""
+
+    def __init__(self, parent, title: str, text: str, icon: str = "info", primary: str = None, secondary: str = None,
+                 subtitle: str = "", modal: bool = True, width: int = 480, logo: bool = False, dark: bool = None):
+        from . import themes
+        super().__init__(parent, title, subtitle, icon, width, dark=themes.is_dark() if dark is None else dark, logo=logo)
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, parent is None)
+        self.setModal(modal)
+        self.choice = "close"
+        self.message_text = text
+        self.message = self.text(text)
+        self.secondary_button = self.secondary(secondary) if secondary else None
+        self.primary_button = self.primary(primary or tr("dialogs.ok"))
+        self.primary_button.clicked.connect(lambda: self._pick("primary"))
+        if self.secondary_button is not None:
+            self.secondary_button.clicked.connect(lambda: self._pick("secondary"))
+        self.primary_button.setFocus()
+
+    def _pick(self, choice: str):
+        self.choice = choice
+        self.accept()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self.parentWidget() is not None:   # над окном, из которого открыто
+            frame = self.frameGeometry()
+            frame.moveCenter(self.parentWidget().frameGeometry().center())
+            self.move(frame.topLeft())

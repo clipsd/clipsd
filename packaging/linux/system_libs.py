@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Shared libraries of the build machine inside a PyInstaller folder: prune the unused ones, list the rest with their
 Debian package and its copyright file (for THIRD-PARTY-NOTICES.txt), refuse anything without a record.
 

@@ -1,6 +1,7 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later. Распространяется по лицензии GNU GPL v3 или более поздней,
 # без каких-либо гарантий; полный текст: файл LICENSE или <https://www.gnu.org/licenses/gpl-3.0.html>.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Окно редактирования снимка: открывается в размер скриншота на месте снятой области."""
 
 import datetime
@@ -8,16 +9,16 @@ import os
 import sys
 
 from PyQt6.QtCore import QEvent, QKeyCombination, QMimeData, QObject, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import (QColor, QContextMenuEvent, QDrag, QFontMetricsF, QPolygonF, QGuiApplication, QIcon, QImage, QKeySequence, QPainter, QPainterPath, QPen,
+from PyQt6.QtGui import (QColor, QContextMenuEvent, QDrag, QFont, QFontMetrics, QFontMetricsF, QPolygonF, QGuiApplication, QIcon, QImage, QKeySequence, QPainter, QPainterPath, QPen,
                          QPixmap, QShortcut)
-from PyQt6.QtWidgets import (QAbstractSpinBox, QKeySequenceEdit, QLineEdit, QTextEdit,
+from PyQt6.QtWidgets import (QAbstractButton, QAbstractSpinBox, QKeySequenceEdit, QLineEdit, QTextEdit,
                              QApplication, QButtonGroup, QColorDialog, QDialog, QFileDialog, QFrame, QGraphicsDropShadowEffect,
                              QGridLayout, QHBoxLayout, QLabel, QMainWindow, QMenu, QWidgetAction,
-                             QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy, QToolButton,
+                             QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy, QToolButton,
                              QVBoxLayout,
                              QWidget)
 
-from . import icons
+from . import hidpi, icons
 from .dialogs import ClipDialog
 from .frame_extents import track_frame_extents
 from .i18n import dynamic, tr
@@ -388,7 +389,10 @@ class Canvas(QWidget):
     def paintEvent(self, _event):
         p = QPainter(self)
         p.scale(self.zoom, self.zoom)
-        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, self.zoom != 1.0)
+        # 100% на мониторе масштаба снимка: пиксель в пиксель, без сглаживания (резко). Снимок с монитора 150 %
+        # в окне на мониторе 100 % уменьшается: со сглаживанием, иначе мелкий текст рвётся.
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform,
+                        self.zoom != 1.0 or self.devicePixelRatioF() < self.base.devicePixelRatio() - 0.01)
         p.drawImage(0, 0, self.base)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         for shape in self.shapes:
@@ -1158,9 +1162,11 @@ FRAME_WIDTH = 1   # тонкая линия вокруг самого снимк
 BORDER = 8        # толщина рамки окна по умолчанию (настройка «Толщина рамки»: 4, 8, 12)
 SHADOW = 16       # поле вокруг скруглённой карточки окна: тень и ореол (только своё оформление окна)
 RADIUS = 12       # скругление углов окна
+RADIUS_THIN = 8   # 1.32, вид «Тонкая линия»: скругление окна как в эскизе А
 TITLE_H = 38      # своя шапка окна
 GRAB = 8          # ширина зоны захвата края окна для изменения размера, px
-FRAME_STYLE_KEYS = (("glow", "editor.frame_glow"), ("thick", "editor.frame_thick"), ("plain", "editor.frame_plain"))
+FRAME_STYLE_KEYS = (("thin", "editor.frame_thin"), ("glow", "editor.frame_glow"), ("thick", "editor.frame_thick"),
+                    ("plain", "editor.frame_plain"))
 
 
 def __getattr__(name):
@@ -1170,7 +1176,11 @@ def __getattr__(name):
     raise AttributeError(name)
 
 # Оформление по умолчанию; меняется в настройках (раздел «Оформление»).
-THEME_DEFAULTS = {"ui_accent": ACCENT, "ui_panel": "#d9dbdf", "ui_field": "#3a3d42", "ui_frame": BORDER}
+THEME_DEFAULTS = {"ui_accent": ACCENT, "ui_panel": "#f5f6f8", "ui_field": "#34383e", "ui_frame": BORDER}
+# Цвета панелей и поля из оформлений до 1.32: считаются «не своими» и заменяются спокойной палитрой 1.32 (вид А).
+# Настройки сохраняют цвета целиком, поэтому прежние значения встречаются у всех, кто хоть раз нажимал «Сохранить».
+PRESET_PANELS = {"#d9dbdf", "#232323", "#f5f6f8", "#202327"}
+PRESET_FIELDS = {"#3a3d42", "#121212", "#34383e", "#111315"}
 
 
 def theme(cfg) -> dict:
@@ -1179,17 +1189,53 @@ def theme(cfg) -> dict:
 
 
 def frame_style(cfg) -> str:
-    """Вид рамки окна: glow (тонкая линия со свечением), thick (толстая скруглённая), plain (без цветной рамки)."""
-    value = (cfg or {}).get("editor_frame_style", "glow")
-    return value if value in dict(FRAME_STYLE_KEYS) else "glow"
+    """Вид рамки окна: thin (тонкая линия и мягкая тень, с 1.32 по умолчанию), glow (тонкая линия со свечением),
+    thick (толстая скруглённая), plain (без цветной рамки). «Свечение» было видом по умолчанию до 1.32 и записано в
+    настройки у всех: пока вид не выбран в окне настроек 1.32 (frame_style_132), оно читается как «Тонкая линия»."""
+    cfg = cfg or {}
+    value = cfg.get("editor_frame_style", "thin")
+    if value == "glow" and not cfg.get("frame_style_132"):
+        value = "thin"
+    return value if value in dict(FRAME_STYLE_KEYS) else "thin"
+
+
+def palette(cfg) -> dict:
+    """Цвета редактора 1.32 (вид А, «спокойный»): поверхности, текст, разделители, поле вокруг снимка, акцент.
+    Свои цвета панелей и поля из настроек сохраняются; прежние цвета оформлений заменяются новой палитрой."""
+    t = theme(cfg)
+    accent = QColor(t["ui_accent"])
+    panel_c = QColor(t["ui_panel"])
+    dark = panel_c.lightnessF() < 0.45
+    if str(t["ui_panel"]).lower() in PRESET_PANELS:
+        if dark:
+            p = {"win": "#25282c", "panel": "#202327", "s2": "#2f3338", "s3": "#383d43", "sep": "#3a3f46",
+                 "t": "#f1f3f5", "t2": "#aab1ba"}
+        else:
+            p = {"win": "#ffffff", "panel": "#f5f6f8", "s2": "#eceff3", "s3": "#e1e5eb", "sep": "#d8dde5",
+                 "t": "#1f2328", "t2": "#5f6875"}
+    else:   # свой цвет панелей: оттенки из него (подложка окна чуть светлее выбранного цвета, как до 1.32)
+        p = {"win": panel_c.lighter(118 if dark else 104).name(), "panel": panel_c.lighter(104 if dark else 106).name(),
+             "s2": panel_c.lighter(130).name() if dark else panel_c.darker(106).name(),
+             "s3": panel_c.lighter(150).name() if dark else panel_c.darker(112).name(),
+             "sep": panel_c.lighter(160).name() if dark else panel_c.darker(118).name(),
+             "t": t["text"] if dark else "#1f2328", "t2": t["text_dim"] if dark else "#5f6875"}
+    field = str(t["ui_field"]).lower()
+    p["stage"] = ("#111315" if dark else "#34383e") if field in PRESET_FIELDS else QColor(t["ui_field"]).lighter(125).name()
+    r, g, b = accent.red(), accent.green(), accent.blue()
+    from . import themes as _t
+    p.update({"dark": dark, "acc": accent.name(), "accs": f"rgba({r}, {g}, {b}, {66 if dark else 36})", "link": _t.link_color(dark),
+              "hover": "rgba(255, 255, 255, 18)" if dark else "rgba(0, 0, 0, 14)",
+              "quick": "rgba(255, 255, 255, 18)" if dark else "rgba(0, 0, 0, 15)"})
+    return p
 
 
 def chrome_params(cfg) -> dict:
     """Всё, что нужно для рисования рамки окна редактора: вид, цвета, толщина линии и ореола."""
     t = theme(cfg)
-    accent, panel = QColor(t["ui_accent"]), QColor(t["ui_panel"])
-    dark = panel.lightnessF() < 0.45
-    fill = panel.lighter(104 if dark else 106)
+    accent = QColor(t["ui_accent"])
+    pal = palette(cfg)
+    dark = pal["dark"]
+    fill = QColor(pal["panel"])
     style = frame_style(cfg)
     px = int(t["ui_frame"])
     if style == "glow":
@@ -1198,6 +1244,10 @@ def chrome_params(cfg) -> dict:
         color = QColor(accent)
     elif style == "thick":
         line, halo, color = px, 0, QColor(accent)
+    elif style == "thin":   # 1.32: тонкая линия цвета акцента без свечения и одна мягкая тень
+        line, halo = 1, 0
+        color = QColor(accent)
+        color.setAlpha(170 if dark else 150)
     else:
         line, halo = 1, 0
         color = QColor(255, 255, 255, 70) if dark else QColor(0, 0, 0, 46)   # нейтральная тонкая обводка
@@ -1205,84 +1255,116 @@ def chrome_params(cfg) -> dict:
             "accent": accent, "system": bool(cfg.get("editor_system_title", False))}
 
 
+SOFT = {   # 1.32: «Копировать текст» и «Перевести» мягкой заливкой: (фон, текст, наведение, отмеченная) светлое / тёмное
+    "ocr": (("#efe7fe", "#5b21b6", "#e4d6fd", "#7c3aed"), ("#2e2547", "#d9c8ff", "#3a2f5a", "#7c3aed")),
+    "tr": (("#e0f4f1", "#0b5f57", "#cdeee9", "#0b766c"), ("#13302d", "#a7ece4", "#1a3f3b", "#0b766c")),   # отмеченная: themes.TEAL_BUTTON
+}
+
+
+def soft_colors(kind: str, dark: bool) -> tuple:
+    return SOFT[kind][1 if dark else 0]
+
+
 def make_style(cfg) -> str:
-    """Стиль окна редактора из выбранного оформления и своих цветов (акцент, панели, поле вокруг снимка)."""
+    """Стиль окна редактора 1.32 (вид А): светлые спокойные поверхности, выбранный инструмент мягкой подложкой,
+    «Сохранить» и «Скопировать» лёгкие, одна яркая зелёная «Скопировать и закрыть». Из оформления и своих цветов."""
     t = theme(cfg)
-    accent, panel, field = QColor(t["ui_accent"]), QColor(t["ui_panel"]), QColor(t["ui_field"])
-    a, a_light, a_dark = accent.name(), accent.lighter(130).name(), accent.darker(135).name()
-    dark = panel.lightnessF() < 0.45
-    fill = chrome_params(cfg)["fill"]
-    if dark:
-        a_hover = t["button_hover"]
-        line, sep = fill.lighter(140).name(), fill.lighter(150).name()
-    else:
-        a_hover = QColor.fromHsl(accent.hslHue(), max(0, accent.hslSaturation() // 3), 215).name()
-        line, sep = fill.darker(112).name(), fill.darker(122).name()
-    a_soft = f"rgba({accent.red()}, {accent.green()}, {accent.blue()}, {70 if dark else 55})"   # полупрозрачная заливка выбранного
-    p = fill.name()
-    info = t["text_dim"] if dark else "#3d4046"
-    stage = field.lighter(125).name()
+    P = palette(cfg)
+    dark = P["dark"]
+    accent = QColor(t["ui_accent"])
+    a = accent.name()
+    info = P["t2"]
+    font = t["font"]
+    from . import themes as G   # 1.32: зелёный главной кнопки из одного места
+    ocr_bg, ocr_fg, ocr_hover, ocr_on = soft_colors("ocr", dark)
+    tr_bg, tr_fg, tr_hover, tr_on = soft_colors("tr", dark)
     return f"""
 QMainWindow {{ background: transparent; }}
-#panel, #bottom, #titlebar, #modeHint {{ background: transparent; color: {t['text']}; }}
-#panel {{ border-bottom: 1px solid {line}; }}
-#bottom {{ border-top: 1px solid {line}; }}
-QToolButton {{ color: {t['button_text']}; }}
-QToolButton#tool, QToolButton#size, QToolButton#action {{
-    border: 1px solid transparent; border-radius: 8px; padding: 3px; background: transparent; }}
-QToolButton#tool:hover, QToolButton#size:hover, QToolButton#action:hover {{
-    background: {a_hover}; border-color: {line}; }}
-QToolButton#tool:checked, QToolButton#size:checked {{
-    background: {a_soft}; border: 1px solid {a}; }}
-QToolButton#swatch {{ border: 1px solid #8a8a8a; border-radius: 6px; }}
-QToolButton#swatch:checked {{ border: 3px solid {t['swatch_check']}; }}
-QFrame#sep {{ background: {sep}; }}
-QFrame#quickGroup {{ background: {'rgba(255, 255, 255, 22)' if dark else 'rgba(0, 0, 0, 16)'}; border: 1px solid {line}; border-radius: 9px; }}
-QScrollArea, #stage {{ background: {stage}; border: none; }}
+#panel, #bottom, #titlebar, #modeHint {{ background: transparent; color: {P['t']}; }}
+#panel {{ border-bottom: 1px solid {P['sep']}; }}
+#bottom {{ border-top: 1px solid {P['sep']}; }}
+QToolButton {{ color: {P['t']}; }}
+QToolButton#tool, QToolButton#group, QToolButton#action, QToolButton#more, QToolButton#bell {{
+    border: none; border-radius: 6px; padding: 3px; background: transparent; }}
+QToolButton#group {{ padding-right: {GROUP_ARROW_W + 3}px; }}
+QToolButton#more {{ padding: 0px 10px 0px 7px; background: {P['s2']}; font-size: {font - 1}px; }}
+QToolButton#tool:hover, QToolButton#group:hover, QToolButton#action:hover, QToolButton#bell:hover {{ background: {P['hover']}; }}
+QToolButton#more:hover {{ background: {P['s3']}; }}
+QToolButton#tool:checked, QToolButton#group:checked {{ background: {P['accs']}; }}
+QToolButton#action::menu-indicator, QToolButton#bell::menu-indicator {{ image: none; width: 0px; }}
+QToolButton#size {{ border: none; border-radius: 4px; padding: 0px 6px; background: transparent; }}
+QToolButton#size:hover {{ background: {P['hover']}; }}
+QToolButton#size:checked {{ background: {P['win'] if not dark else P['s3']}; border: 1px solid {P['sep']}; }}
+QFrame#sizeSeg {{ background: {P['s2']}; border-radius: 6px; }}
+QFrame#sep {{ background: {P['sep']}; }}
+QFrame#quickGroup {{ background: {P['quick']}; border: 1px solid {P['sep']}; border-radius: 9px; }}
+QScrollArea, #stage {{ background: {P['stage']}; border: none; }}
 #imageFrame {{ background: {t['image_frame']}; }}
-QPushButton {{ min-height: 30px; padding: 0 14px; border-radius: 8px; font-size: {t['font']}px;
-    border: 1px solid {t['button_border']}; background: {t['button_bg']}; color: {t['button_text']}; }}
-QPushButton:hover {{ background: {t['button_hover']}; border-color: {a if dark else '#9fb6da'}; }}
-QPushButton#primary {{ background: {a}; color: white; border: 1px solid {a_dark}; font-weight: bold; }}
-QPushButton#primary:hover {{ background: {a_light}; }}
-QPushButton#finish {{ min-height: 38px; padding: 0 20px; font-size: {t['font'] + 1}px; font-weight: bold; color: white;
-    background: #1f9d55; border: 1px solid #157a40; }}
-QPushButton#finish:hover {{ background: #26b864; border-color: #1f9d55; }}
-QPushButton#finish:pressed {{ background: #157a40; }}
-QLabel#info {{ color: {info}; font-size: {t['font'] - 1}px; background: transparent; }}
-QLabel#winTitle {{ color: {t['text']}; font-weight: bold; font-size: {t['font']}px; background: transparent; }}
-QLabel#modeHint {{ color: {t['text']}; font-size: {max(15, t['font'] + 1)}px; padding: 10px 12px;
-    border-top: 1px solid {line}; }}
-#trTop {{ background: {'#12302d' if dark else '#eaf7f5'}; color: {t['text']}; border-bottom: 2px solid #0b8f84; }}
+QPushButton {{ min-height: 30px; padding: 0 14px; border-radius: 6px; font-size: {font}px;
+    border: 1px solid {P['sep']}; background: {P['win']}; color: {P['t']}; }}
+QPushButton:hover {{ background: {P['s2']}; }}
+QPushButton#light {{ min-height: 34px; padding: 0 13px 0 10px; border: none; background: {P['s2']}; }}
+QPushButton#light:hover {{ background: {P['s3']}; }}
+QFrame#zoomGroup {{ border: 1px solid {P['sep']}; border-radius: 6px; background: {P['win']}; }}
+QPushButton#zoomSeg {{ min-height: 30px; padding: 0px; border: none; border-left: 1px solid {P['sep']};
+    border-radius: 0px; background: transparent; }}
+QPushButton#zoomSeg[first="true"] {{ border-left: none; border-top-left-radius: 5px; border-bottom-left-radius: 5px; }}
+QPushButton#zoomSeg[last="true"] {{ border-top-right-radius: 5px; border-bottom-right-radius: 5px; }}
+QPushButton#zoomSeg[big="true"] {{ font-size: 18px; }}
+QPushButton#zoomSeg:hover {{ background: {P['s2']}; }}
+QPushButton#primary {{ background: {G.blue_button(a)[0]}; color: white; border: 1px solid {G.blue_button(a)[2]};
+    font-weight: bold; }}
+QPushButton#primary:hover {{ background: {G.blue_button(a)[1]}; }}
+QPushButton#finish {{ min-height: 38px; padding: 0 18px 0 14px; font-size: {font + 1}px; font-weight: bold; color: white;
+    background: {G.GREEN}; border: 1px solid {G.GREEN_BORDER}; border-radius: 6px; }}
+QPushButton#finish:hover {{ background: {G.GREEN_HOVER}; }}
+QPushButton#finish:pressed {{ background: {G.GREEN_PRESSED}; }}
+QPushButton#ocrButton {{ min-height: 32px; padding: 0 12px 0 9px; border: none; border-radius: 6px; font-weight: 600;
+    background: {ocr_bg}; color: {ocr_fg}; }}
+QPushButton#ocrButton:hover {{ background: {ocr_hover}; }}
+QPushButton#ocrButton:checked {{ background: {ocr_on}; color: white; }}
+QPushButton#trAllButton, QPushButton#trButton {{ min-height: 32px; border: none; font-weight: 600; background: {tr_bg};
+    color: {tr_fg}; }}
+QPushButton#trAllButton {{ padding: 0 11px 0 9px; border-top-left-radius: 6px; border-bottom-left-radius: 6px;
+    border-top-right-radius: 0px; border-bottom-right-radius: 0px; }}
+QPushButton#trButton {{ padding: 0 11px; border-left: 1px solid rgba(11, 143, 132, 90); border-top-right-radius: 6px;
+    border-bottom-right-radius: 6px; border-top-left-radius: 0px; border-bottom-left-radius: 0px; }}
+QPushButton#trAllButton:hover, QPushButton#trButton:hover {{ background: {tr_hover}; }}
+QPushButton#trButton:checked {{ background: {tr_on}; color: white; }}
+QLabel#info {{ color: {info}; font-size: {font - 1}px; background: transparent; }}
+QLabel#winTitle {{ color: {P['t']}; font-weight: 600; font-size: {font}px; background: transparent; }}
+QLabel#modeHint {{ color: {P['t']}; font-size: {max(15, font + 1)}px; padding: 10px 12px;
+    border-top: 1px solid {P['sep']}; }}
+#trTop {{ background: {'#12302d' if dark else '#eaf7f5'}; color: {P['t']}; border-bottom: 2px solid #0b8f84; }}
 #trTop[mode="text"] {{ background: {'#2a1d4a' if dark else '#f3edff'}; border-bottom: 2px solid #7c3aed; }}
 #trTop[mode="crop"] {{ background: {'#16301f' if dark else '#eaf7ee'}; border-bottom: 2px solid #1f9d55; }}
-QLabel#trTitle {{ color: {t['text']}; font-weight: bold; font-size: {t['font'] + 5}px; background: transparent; }}
-QLabel#trSub {{ color: {info}; font-size: {t['font'] - 1}px; background: transparent; }}
-QPushButton#modeDone, QPushButton#modeMain {{ min-height: 38px; min-width: 130px; padding: 0 18px; font-size: {t['font'] + 2}px;
-    font-weight: bold; color: white; background: #0d9488; border: 1px solid #0b766c; border-radius: 8px; }}
-QPushButton#modeDone:hover, QPushButton#modeMain:hover {{ background: #14b8a6; }}
+QLabel#trTitle {{ color: {P['t']}; font-weight: bold; font-size: {font + 5}px; background: transparent; }}
+QLabel#trSub {{ color: {info}; font-size: {font - 1}px; background: transparent; }}
+QPushButton#modeDone, QPushButton#modeMain {{ min-height: 38px; min-width: 130px; padding: 0 18px; font-size: {font + 2}px;
+    font-weight: bold; color: white; background: {G.TEAL_BUTTON}; border: 1px solid {G.TEAL_BUTTON_BORDER}; border-radius: 6px; }}
+QPushButton#modeDone:hover, QPushButton#modeMain:hover {{ background: {G.TEAL_BUTTON_HOVER}; }}
 QPushButton#modeDone[mode="text"], QPushButton#modeMain[mode="text"] {{ background: #7c3aed; border: 1px solid #5b21b6; }}
-QPushButton#modeDone[mode="text"]:hover {{ background: #8f55f5; }}
-QPushButton#modeDone[mode="crop"] {{ background: {t['button_bg']}; color: {t['button_text']}; border: 1px solid {t['button_border']}; }}
-QPushButton#modeMain[mode="crop"] {{ background: #1f9d55; border: 1px solid #157a40; }}
-QPushButton#modeMain[mode="crop"]:hover {{ background: #26b864; }}
-QPushButton#modeMain:disabled {{ background: {t['button_bg']}; color: {info}; border: 1px solid {t['button_border']}; }}
+QPushButton#modeDone[mode="text"]:hover {{ background: {G.VIOLET_HOVER}; }}
+QPushButton#modeDone[mode="crop"] {{ background: {P['win']}; color: {P['t']}; border: 1px solid {P['sep']}; }}
+QPushButton#modeMain[mode="crop"] {{ background: {G.GREEN}; border: 1px solid {G.GREEN_BORDER}; }}
+QPushButton#modeMain[mode="crop"]:hover {{ background: {G.GREEN_HOVER}; }}
+QPushButton#modeMain:disabled {{ background: {P['s2']}; color: {info}; border: 1px solid {P['sep']}; }}
 #textBottom {{ background: {'#2a1d4a' if dark else '#f3edff'}; border-top: 2px solid #7c3aed; }}
-QLabel#textMessage {{ color: {'#d9c8ff' if dark else '#3b1a7a'}; font-size: {max(15, t['font'] + 1)}px; background: transparent; }}
+QLabel#textMessage {{ color: {'#d9c8ff' if dark else '#3b1a7a'}; font-size: {max(15, font + 1)}px; background: transparent; }}
 QPushButton#textCopySel {{ min-height: 30px; padding: 0 14px; font-weight: bold; color: {'#d9c8ff' if dark else '#3b1a7a'};
-    background: {t['button_bg'] if dark else '#ffffff'}; border: 1px solid #7c3aed; }}
+    background: {P['win']}; border: 1px solid #7c3aed; }}
 QPushButton#textCopyAll {{ min-height: 30px; padding: 0 14px; font-weight: bold; color: white; background: #7c3aed; border: 1px solid #5b21b6; }}
-QPushButton#textCopyAll:hover {{ background: #8f55f5; }}
+QPushButton#textCopyAll:hover {{ background: {G.VIOLET_HOVER}; }}
 #trBottom {{ background: {'#12302d' if dark else '#eaf7f5'}; border-top: 2px solid #0b8f84; }}
-QLabel#trMessage {{ color: {'#a7ece4' if dark else '#0b5f57'}; font-size: {t['font']}px; background: transparent; }}
+QLabel#trMessage {{ color: {'#a7ece4' if dark else '#0b5f57'}; font-size: {font}px; background: transparent; }}
 QPushButton#trLang, QPushButton#trSegL, QPushButton#trSegR {{ min-height: 30px; padding: 0 12px; font-weight: bold;
-    color: {'#a7ece4' if dark else '#0b5f57'}; background: {t['button_bg'] if dark else '#ffffff'}; border: 1px solid #0b8f84; }}
+    color: {'#a7ece4' if dark else '#0b5f57'}; background: {P['win']}; border: 1px solid #0b8f84; }}
 QPushButton#trSegL {{ border-top-right-radius: 0px; border-bottom-right-radius: 0px; }}
 QPushButton#trSegR {{ border-top-left-radius: 0px; border-bottom-left-radius: 0px; border-left: none; }}
-QPushButton#trSegL:checked, QPushButton#trSegR:checked {{ background: #0d9488; color: white; }}
-QPushButton#trCopy {{ min-height: 30px; padding: 0 14px; font-weight: bold; color: white; background: #0d9488;
-    border: 1px solid #0b766c; }}
-QPushButton#trCopy:hover {{ background: #14b8a6; }}
+QPushButton#trSegL:checked, QPushButton#trSegR:checked {{ background: {G.TEAL_BUTTON}; color: white; }}
+QPushButton#trCopy {{ min-height: 30px; padding: 0 14px; font-weight: bold; color: white; background: {G.TEAL_BUTTON};
+    border: 1px solid {G.TEAL_BUTTON_BORDER}; }}
+QPushButton#trCopy:hover {{ background: {G.TEAL_BUTTON_HOVER}; }}
 """
 
 
@@ -1344,6 +1426,7 @@ class TitleBar(QWidget):
         self.label.setObjectName("winTitle")
         row.addWidget(self.label)
         row.addStretch(1)
+        self.icons_widget = None   # 1.32: колокольчик, «?», шестерёнка и глобус справа в шапке (set_icons)
         self.min_button = WinButton("min", tr("editor.minimize"))
         self.max_button = WinButton("max", tr("editor.maximize"))
         self.close_button = WinButton("close", tr("editor.close"))
@@ -1352,6 +1435,22 @@ class TitleBar(QWidget):
         self.close_button.clicked.connect(window.close)   # тот же путь, что у прежнего закрытия: вопрос «Снимок не сохранён»
         for b in (self.min_button, self.max_button, self.close_button):
             row.addWidget(b)
+
+    def set_icons(self, widget):
+        """Колокольчик, «?», шестерёнка, глобус (1.32): в своей шапке перед кнопками окна, с промежутком 10 px."""
+        row = self.layout()
+        if self.icons_widget is not None:
+            row.removeWidget(self.icons_widget)
+            self.icons_widget.hide()
+            self.icons_widget.deleteLater()
+            spacer = row.itemAt(row.indexOf(self.min_button) - 1)
+            if spacer is not None and spacer.spacerItem() is not None:
+                row.removeItem(spacer)
+        self.icons_widget = widget
+        i = row.indexOf(self.min_button)
+        row.insertWidget(i, widget)
+        row.insertSpacing(i + 1, 10)
+        widget.show()
 
     def set_maximized(self, on: bool):
         self.max_button.kind = "restore" if on else "max"
@@ -1418,7 +1517,9 @@ class ChromeShell(QWidget):
         return SHADOW if self.custom() and not self.maximized() else 0
 
     def radius(self) -> int:
-        return RADIUS if self.outer() else 0
+        if not self.outer():
+            return 0
+        return RADIUS_THIN if self.params["style"] == "thin" else RADIUS
 
     def inner(self) -> int:
         """Отступ содержимого внутри карточки: рамка и (в системном окне) внутренний ореол."""
@@ -1426,7 +1527,7 @@ class ChromeShell(QWidget):
         if self.custom() and self.maximized():
             return 0
         extra = p["halo"] if not self.custom() else 0
-        return p["line"] + extra + (1 if p["style"] != "plain" else 0)
+        return p["line"] + extra + (1 if p["style"] in ("glow", "thick") else 0)
 
     def apply(self, params=None):
         if params is not None:
@@ -1447,11 +1548,18 @@ class ChromeShell(QWidget):
         dark = pr["dark"]
         if self.outer():
             p.setPen(Qt.PenStyle.NoPen)
-            deep = 1.5 if pr["style"] == "plain" else 1.0   # вид «без цветной рамки»: тень глубже
-            for i in range(14, 0, -2):
-                alpha = int((6 if not dark else 9) * deep)
-                p.setBrush(QColor(0, 0, 0, alpha))
-                p.drawRoundedRect(card.adjusted(-i, -i + 7, i, i + 7), r + i, r + i)
+            if pr["style"] == "thin":   # 1.32: одна мягкая широкая тень (как 0 12px 36px) и тонкая близкая
+                for i in range(15, 0, -1):
+                    p.setBrush(QColor(0, 0, 0, 4 if not dark else 7))
+                    p.drawRoundedRect(card.adjusted(-i, -i + 6, i, i + 6), r + i, r + i)
+                p.setBrush(QColor(0, 0, 0, 22 if not dark else 40))
+                p.drawRoundedRect(card.adjusted(-1, 0, 1, 2), r + 1, r + 1)
+            else:
+                deep = 1.5 if pr["style"] == "plain" else 1.0   # вид «без цветной рамки»: тень глубже
+                for i in range(14, 0, -2):
+                    alpha = int((6 if not dark else 9) * deep)
+                    p.setBrush(QColor(0, 0, 0, alpha))
+                    p.drawRoundedRect(card.adjusted(-i, -i + 7, i, i + 7), r + i, r + i)
             if pr["halo"] and pr["style"] == "glow":
                 halo = QColor(pr["color"])
                 halo.setAlpha(70)
@@ -1485,7 +1593,7 @@ class ChromeShell(QWidget):
         if not c.adjusted(-GRAB, -GRAB, GRAB, GRAB).contains(QPointF(x, y)):
             return none
         e = none
-        near = max(2, int(self.params["line"]))   # внутрь карточки только сама линия рамки: шапка целиком отдана переносу
+        near = max(3, int(self.params["line"]))   # внутрь карточки только линия рамки (3 px у тонкой): шапка отдана переносу
         corner = 2 * GRAB + 4
         left, right = x < c.left() + near, x > c.right() - near
         top, bottom = y < c.top() + near, y > c.bottom() - near
@@ -1576,6 +1684,134 @@ def _separator() -> QFrame:
 
 
 TOOL_MIME = "application/x-clipsd-tool"
+GROUP_PREFIX = "group:"   # в перетаскивании: «group:<код>» тащит всю группу
+
+# 1.32: группы инструментов, как в Office. Щелчок по значку группы включает её последний выбранный инструмент,
+# стрелка ▾ справа открывает меню группы (значок, название, клавиша, зелёная галочка у инструмента по умолчанию).
+# По ширине окна группы сворачиваются в одну кнопку от менее нужных к более нужным (COLLAPSE_ORDER);
+# выделение, номер и обрезка всегда отдельными кнопками. Горячие клавиши работают всегда.
+GROUPS = (   # (код, ключ названия, инструменты в стандартном порядке)
+    ("arrows", "editor.group_arrows", (ARROW, DARROW, FARROW, FLINE, LINE)),
+    ("shapes", "editor.group_shapes", (RECT, ELLIPSE, FSHAPE)),
+    ("labels", "editor.group_labels", (CALLOUT, TEXT)),
+    ("draw", "editor.group_draw", (MARKER, PENCIL)),
+    ("hide", "editor.group_hide", (BLUR, ERASER)),
+    ("ocr", "editor.group_ocr", (OCR, TRANSLATE)),
+)
+GROUP_TOOLS = {code: tools for code, _key, tools in GROUPS}
+GROUP_TITLE = {code: key for code, key, _tools in GROUPS}
+TOOL_GROUP = {tool: code for code, _key, tools in GROUPS for tool in tools}
+GROUP_MAIN = {"arrows": ARROW, "shapes": RECT, "labels": TEXT, "draw": MARKER, "hide": BLUR, "ocr": OCR}   # на значке, пока ничего не выбирали
+COLLAPSE_ORDER = ("draw", "ocr", "hide", "shapes", "arrows", "labels")   # первыми сворачиваются менее нужные
+COLLAPSE_SLACK = 15   # px: свернувшаяся группа разворачивается на 15 px позже, кнопки не прыгают у порога
+TOOL_W, GROUP_W, GROUP_ARROW_W = 36, 48, 13   # ширина кнопки инструмента, кнопки группы и её зоны ▾
+
+
+def normalize_order(order) -> list:
+    """Порядок инструментов в модели групп (1.32): неизвестные отбрасываются, повторы убираются; новый
+    инструмент встаёт в свою группу (или в конец); каждая группа идёт подряд на месте своего первого инструмента.
+    Так сохранённый в 1.31 порядок переносится аккуратно: порядок групп берётся по первому инструменту каждой группы,
+    порядок внутри группы сохраняется."""
+    standard = [t for t, _g, _tip, _k in TOOLS]
+    seen = [t for t in dict.fromkeys(order or []) if t in standard]
+    for t in standard:
+        if t in seen:
+            continue
+        g = TOOL_GROUP.get(t)
+        mates = [i for i, x in enumerate(seen) if g is not None and TOOL_GROUP.get(x) == g]
+        if mates:
+            seen.insert(mates[-1] + 1, t)
+        else:
+            seen.append(t)
+    out, placed = [], set()
+    for t in seen:
+        g = TOOL_GROUP.get(t)
+        if g is None:
+            out.append(t)
+        elif g not in placed:
+            placed.add(g)
+            out.extend(x for x in seen if TOOL_GROUP.get(x) == g)
+    return out
+
+
+def order_entries(order) -> list:
+    """Плоский порядок -> элементы ряда: [("tool", MOVE, [MOVE]), ("group", "arrows", [ARROW, ...]), ...]."""
+    entries = []
+    for t in normalize_order(order):
+        g = TOOL_GROUP.get(t)
+        if g is None:
+            entries.append(("tool", t, [t]))
+        elif entries and entries[-1][0] == "group" and entries[-1][1] == g:
+            entries[-1][2].append(t)
+        else:
+            entries.append(("group", g, [t]))
+    return entries
+
+
+def move_in_order(order, tool, index, whole=False) -> list:
+    """Перестановка перетаскиванием. index: куда в плоском порядке (перед каким по счёту) отпустили.
+    Инструмент группы, отпущенный внутри своей группы, переставляется в ней; отпущенный вне её (или whole=True,
+    тащили кнопку свёрнутой группы) переносит всю группу. Отдельная кнопка и группа встают только между
+    элементами ряда: внутрь чужой группы не попадают (к её ближнему краю)."""
+    order = normalize_order(order)
+    g = TOOL_GROUP.get(tool)
+    block = [t for t in order if TOOL_GROUP.get(t) == g] if g is not None else [tool]
+    start = order.index(block[0])
+    end = start + len(block)
+    if g is not None and not whole and start <= index <= end:
+        old = order.index(tool)
+        order.pop(old)
+        order.insert(index - (1 if index > old else 0), tool)
+        return order
+    rest = [t for t in order if t not in block]
+    idx = sum(1 for t in order[:max(0, index)] if t not in block)
+    if 0 < idx < len(rest):
+        g2 = TOOL_GROUP.get(rest[idx])
+        if g2 is not None and TOOL_GROUP.get(rest[idx - 1]) == g2:
+            s = next(i for i, t in enumerate(rest) if TOOL_GROUP.get(t) == g2)
+            e = s + sum(1 for t in rest if TOOL_GROUP.get(t) == g2)
+            idx = s if idx - s <= e - idx else e
+    return rest[:idx] + block + rest[idx:]
+
+
+def drop_plan(order, tool, index, whole=False) -> tuple:
+    """(новый порядок, что переносится): весь блок группы или один инструмент (для красной черты «сюда встанет»)."""
+    order = normalize_order(order)
+    g = TOOL_GROUP.get(tool)
+    block = [t for t in order if TOOL_GROUP.get(t) == g] if g is not None else [tool]
+    start = order.index(block[0])
+    inside = g is not None and not whole and start <= index <= start + len(block)
+    return move_in_order(order, tool, index, whole), ([tool] if inside else block)
+
+
+SELECTED_BAR_COLOR = [ACCENT]   # цвет полоски выбранного инструмента (акцент оформления; ставит окно редактора)
+
+
+def _paint_selected_bar(button, center=None):
+    """1.32: выбранный инструмент: мягкая подложка (таблица стилей) и короткая полоска акцента снизу."""
+    p = QPainter(button)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    c = button.width() / 2 if center is None else center
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor(SELECTED_BAR_COLOR[0]))
+    p.drawRoundedRect(QRectF(c - 7, button.height() - 5, 14, 3), 1.5, 1.5)
+    p.end()
+
+
+def _paint_default_mark(button, right=2):
+    """Зелёная галочка (инструмент по умолчанию) в правом нижнем углу значка."""
+    p = QPainter(button)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    d = 13
+    r = QRectF(button.width() - d - right, button.height() - d - 2, d, d)
+    from .themes import GREEN   # 1.32: галочка того же зелёного, что главная кнопка
+    p.setPen(QPen(QColor("#ffffff"), 1.5))
+    p.setBrush(QColor(GREEN))
+    p.drawEllipse(r)
+    p.setPen(QPen(QColor("#ffffff"), 1.7, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+    p.drawPolyline(QPolygonF([QPointF(r.left() + d * 0.27, r.top() + d * 0.53), QPointF(r.left() + d * 0.43, r.top() + d * 0.69),
+                              QPointF(r.left() + d * 0.75, r.top() + d * 0.32)]))
+    p.end()
 
 
 class DraggableToolButton(QToolButton):
@@ -1587,6 +1823,9 @@ class DraggableToolButton(QToolButton):
         self._press = None
         self.default_mark = False   # зелёная галочка: это инструмент по умолчанию
 
+    def drag_payload(self) -> str:
+        return self.tool
+
     def set_default_mark(self, on: bool):
         if on != self.default_mark:
             self.default_mark = on
@@ -1594,19 +1833,10 @@ class DraggableToolButton(QToolButton):
 
     def paintEvent(self, event):
         super().paintEvent(event)
-        if not self.default_mark:
-            return
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        d = 13
-        r = QRectF(self.width() - d - 2, self.height() - d - 2, d, d)
-        p.setPen(QPen(QColor("#ffffff"), 1.5))
-        p.setBrush(QColor("#1f9d55"))
-        p.drawEllipse(r)
-        p.setPen(QPen(QColor("#ffffff"), 1.7, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-        p.drawPolyline(QPolygonF([QPointF(r.left() + d * 0.27, r.top() + d * 0.53), QPointF(r.left() + d * 0.43, r.top() + d * 0.69),
-                                  QPointF(r.left() + d * 0.75, r.top() + d * 0.32)]))
-        p.end()
+        if self.isChecked():
+            _paint_selected_bar(self, center=self.width() / 2 - (4 if self.default_mark else 0))
+        if self.default_mark:
+            _paint_default_mark(self)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -1620,7 +1850,7 @@ class DraggableToolButton(QToolButton):
             self.setDown(False)
             drag = QDrag(self)
             mime = QMimeData()
-            mime.setData(TOOL_MIME, self.tool.encode())
+            mime.setData(TOOL_MIME, self.drag_payload().encode())
             drag.setMimeData(mime)
             drag.setPixmap(self.grab())
             drag.setHotSpot(QPoint(self.width() // 2, self.height() // 2))
@@ -1633,8 +1863,73 @@ class DraggableToolButton(QToolButton):
         super().mouseReleaseEvent(event)
 
 
+class GroupButton(DraggableToolButton):
+    """Кнопка свёрнутой группы (1.32): значок последнего выбранного инструмента группы и стрелка ▾ справа.
+    Щелчок по значку включает этот инструмент, по стрелке открывает меню группы (menu_requested);
+    перетаскивание переносит группу целиком."""
+
+    menu_requested = pyqtSignal(str)
+
+    def __init__(self, code):
+        super().__init__(code)
+        self.code = code
+        self.current = GROUP_MAIN[code]
+        self.menu_open = False
+        self._arrow_hover = False
+        self.setMouseTracking(True)
+
+    def drag_payload(self) -> str:
+        return GROUP_PREFIX + self.code
+
+    def in_arrow(self, pos) -> bool:
+        return pos.x() >= self.width() - GROUP_ARROW_W - 2
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self.in_arrow(event.position()):
+            event.accept()
+            self.menu_requested.emit(self.code)
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        hover = self.in_arrow(event.position())
+        if hover != self._arrow_hover:
+            self._arrow_hover = hover
+            self.update()
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event):
+        self._arrow_hover = False
+        self.update()
+        super().leaveEvent(event)
+
+    def paintEvent(self, event):
+        QToolButton.paintEvent(self, event)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        zone = QRectF(self.width() - GROUP_ARROW_W - 2, 3, GROUP_ARROW_W, self.height() - 6)
+        if self.menu_open or self._arrow_hover:
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(128, 128, 128, 60 if self._arrow_hover and not self.menu_open else 90))
+            p.drawRoundedRect(zone, 4, 4)
+        c = zone.center()
+        color = QColor(icons.ICON_COLOR)
+        color.setAlpha(200)
+        p.setPen(QPen(color, 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawPolyline(QPolygonF([QPointF(c.x() - 3.5, c.y() - 1.6), QPointF(c.x(), c.y() + 1.9),
+                                  QPointF(c.x() + 3.5, c.y() - 1.6)]))
+        p.end()
+        if self.isChecked():
+            _paint_selected_bar(self, center=(self.width() - GROUP_ARROW_W - 2) / 2 + 1)
+        if self.default_mark:
+            _paint_default_mark(self, right=GROUP_ARROW_W + 1)
+
+
 class ToolStrip(QWidget):
-    """Строка инструментов, порядок которой меняется перетаскиванием. order_changed(список инструментов)."""
+    """Ряд инструментов (1.32): отдельные кнопки и группы. Свёрнутая группа показывает одну кнопку GroupButton,
+    развёрнутая: кнопки всех своих инструментов. Порядок меняется перетаскиванием (группы целиком, инструмент
+    внутри своей группы); order_changed(плоский список инструментов) пишется в tool_order."""
 
     order_changed = pyqtSignal(list)
 
@@ -1645,63 +1940,150 @@ class ToolStrip(QWidget):
         self.row.setContentsMargins(0, 0, 0, 0)
         self.row.setSpacing(2)
         self.drop_x = None
+        self.tool_buttons = {}
+        self.group_buttons = {}
+        self._order = []
+        self.collapsed = set()
+        self.available = lambda tool: True   # распознавание или перевод выключены в настройках: их кнопок нет
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
 
-    def buttons(self):
-        return [self.row.itemAt(i).widget() for i in range(self.row.count())]
+    def setup(self, order, tool_buttons, group_buttons, available=None):
+        self.tool_buttons, self.group_buttons = tool_buttons, group_buttons
+        if available is not None:
+            self.available = available
+        self._order = normalize_order(order)
+        self._relayout()
 
+    # --- порядок -----------------------------------------------------------------------------
     def order(self):
-        return [b.tool for b in self.buttons()]
+        return list(self._order)
 
-    def index_at(self, x: int) -> int:
-        """Куда встанет кнопка, если отпустить её в точке x."""
-        for i, button in enumerate(self.buttons()):
-            if x < button.geometry().center().x():
-                return i
-        return len(self.buttons())
-
-    def move_tool(self, tool, index):
-        button = next(b for b in self.buttons() if b.tool == tool)
-        old = self.buttons().index(button)
-        if index > old:
-            index -= 1
-        if index == old:
-            return
-        self.row.removeWidget(button)
-        self.row.insertWidget(index, button)
-        self.order_changed.emit(self.order())
+    def buttons(self):
+        """Видимые кнопки ряда по порядку: инструменты и кнопки свёрнутых групп."""
+        out = []
+        for t in self._order:
+            w = self.visible_widget(t)
+            if w.isVisibleTo(self) and w not in out:
+                out.append(w)
+        return out
 
     def set_order(self, order):
-        buttons = {b.tool: b for b in self.buttons()}
-        for button in buttons.values():
-            self.row.removeWidget(button)
-        for tool in order:
-            self.row.addWidget(buttons[tool])
+        self._order = normalize_order(order)
+        self._relayout()
         self.order_changed.emit(self.order())
+
+    def move_tool(self, tool, index, whole=False):
+        new = move_in_order(self._order, tool, index, whole)
+        if new == self._order:
+            return
+        self._order = new
+        self._relayout()
+        self.order_changed.emit(self.order())
+
+    # --- что видно ---------------------------------------------------------------------------
+    def members(self, code) -> list:
+        """Инструменты группы в порядке ряда, которые сейчас доступны."""
+        return [t for t in self._order if TOOL_GROUP.get(t) == code and self.available(t)]
+
+    def folded(self, code, collapsed=None) -> bool:
+        """Группа показана одной кнопкой: свёрнута и в ней больше одного доступного инструмента."""
+        collapsed = self.collapsed if collapsed is None else collapsed
+        return code in collapsed and len(self.members(code)) > 1
+
+    def set_collapsed(self, codes):
+        codes = set(codes)
+        if codes != self.collapsed:
+            self.collapsed = codes
+            self._sync_visibility()
+
+    def _relayout(self):
+        while self.row.count():
+            self.row.takeAt(0)
+        for kind, key, tools in order_entries(self._order):
+            if kind == "group" and key in self.group_buttons:
+                self.row.addWidget(self.group_buttons[key])
+            for t in tools:
+                self.row.addWidget(self.tool_buttons[t])
+        self._sync_visibility()
+
+    def _sync_visibility(self):
+        for code, gb in self.group_buttons.items():
+            folded = self.folded(code)
+            gb.setVisible(folded)
+            for t in GROUP_TOOLS[code]:
+                if t in self.tool_buttons:
+                    self.tool_buttons[t].setVisible(not folded and self.available(t))
+        for t, b in self.tool_buttons.items():
+            if t not in TOOL_GROUP:
+                b.setVisible(self.available(t))
+        self.updateGeometry()
+
+    def width_for(self, collapsed) -> int:
+        """Ширина ряда при этих свёрнутых группах (по настоящим размерам кнопок)."""
+        widths = []
+        for kind, key, tools in order_entries(self._order):
+            if kind == "tool":
+                widths += [TOOL_W] if self.available(key) else []
+            elif self.folded(key, collapsed):
+                widths.append(GROUP_W)
+            else:
+                widths += [TOOL_W] * len(self.members(key))
+        return sum(widths) + self.row.spacing() * max(0, len(widths) - 1)
+
+    def visible_widget(self, tool):
+        g = TOOL_GROUP.get(tool)
+        if g is not None and self.folded(g):
+            return self.group_buttons[g]
+        return self.tool_buttons[tool]
+
+    # --- перетаскивание ----------------------------------------------------------------------
+    def index_at(self, x: int) -> int:
+        """Куда (перед каким по счёту инструментом плоского порядка) встанет кнопка, если отпустить её в точке x."""
+        for i, tool in enumerate(self._order):
+            w = self.visible_widget(tool)
+            if w.isVisible() and x < w.geometry().center().x():
+                return i
+        return len(self._order)
+
+    def _payload(self, event):
+        text = bytes(event.mimeData().data(TOOL_MIME)).decode()
+        if text.startswith(GROUP_PREFIX):
+            code = text[len(GROUP_PREFIX):]
+            tools = [t for t in self._order if TOOL_GROUP.get(t) == code]
+            return (tools[0], True) if tools else (None, False)
+        return (text, False) if text in self._order else (None, False)
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasFormat(TOOL_MIME):
             event.acceptProposedAction()
 
     def dragMoveEvent(self, event):
-        if event.mimeData().hasFormat(TOOL_MIME):
-            index = self.index_at(int(event.position().x()))
-            buttons = self.buttons()
-            self.drop_x = (buttons[index].geometry().left() - 2 if index < len(buttons)
-                           else buttons[-1].geometry().right() + 2)
-            self.update()
-            event.acceptProposedAction()
+        if not event.mimeData().hasFormat(TOOL_MIME):
+            return
+        tool, whole = self._payload(event)
+        if tool is None:
+            return
+        new, block = drop_plan(self._order, tool, self.index_at(int(event.position().x())), whole)
+        after = new.index(block[-1]) + 1
+        nxt = next((t for t in new[after:] if t not in block), None)
+        shown = [self.visible_widget(t) for t in self._order if self.visible_widget(t).isVisible()]
+        if nxt is not None and self.visible_widget(nxt).isVisible():
+            self.drop_x = self.visible_widget(nxt).geometry().left() - 2   # красная черта: сюда встанет
+        elif shown:
+            self.drop_x = shown[-1].geometry().right() + 2
+        self.update()
+        event.acceptProposedAction()
 
     def dragLeaveEvent(self, _event):
         self.drop_x = None
         self.update()
 
     def dropEvent(self, event):
-        tool = bytes(event.mimeData().data(TOOL_MIME)).decode()
+        tool, whole = self._payload(event)
         self.drop_x = None
         self.update()
-        if tool in self.order():
-            self.move_tool(tool, self.index_at(int(event.position().x())))
+        if tool is not None:
+            self.move_tool(tool, self.index_at(int(event.position().x())), whole)
             event.acceptProposedAction()
 
     def paintEvent(self, event):
@@ -1713,10 +2095,9 @@ class ToolStrip(QWidget):
 
 
 def tool_order(cfg) -> list:
-    """Порядок инструментов из настроек: неизвестные отбрасываются, новые добавляются в конец."""
-    standard = [t for t, _g, _tip, _k in TOOLS]
-    saved = [t for t in (cfg.get("tool_order") or []) if t in standard]
-    return saved + [t for t in standard if t not in saved]
+    """Порядок инструментов из настроек в модели групп (1.32, см. normalize_order): неизвестные отбрасываются,
+    новые встают в свою группу или в конец."""
+    return normalize_order(cfg.get("tool_order") or [])
 
 
 MODE_TOOLS = {OCR, TRANSLATE, CROP}   # режимы со своей строкой сверху (1.29.1): по умолчанию не включаются и не запоминаются
@@ -1812,6 +2193,337 @@ def ask_save_path(parent, cfg):
     return path
 
 
+MENU_GAP = 8   # px: меню объекта не ближе к рамке с ручками
+
+
+def place_menu(frame: QRect, size: QSize, cursor: QPoint, area: QRect, handles=(), gap=MENU_GAP) -> QPoint:
+    """Левый верхний угол меню, которое не закрывает рамку объекта с ручками (frame) и целиком на экране area:
+    справа от рамки, иначе слева, ниже, выше (по высоте или ширине ближе к курсору). Объект почти во весь экран:
+    у курсора, но так, чтобы меню не закрыло ближайшую ручку."""
+    w, h = size.width(), size.height()
+
+    def clamp(v, lo, hi):
+        return max(lo, min(v, hi))
+
+    def fits(x, y):
+        r = QRect(x, y, w, h)
+        return area.contains(r) and not r.intersects(frame.adjusted(-gap + 1, -gap + 1, gap - 1, gap - 1))
+
+    y_side = clamp(cursor.y() - 10, area.top(), area.bottom() - h + 1)
+    x_side = clamp(cursor.x() - 10, area.left(), area.right() - w + 1)
+    for x, y in ((frame.right() + gap, y_side), (frame.left() - gap - w, y_side),
+                 (x_side, frame.bottom() + gap), (x_side, frame.top() - gap - h)):
+        if fits(x, y):
+            return QPoint(x, y)
+    # объект почти во весь экран: у курсора, со сдвигом от ближайшей ручки
+    near = min(handles, key=lambda p: (p - cursor).manhattanLength()) if handles else cursor
+    keep = QRect(near.x() - HANDLE - gap, near.y() - HANDLE - gap, 2 * (HANDLE + gap), 2 * (HANDLE + gap))
+    off = 14
+    for dx, dy in ((1, 1), (-1, 1), (1, -1), (-1, -1)):
+        x = cursor.x() + off if dx > 0 else cursor.x() - off - w
+        y = cursor.y() + off if dy > 0 else cursor.y() - off - h
+        x, y = clamp(x, area.left(), area.right() - w + 1), clamp(y, area.top(), area.bottom() - h + 1)
+        if not QRect(x, y, w, h).intersects(keep):
+            return QPoint(x, y)
+    return QPoint(clamp(cursor.x() + off, area.left(), area.right() - w + 1),
+                  clamp(cursor.y() + off, area.top(), area.bottom() - h + 1))
+
+
+def split_columns(sections, n=3) -> list:
+    """Разделы подряд в n столбцов так, чтобы самый высокий столбец был как можно ниже (строка заголовка + строки)."""
+    import itertools
+    heights = [len(tools) + 1 for _t, tools in sections]
+    k = min(n, len(sections))
+    if k <= 1:
+        return [list(sections)] if sections else []
+    best = None
+    for cuts in itertools.combinations(range(1, len(sections)), k - 1):
+        bounds = (0,) + cuts + (len(sections),)
+        tallest = max(sum(heights[a:b]) for a, b in zip(bounds, bounds[1:]))
+        if best is None or tallest < best[0]:
+            best = (tallest, bounds)
+    bounds = best[1]
+    return [list(sections[a:b]) for a, b in zip(bounds, bounds[1:])]
+
+
+class ToolRow(QAbstractButton):
+    """Строка панели «Все инструменты» (1.32): значок, название, клавиша справа; текущий на мягкой подложке.
+    Правая кнопка: context(инструмент, где показать меню «инструмент по умолчанию»)."""
+
+    context = pyqtSignal(str, QPoint)
+
+    def __init__(self, tool, text, key, icon, current=False, tokens=None):
+        super().__init__()
+        self.tool, self.key, self.current = tool, key, current
+        self.setText(text)
+        self.setIcon(icon)
+        self.setObjectName("toolRow")
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip(f"{text} ({key})" if key else text)
+        t = tokens or {}
+        dark = bool(t.get("dark"))
+        accent = QColor(t.get("ui_accent", ACCENT))
+        self.c_text = QColor(t["text"]) if dark and "text" in t else QColor("#16181c")
+        self.c_dim = QColor(t["text_dim"]) if dark and "text_dim" in t else QColor("#6b7280")
+        self.c_hover = QColor(accent.red(), accent.green(), accent.blue(), 70 if dark else 38)
+        self.c_cur = QColor(accent.red(), accent.green(), accent.blue(), 95 if dark else 60)
+        self.c_line = QColor("#4a4f57") if dark else QColor("#d9dee6")
+        self.setMouseTracking(True)
+        f = self.font()
+        f.setPixelSize(14)
+        self.setFont(f)
+
+    def _key_font(self):
+        f = QFont(self.font())
+        f.setPixelSize(12)
+        return f
+
+    def sizeHint(self):
+        fm = self.fontMetrics()
+        key_w = QFontMetrics(self._key_font()).horizontalAdvance(self.key) + 12 if self.key else 0
+        return QSize(10 + 22 + 10 + fm.horizontalAdvance(self.text()) + 18 + key_w + 8, 34)
+
+    def minimumSizeHint(self):
+        return self.sizeHint()
+
+    def enterEvent(self, event):
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.update()
+        super().leaveEvent(event)
+
+    def contextMenuEvent(self, event):
+        self.context.emit(self.tool, event.globalPos())
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        r = QRectF(self.rect()).adjusted(1, 1, -1, -1)
+        if self.current or self.underMouse():
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(self.c_cur if self.current else self.c_hover)
+            p.drawRoundedRect(r, 7, 7)
+        self.icon().paint(p, QRect(10, (self.height() - 22) // 2, 22, 22))
+        x = 10 + 22 + 10
+        key_w = 0
+        if self.key:
+            kf = self._key_font()
+            key_w = QFontMetrics(kf).horizontalAdvance(self.key) + 12
+            chip = QRectF(self.width() - 8 - key_w, (self.height() - 20) / 2, key_w, 20)
+            p.setPen(QPen(self.c_line, 1))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRoundedRect(chip, 4, 4)
+            p.setFont(kf)
+            p.setPen(self.c_dim)
+            p.drawText(chip, int(Qt.AlignmentFlag.AlignCenter), self.key)
+        f = QFont(self.font())
+        f.setBold(self.current)
+        p.setFont(f)
+        p.setPen(self.c_text)
+        p.drawText(QRectF(x, 0, self.width() - x - key_w - 14, self.height()),
+                   int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft), self.text())
+        p.end()
+
+
+class SwatchButton(QToolButton):
+    """Цвет палитры (1.32): квадрат 20 px с тонкой обводкой (белый и чёрный различимы на любой панели), выбранный
+    обведён кольцом цвета текста с промежутком. Без цвета (color None) рисуется «+» (другой цвет)."""
+
+    def __init__(self, color=None):
+        super().__init__()
+        self.setObjectName("swatch")
+        self.setCheckable(True)
+        self.setFixedSize(28, 28)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.color = color
+        self.ring = QColor("#1f2328")
+        self.dark = False
+
+    def set_color(self, color):
+        self.color = color
+        self.update()
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        sq = QRectF(4, 4, self.width() - 8, self.height() - 8)
+        if self.isChecked():
+            p.setPen(QPen(self.ring, 2))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRoundedRect(QRectF(1, 1, self.width() - 2, self.height() - 2), 7, 7)
+        elif self.underMouse():
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(128, 128, 128, 50))
+            p.drawRoundedRect(QRectF(1, 1, self.width() - 2, self.height() - 2), 7, 7)
+        if self.color is None:
+            line = QColor(self.ring)
+            line.setAlpha(150)
+            p.setPen(QPen(line, 1))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRoundedRect(sq.adjusted(0.5, 0.5, -0.5, -0.5), 5, 5)
+            p.setPen(QPen(line, 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            c = sq.center()
+            p.drawLine(QPointF(c.x() - 4.5, c.y()), QPointF(c.x() + 4.5, c.y()))
+            p.drawLine(QPointF(c.x(), c.y() - 4.5), QPointF(c.x(), c.y() + 4.5))
+        else:
+            p.setPen(QPen(QColor(255, 255, 255, 64) if self.dark else QColor(0, 0, 0, 52), 1))
+            p.setBrush(QColor(self.color))
+            p.drawRoundedRect(sq.adjusted(0.5, 0.5, -0.5, -0.5), 5, 5)
+        p.end()
+
+    def enterEvent(self, event):
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.update()
+        super().leaveEvent(event)
+
+
+class BellButton(QToolButton):
+    """Колокольчик уведомлений (1.32): красная точка в углу, когда есть непрочитанное."""
+
+    def __init__(self):
+        super().__init__()
+        self.setObjectName("bell")
+        self.unread = 0
+        self.ring = QColor("#f5f6f8")
+
+    def set_unread(self, n: int):
+        if n != self.unread:
+            self.unread = n
+            self.update()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self.unread:
+            return
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        p.setPen(QPen(self.ring, 2))
+        p.setBrush(QColor("#e5484d"))
+        p.drawEllipse(QRectF(self.width() - 15.5, 4.5, 10, 10))
+        p.end()
+
+
+class NoticeRow(QAbstractButton):
+    """Пункт колокольчика (1.32): кружок со значком, заголовок, пояснение; непрочитанный на мягкой подложке;
+    у «Доступна версия» справа зелёная «Обновить»."""
+
+    ICONS = {"update": "update", "whatsnew": "spark", "message": "info"}
+
+    def __init__(self, item, unread, pal):
+        super().__init__()
+        self.item, self.unread, self.pal = item, unread, pal
+        self.setText(item["title"])
+        self.setToolTip(item["sub"])
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setMouseTracking(True)
+        self.action_button = None
+        if item["kind"] == "update":
+            b = QPushButton(tr("notifications.update_button"), self)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            from . import themes
+            b.setStyleSheet(themes.green_button_qss(radius=6, extra="min-height: 28px; padding: 0 12px; font-weight: bold;"))
+            b.ensurePolished()   # ширина по жирному шрифту и отступам из таблицы стилей
+            bold = QFont(b.font())
+            bold.setBold(True)
+            b.setFixedSize(max(b.sizeHint().width(), QFontMetrics(bold).horizontalAdvance(b.text()) + 40), 30)
+            self.action_button = b
+        self._title_font = QFont(self.font())
+        self._title_font.setPixelSize(14)
+        self._title_font.setBold(True)
+        self._sub_font = QFont(self.font())
+        self._sub_font.setPixelSize(12)
+
+    def _text_width(self):
+        return 332 - 10 - 30 - 10 - 10 - ((self.action_button.width() + 10) if self.action_button else 0)
+
+    def _title_height(self):
+        """Заголовок переносится на вторую строку, а не обрезается (немецкий и французский длиннее)."""
+        fm = QFontMetrics(self._title_font)
+        return fm.boundingRect(QRect(0, 0, self._text_width(), 400), int(Qt.TextFlag.TextWordWrap), self.text()).height()
+
+    def sizeHint(self):
+        fm = QFontMetrics(self._sub_font)
+        sub_h = fm.boundingRect(QRect(0, 0, self._text_width(), 400), int(Qt.TextFlag.TextWordWrap), self.item["sub"]).height()
+        return QSize(332, max(50, 10 + self._title_height() + 2 + sub_h + 10))
+
+    def resizeEvent(self, event):
+        if self.action_button is not None:
+            b = self.action_button
+            b.move(self.width() - b.width() - 10, (self.height() - b.height()) // 2)
+        super().resizeEvent(event)
+
+    def enterEvent(self, event):
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.update()
+        super().leaveEvent(event)
+
+    def paintEvent(self, _event):
+        P = self.pal
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        r = QRectF(self.rect()).adjusted(1, 1, -1, -1)
+        if self.unread or self.underMouse():
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(P["accs"]) if self.unread else QColor(128, 128, 128, 30))
+            if self.unread:
+                acc = QColor(P["acc"])
+                acc.setAlpha(60 if P["dark"] else 34)
+                p.setBrush(acc)
+            p.drawRoundedRect(r, 8, 8)
+        circle = QRectF(10, 10, 30, 30)
+        accent = self.item["kind"] == "update"
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(P["acc"]) if accent else QColor(P["s2"]))
+        p.drawEllipse(circle)
+        _draw_notice_icon(p, self.ICONS[self.item["kind"]], circle.center(), QColor("#ffffff") if accent else QColor(P["t2"]))
+        x = 50
+        w = self._text_width()
+        p.setFont(self._title_font)
+        p.setPen(QColor(P["t"]))
+        th = self._title_height()
+        p.drawText(QRectF(x, 9, w, th), int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap),
+                   self.text())
+        p.setFont(self._sub_font)
+        p.setPen(QColor(P["t2"]))
+        p.drawText(QRectF(x, 9 + th + 2, w, self.height() - th - 12),
+                   int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap), self.item["sub"])
+        p.end()
+
+
+def _draw_notice_icon(p, kind, c, color):
+    """Значки пунктов колокольчика: стрелка загрузки (обновление), звёздочка (что нового), «i» (сообщение)."""
+    pen = QPen(color, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    x, y = c.x(), c.y()
+    if kind == "update":
+        p.drawLine(QPointF(x, y - 6), QPointF(x, y + 3))
+        p.drawPolyline(QPolygonF([QPointF(x - 4, y - 0.5), QPointF(x, y + 3.5), QPointF(x + 4, y - 0.5)]))
+        p.drawLine(QPointF(x - 6, y + 6.5), QPointF(x + 6, y + 6.5))
+    elif kind == "spark":
+        path = QPainterPath(QPointF(x, y - 7))
+        for px, py in ((x + 1.8, y - 1.8), (x + 7, y), (x + 1.8, y + 1.8), (x, y + 7), (x - 1.8, y + 1.8), (x - 7, y),
+                       (x - 1.8, y - 1.8)):
+            path.lineTo(px, py)
+        path.closeSubpath()
+        p.drawPath(path)
+    else:
+        p.drawEllipse(QPointF(x, y), 7, 7)
+        p.drawLine(QPointF(x, y - 0.5), QPointF(x, y + 3.5))
+        p.drawPoint(QPointF(x, y - 3.5))
+
+
 class EditorWindow(QMainWindow):
     closed = pyqtSignal(object)
 
@@ -1831,6 +2543,7 @@ class EditorWindow(QMainWindow):
             self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
             self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         icons.ICON_COLOR = theme(cfg)["icon"]
+        SELECTED_BAR_COLOR[0] = theme(cfg)["ui_accent"]
         self.setStyleSheet(make_style(cfg))
         self.frame_px = theme(cfg)["ui_frame"]
 
@@ -1906,6 +2619,8 @@ class EditorWindow(QMainWindow):
             title_line.setFixedHeight(1)
             self.title_line = title_line
             self.shell.layout_.addWidget(title_line)
+            title_line.hide()   # 1.32 (вид А): шапка и первый ряд на одной подложке, без линии между ними
+            self.titlebar.set_icons(self.top_icons)
             self._drag_filter = DragFilter(self)
             for w in self._chrome_widgets():
                 w.installEventFilter(self._drag_filter)
@@ -1915,6 +2630,11 @@ class EditorWindow(QMainWindow):
 
         self._build_shortcuts()
         self._sync_ocr()
+        from . import notifications   # 1.32: колокольчик
+        notifications.register(ctx)
+        notifications.first_run_seen(cfg)
+        notifications.listen(self._sync_bell)
+        self._sync_bell()
         self.scroll.viewport().installEventFilter(self)   # Ctrl+колесо над полем вокруг снимка
         self._update_info()
         self.fit_size()
@@ -1998,16 +2718,25 @@ class EditorWindow(QMainWindow):
         row1.addSpacing(6)
         self.tool_group = QButtonGroup(self)
         self.tool_buttons = {}
+        self.group_buttons = {}
         self.tool_strip = ToolStrip()
-        tips = {tool: tip for tool, _glyph, tip, _key in TOOLS}
-        for tool in tool_order(self.ctx.config):
+        for tool, _glyph, _tip, _key in TOOLS:
             button = DraggableToolButton(tool)
             self._style_tool_button(button, icons.icon(tool), self._tool_tip(tool))
             button.setChecked(tool == self.canvas.tool)
             button.clicked.connect(lambda _c, t=tool: self.select_tool(t))
             self.tool_group.addButton(button)
             self.tool_buttons[tool] = button
-            self.tool_strip.row.addWidget(button)
+        # 1.32: группы (как в Office): значок = последний выбранный инструмент группы, ▾ = меню группы
+        self.group_current = self._initial_group_tools()
+        for code, _key, _tools in GROUPS:
+            gb = GroupButton(code)
+            self._style_tool_button(gb, icons.icon(self.group_current[code]), "", "group")
+            gb.setFixedSize(GROUP_W, 36)
+            gb.clicked.connect(lambda _c, c=code: self.select_tool(self.group_current[c]))
+            gb.menu_requested.connect(self.show_group_menu)
+            self.group_buttons[code] = gb
+        self.tool_strip.setup(tool_order(self.ctx.config), self.tool_buttons, self.group_buttons, self._tool_available)
         self.tool_strip.order_changed.connect(self._save_tool_order)
         self.tool_strip.customContextMenuRequested.connect(self._tool_strip_menu)
         self._sync_default_tool()
@@ -2025,7 +2754,33 @@ class EditorWindow(QMainWindow):
         insert.setMenu(menu)
         self.insert_button = insert
         row1.addWidget(insert)
+        # «⋯ Все инструменты» (1.32): видна всегда; панель со всеми инструментами по группам и их клавишами.
+        # В узком окне только значок «⋯»
+        more = QToolButton()
+        more.setObjectName("more")
+        more.setIcon(icons.icon("more"))
+        more.setIconSize(QSize(20, 20))
+        more.setFixedHeight(36)
+        more.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        more.clicked.connect(self.show_all_tools)
+        self.more_button = more
+        self._set_more_label(True)
+        row1.addSpacing(4)
+        row1.addWidget(more)
+        self.panel_row1 = row1
         row1.addStretch(1)
+        # 1.32: колокольчик, «?», шестерёнка, глобус одной группой справа сверху: в своей шапке окна (перед кнопками
+        # окна) или, при системном заголовке, справа в первом ряду. Нативную шапку окна ClipSD не трогает.
+        top = QWidget()
+        top.setObjectName("topIcons")
+        top_row = QHBoxLayout(top)
+        top_row.setContentsMargins(0, 0, 0, 0)
+        top_row.setSpacing(2)
+        bell = BellButton()
+        self._style_tool_button(bell, icons.icon("bell"), tr("editor.bell_tip"), "bell", False)
+        bell.clicked.connect(self.show_notifications)
+        self.bell_button = bell
+        top_row.addWidget(bell)
         help_button = self._tool_button(icons.icon("help"), tr("editor.help_tip"),
                                         "action", False)
         help_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
@@ -2033,21 +2788,30 @@ class EditorWindow(QMainWindow):
         style_menu(help_menu, self.ctx.config)
         help_menu.addAction(tr("app.menu_tour")).triggered.connect(self.start_tour)
         help_menu.addAction(tr("updater.menu.check")).triggered.connect(self._check_updates)
+        help_menu.addAction(tr("feedback.rate_title")).triggered.connect(self._rate)   # 1.32: «Оценить ClipSD»
         help_menu.addAction(tr("app.menu_about")).triggered.connect(self._show_about)
+        from . import links   # 1.32: «Новости в Telegram» (канал программы, открывается через sysenv.open_url)
+        telegram = help_menu.addAction(tr("links.telegram_menu"))
+        telegram.setToolTip(tr("links.telegram_tip"))
+        telegram.triggered.connect(links.open_telegram)
+        self.telegram_action = telegram
         help_button.setMenu(help_menu)
         self.help_menu = help_menu
         self.help_button = help_button
-        row1.addWidget(help_button)
+        top_row.addWidget(help_button)
         settings = self._tool_button(icons.icon("settings"), tr("editor.settings_tip"), "action", False)
         self.settings_button = settings
         settings.clicked.connect(self.open_settings)
-        row1.addWidget(settings)
+        top_row.addWidget(settings)
         from . import language   # 1.31: глобус рядом с «?» и шестерёнкой, подменю языков на самих себе
         globe = self._tool_button(icons.icon("globe"), language.menu_title(), "action", False)
         globe.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         globe.setMenu(language.make_menu(self.ctx, globe))
         self.language_button = globe
-        row1.addWidget(globe)
+        top_row.addWidget(globe)
+        self.top_icons = top
+        if self.system_title:
+            row1.addWidget(top)        # системный заголовок: справа в первом ряду
         rows.addLayout(row1)
 
         # Ряд 2: цвета | толщина
@@ -2056,24 +2820,18 @@ class EditorWindow(QMainWindow):
         self.color_group = QButtonGroup(self)
         self.color_buttons = {}
         current = self.canvas.color.name().lower()
+        pal = palette(self.ctx.config)
         for color in PALETTE:
-            swatch = QToolButton()
-            swatch.setObjectName("swatch")
-            swatch.setCheckable(True)
-            swatch.setFixedSize(26, 26)
-            swatch.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            swatch = SwatchButton(color)
+            swatch.ring, swatch.dark = QColor(pal["t"]), pal["dark"]
             swatch.setToolTip(color.upper())
-            swatch.setStyleSheet(f"QToolButton#swatch {{ background: {color}; }}")
             swatch.setChecked(color == current)
             swatch.clicked.connect(lambda _c, col=color: self.select_color(col))
             self.color_group.addButton(swatch)
             self.color_buttons[color] = swatch
             row2.addWidget(swatch)
-        self.custom_color = QToolButton()
-        self.custom_color.setObjectName("swatch")
-        self.custom_color.setCheckable(True)
-        self.custom_color.setFixedSize(26, 26)
-        self.custom_color.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.custom_color = SwatchButton(None)
+        self.custom_color.ring, self.custom_color.dark = QColor(pal["t"]), pal["dark"]
         self.custom_color.setText("+")
         self.custom_color.setToolTip(tr("editor.other_color"))
         self.custom_color.clicked.connect(self.pick_custom_color)
@@ -2089,14 +2847,21 @@ class EditorWindow(QMainWindow):
         row2.addWidget(_separator())
         row2.addSpacing(6)
         self.size_group = QButtonGroup(self)
+        seg = QFrame()   # 1.32: толщины одной полосой, выбранная приподнята
+        seg.setObjectName("sizeSeg")
+        seg_row = QHBoxLayout(seg)
+        seg_row.setContentsMargins(2, 2, 2, 2)
+        seg_row.setSpacing(1)
         for level in range(1, 6):
             button = self._tool_button(icons.size_icon(level), tr("editor.size_tip", level=level),
                                        "size")
-            button.setFixedSize(34, 30)
+            button.setFixedSize(32, 26)
             button.setChecked(level == self.canvas.pen_size)
             button.clicked.connect(lambda _c, lv=level: self.select_size(lv))
             self.size_group.addButton(button, level)
-            row2.addWidget(button)
+            seg_row.addWidget(button)
+        self.size_seg = seg
+        row2.addWidget(seg)
         # Режим ластика: видно, только когда выбран ластик.
         self.eraser_box = QWidget()
         box = QHBoxLayout(self.eraser_box)
@@ -2357,23 +3122,37 @@ class EditorWindow(QMainWindow):
         zoom_in.setToolTip(tr("editor.zoom_in_tip"))
         zoom_fit = QPushButton(tr("editor.zoom_fit"))
         zoom_fit.setToolTip(tr("editor.zoom_fit_tip"))
-        for button, width in ((zoom_out, 34), (self.zoom_label, 60), (zoom_in, 34),
-                               (zoom_fit, max(84, zoom_fit.fontMetrics().horizontalAdvance(zoom_fit.text()) + 24))):   # ширина по тексту: на другом языке надпись длиннее
+        # 1.32: масштаб одной группой: «− | 100% | + | Вписать» в общей рамке
+        zoom_box = QFrame()
+        zoom_box.setObjectName("zoomGroup")
+        zoom_row = QHBoxLayout(zoom_box)
+        zoom_row.setContentsMargins(0, 0, 0, 0)
+        zoom_row.setSpacing(0)
+        for i, (button, width) in enumerate(((zoom_out, 32), (self.zoom_label, 56), (zoom_in, 32),
+                                             (zoom_fit, max(76, zoom_fit.fontMetrics().horizontalAdvance(zoom_fit.text()) + 22)))):   # ширина по тексту: на другом языке надпись длиннее
+            button.setObjectName("zoomSeg")
             button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             button.setFixedWidth(width)
-            button.setStyleSheet("QPushButton { padding: 0px; font-size: 18px; }" if width < 40 else "QPushButton { padding: 0px; }")   # общий стиль кнопок даёт большие отступы и режет подпись
-            row.addWidget(button)
+            button.setProperty("first", i == 0)
+            button.setProperty("last", i == 3)
+            button.setProperty("big", width < 40)
+            zoom_row.addWidget(button)
+        self.zoom_group = zoom_box
+        row.addWidget(zoom_box)
         zoom_out.clicked.connect(lambda: self.zoom_step(-1))
         zoom_in.clicked.connect(lambda: self.zoom_step(1))
         self.zoom_label.clicked.connect(lambda: self.set_zoom(1.0))
         zoom_fit.clicked.connect(self.zoom_fit)
+        self.zoom_fit_button = zoom_fit
         row.addSpacing(10)
         save = QPushButton(icons.icon("save"), "  " + tr("editor.save"))
+        save.setObjectName("light")   # 1.32: «Сохранить» и «Скопировать» лёгкие, без рамки
         save.setIconSize(QSize(18, 18))
         save.setToolTip(tr("editor.save_tip"))
         save.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         save.clicked.connect(self.save_and_close)
         copy = QPushButton(icons.icon("copy"), "  " + tr("editor.copy"))
+        copy.setObjectName("light")
         copy.setIconSize(QSize(18, 18))
         copy.setToolTip(tr("editor.copy_tip"))
         copy.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -2388,21 +3167,20 @@ class EditorWindow(QMainWindow):
         copy_close.clicked.connect(self.copy_and_close)
         self.save_button, self.copy_button, self.copy_close_button = save, copy, copy_close
         # Заметная фиолетовая кнопка: текст со всего снимка в буфер обмена (область: инструмент «Текст с картинки»)
-        ocr_button = QPushButton(icons.icon("ocr", "#ffffff"), "  " + self.OCR_LABEL_ON)
+        dark = palette(self.ctx.config)["dark"]
+        ocr_button = QPushButton(icons.icon("ocr", soft_colors("ocr", dark)[1]), "  " + self.OCR_LABEL_ON)
         ocr_button.setCheckable(True)
-        ocr_button.setObjectName("ocrButton")
+        ocr_button.setObjectName("ocrButton")   # 1.32: мягкая фиолетовая (цвета в make_style, SOFT)
         ocr_button.setIconSize(QSize(18, 18))
         ocr_button.setToolTip(tr("editor.ocr_button_tip"))
         ocr_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         ocr_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        ocr_button.setStyleSheet("QPushButton#ocrButton { background: #7c3aed; color: white; font-weight: bold;"
-                                 " border: 1px solid #5b21b6; border-radius: 8px; padding: 3px 10px; }"
-                                 " QPushButton#ocrButton:hover { background: #8f55f5; }"
-                                 " QPushButton#ocrButton:checked { background: #5b21b6; border: 2px solid #ffffff; }")
         ocr_button.clicked.connect(lambda: self.exit_text_mode() if self.canvas.tool == OCR else self.select_tool(OCR))
         # одинаковая ширина при обеих надписях: кнопка не прыгает при входе и выходе из режима текста
-        fm = ocr_button.fontMetrics()
-        ocr_button.setMinimumWidth(max(fm.horizontalAdvance("  " + t) for t in (self.OCR_LABEL_ON, self.OCR_LABEL_OFF)) + 52)
+        bold_o = QFont(ocr_button.font())
+        bold_o.setBold(True)
+        fm = QFontMetrics(bold_o)
+        ocr_button.setMinimumWidth(max(fm.horizontalAdvance("  " + t) for t in (self.OCR_LABEL_ON, self.OCR_LABEL_OFF)) + 44)
         self.ocr_button = ocr_button
         # Способ выделения текста: «Подряд» (как на телефоне) или «Маркер»; виден только в режиме текста
         mode_box = QWidget()
@@ -2438,7 +3216,8 @@ class EditorWindow(QMainWindow):
         block_row = QHBoxLayout(block)
         block_row.setContentsMargins(0, 0, 0, 0)
         block_row.setSpacing(0)
-        all_button = QPushButton(self.TR_ALL_LABEL)
+        all_button = QPushButton(icons.icon("translate_all", soft_colors("tr", dark)[1]), self.TR_ALL_LABEL)
+        all_button.setIconSize(QSize(18, 18))
         all_button.setObjectName("trAllButton")
         all_button.setToolTip(self.TR_ALL_TIP)
         tr_button = QPushButton(self.TR_SEL_LABEL)
@@ -2448,20 +3227,11 @@ class EditorWindow(QMainWindow):
         for b in (all_button, tr_button):
             b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
-        all_button.setStyleSheet("QPushButton#trAllButton { background: #0d9488; color: white; font-weight: bold;"
-                                 " border: 1px solid #0b766c; border-top-left-radius: 8px; border-bottom-left-radius: 8px;"
-                                 " border-top-right-radius: 0px; border-bottom-right-radius: 0px; padding: 3px 6px; }"
-                                 " QPushButton#trAllButton:hover { background: #14b8a6; }")
-        tr_button.setStyleSheet("QPushButton#trButton { background: #0d9488; color: white; font-weight: bold;"
-                                " border: 1px solid #0b766c; border-left: 1px solid #7fd8cf; border-top-right-radius: 8px;"
-                                " border-bottom-right-radius: 8px; border-top-left-radius: 0px; border-bottom-left-radius: 0px;"
-                                " padding: 3px 6px; }"
-                                " QPushButton#trButton:hover { background: #14b8a6; }"
-                                " QPushButton#trButton:checked { background: #0b5f57; border: 2px solid #ffffff; }")
-        fm_tr = tr_button.fontMetrics()
-        fm_all = all_button.fontMetrics()
-        tr_button.setMinimumWidth(max(fm_tr.horizontalAdvance(t) for t in (self.TR_SEL_LABEL, self.TR_DONE_LABEL)) + 16)
-        all_button.setMinimumWidth(fm_all.horizontalAdvance(self.TR_ALL_LABEL) + 16)
+        bold = QFont(tr_button.font())
+        bold.setBold(True)
+        fm_b = QFontMetrics(bold)   # подписи полужирные: ширина по полужирному шрифту
+        tr_button.setMinimumWidth(max(fm_b.horizontalAdvance(t) for t in (self.TR_SEL_LABEL, self.TR_DONE_LABEL)) + 24)
+        all_button.setMinimumWidth(fm_b.horizontalAdvance(self.TR_ALL_LABEL) + 18 + 7 + 22)
         all_button.clicked.connect(self.translate_all)
         tr_button.clicked.connect(lambda: self.exit_translate_mode() if self.canvas.tool == TRANSLATE else self.select_tool(TRANSLATE))
         block_row.addWidget(all_button)
@@ -2525,6 +3295,9 @@ class EditorWindow(QMainWindow):
         Qt сравнивает сочетания по введённому символу: на русской раскладке вместо «A» приходит «Ф»,
         и инструменты не переключаются. Здесь берём физическую клавишу (код VK Windows) и запускаем
         то же действие. Если сочетание уже сработало штатно, KeyPress сюда не доходит."""
+        if isinstance(obj, QMenu) and obj is getattr(self, "_group_menu", None) \
+                and event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.RightButton:
+            return self._menu_right_click(obj, event)
         if event.type() == QEvent.Type.Wheel and obj is self.scroll.viewport() \
                 and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             if event.angleDelta().y():
@@ -2594,19 +3367,22 @@ class EditorWindow(QMainWindow):
             self.ocr_button.setChecked(tool == OCR)
             self.ocr_button.setText("  " + (self.OCR_LABEL_OFF if tool == OCR else self.OCR_LABEL_ON))
             self.text_mode_box.setVisible(tool == OCR)
-            if tool == OCR:
-                self._widen_for_bottom()   # «Подряд / Маркер» появился: окно чуть шире, только если не помещается
         if tool == OCR:
             self.set_text_mode(self.ctx.config.get("ocr_select_mode", "range"))
         if tool == OCR:
             QTimer.singleShot(0, self.start_text_mode)
-        if hasattr(self, "eraser_box"):
+        if hasattr(self, "eraser_box") and self.eraser_box.isVisibleTo(self.panel) != (tool == ERASER):
             self.eraser_box.setVisible(tool == ERASER)
-            if tool == ERASER:
-                self._widen_for_panel()   # «Целиком / Частично» появились: окно шире, если ряд не помещается
+            self._refit_width()   # «Целиком / Частично» появились или ушли: второму ряду нужна другая ширина
         if hasattr(self, "text_color_button"):
             self._sync_controls()
         self.tool_buttons[tool].setChecked(True)
+        if tool in TOOL_GROUP and getattr(self, "group_buttons", None):   # 1.32: инструмент встаёт на значок своей группы
+            self.group_current[TOOL_GROUP[tool]] = tool
+            last = dict(self.ctx.config.get("tool_group_last") or {})
+            last[TOOL_GROUP[tool]] = tool
+            self.ctx.config["tool_group_last"] = last
+        self._sync_groups()
         if tool not in MODE_TOOLS:   # режимы (текст, перевод, обрезка) не запоминаются: следующий снимок открывается обычным видом
             self.ctx.config["tool"] = tool
             self.ctx.save_config()   # выбор сразу запоминается для следующего снимка
@@ -2623,7 +3399,7 @@ class EditorWindow(QMainWindow):
     def _show_custom(self, color):
         self.custom_color.setChecked(True)
         self.custom_color.setText("")
-        self.custom_color.setStyleSheet(f"QToolButton#swatch {{ background: {color}; }}")
+        self.custom_color.set_color(color)
 
     def pick_custom_color(self):
         color = QColorDialog.getColor(QColor(self._shown_values()[0]), self, tr("editor.color"))
@@ -2791,6 +3567,7 @@ class EditorWindow(QMainWindow):
         for tool, button in self.tool_buttons.items():
             button.set_default_mark(bool(current) and tool == current)
             button.setToolTip(self._tool_tip(tool))
+        self._sync_groups()
 
     def set_default_tool(self, tool):
         """Правая кнопка по инструменту: сделать его инструментом по умолчанию (пусто: без него, открывать с последним)."""
@@ -2806,7 +3583,8 @@ class EditorWindow(QMainWindow):
         button = self.tool_strip.childAt(pos)
         while button is not None and not isinstance(button, DraggableToolButton):
             button = button.parentWidget() if button.parentWidget() is not self.tool_strip else None
-        menu = self.build_tool_menu(button.tool if button is not None else None)
+        tool = button.current if isinstance(button, GroupButton) else (button.tool if button is not None else None)
+        menu = self.build_tool_menu(tool)
         menu.exec(self.tool_strip.mapToGlobal(pos))
 
     def build_tool_menu(self, tool=None) -> QMenu:
@@ -2826,6 +3604,454 @@ class EditorWindow(QMainWindow):
             lambda: self.tool_strip.set_order([t for t, _g, _tip, _k in TOOLS]))
         return menu
 
+    # --- 1.32: группы инструментов, «Все инструменты» -------------------------------------------
+
+    def _tool_available(self, tool) -> bool:
+        """Распознавание или перевод выключены в настройках: их кнопок и пунктов нет."""
+        if tool == OCR:
+            return bool(self.ctx.config.get("ocr_enabled", True))
+        if tool == TRANSLATE:
+            return bool(self.ctx.config.get("translate_enabled", True))
+        return True
+
+    def _initial_group_tools(self) -> dict:
+        """Что стоит на значке каждой группы при открытии: текущий инструмент, если он в группе; иначе инструмент
+        по умолчанию из этой группы; иначе последний выбранный в группе (config tool_group_last); иначе главный."""
+        cfg = self.ctx.config
+        last = cfg.get("tool_group_last") if isinstance(cfg.get("tool_group_last"), dict) else {}
+        default = default_tool(cfg)
+        current = {}
+        for code, _key, tools in GROUPS:
+            pick = GROUP_MAIN[code]
+            if last.get(code) in tools:
+                pick = last[code]
+            if default in tools:
+                pick = default
+            if self.canvas.tool in tools:
+                pick = self.canvas.tool
+            current[code] = pick
+        return current
+
+    def _group_tool(self, code):
+        """Инструмент на значке группы с учётом выключенных в настройках."""
+        tool = self.group_current.get(code, GROUP_MAIN[code])
+        if self._tool_available(tool):
+            return tool
+        avail = [t for t in GROUP_TOOLS[code] if self._tool_available(t)]
+        return avail[0] if avail else tool
+
+    def _group_tip(self, code) -> str:
+        tool = self._group_tool(code)
+        first = {t: tr(tp) for t, _g, tp, _k in TOOLS}[tool].split("\n")[0]
+        tip = tr("editor.group_tip", group=tr(GROUP_TITLE[code]), tool=first) + "\n" + tr("editor.group_menu_tip") \
+            + "\n" + tr("editor.group_drag_tip")
+        if tool in NO_DEFAULT_TOOLS:
+            return tip
+        return tip + "\n" + (self.DEFAULT_TIP_ON if tool == default_tool(self.ctx.config) else self.DEFAULT_TIP_OFF)
+
+    def _sync_groups(self):
+        """Значки, подсказки, отметка и галочка кнопок групп по текущему инструменту и инструменту по умолчанию."""
+        if not getattr(self, "group_buttons", None):
+            return
+        default = default_tool(self.ctx.config)
+        for code, gb in self.group_buttons.items():
+            tool = self._group_tool(code)
+            gb.current = tool
+            gb.setIcon(icons.icon(tool))
+            gb.setToolTip(self._group_tip(code))
+            gb.setChecked(self.canvas.tool in GROUP_TOOLS[code])
+            gb.set_default_mark(bool(default) and tool == default)
+
+    def _badged_icon(self, tool) -> QIcon:
+        """Значок инструмента с зелёной галочкой (инструмент по умолчанию) для меню."""
+        pix = icons.icon(tool).pixmap(QSize(24, 24), 3.0)
+        pix.setDevicePixelRatio(3.0)
+        p = QPainter(pix)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        r = QRectF(12.5, 12.5, 11, 11)
+        from .themes import GREEN
+        p.setPen(QPen(QColor("#ffffff"), 1.3))
+        p.setBrush(QColor(GREEN))
+        p.drawEllipse(r)
+        p.setPen(QPen(QColor("#ffffff"), 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        p.drawPolyline(QPolygonF([QPointF(r.left() + 3, r.top() + 5.8), QPointF(r.left() + 4.8, r.top() + 7.6),
+                                  QPointF(r.left() + 8.2, r.top() + 3.6)]))
+        p.end()
+        return QIcon(pix)
+
+    def build_group_menu(self, code) -> QMenu:
+        """Меню группы (стрелка ▾): значок, название и клавиша каждого инструмента; текущий на подложке,
+        у инструмента по умолчанию зелёная галочка. Правая кнопка по строке: «Сделать … по умолчанию»."""
+        menu = QMenu(self)
+        style_menu(menu, self.ctx.config)
+        head = menu.addAction(tr(GROUP_TITLE[code]))
+        head.setEnabled(False)
+        default = default_tool(self.ctx.config)
+        current = self._group_tool(code)
+        keys = {t: k for t, _g, _tip, k in TOOLS}
+        for tool in self.tool_strip.members(code):
+            act = menu.addAction(self._badged_icon(tool) if tool == default else icons.icon(tool),
+                                 tool_title(tool) + "\t" + keys[tool])
+            act.setData(tool)
+            if tool == current:
+                f = act.font()
+                f.setBold(True)
+                act.setFont(f)
+            act.triggered.connect(lambda _c=False, t=tool: self.select_tool(t))
+        if code == "ocr" and self._tool_available(TRANSLATE):
+            act = menu.addAction(icons.icon("translate_all"), tr("editor.menu_translate_all") + "\tShift+Y")
+            act.triggered.connect(self.translate_all)
+        menu.installEventFilter(self)
+        self._group_menu = menu
+        return menu
+
+    def show_group_menu(self, code):
+        gb = self.group_buttons[code]
+        menu = self.build_group_menu(code)
+        gb.menu_open = True
+        gb.update()
+        try:
+            menu.exec(gb.mapToGlobal(QPoint(0, gb.height() + 2)))
+        finally:
+            gb.menu_open = False
+            gb.update()
+
+    def _menu_right_click(self, menu, event) -> bool:
+        """Правая кнопка по строке меню группы: то же меню «инструмент по умолчанию», что и на кнопке."""
+        act = menu.actionAt(event.position().toPoint())
+        tool = act.data() if act is not None else None
+        if tool not in {t for t, _g, _tip, _k in TOOLS}:
+            return False
+        menu.close()
+        self.build_tool_menu(tool).exec(event.globalPosition().toPoint())
+        return True
+
+    def _set_more_label(self, on: bool):
+        """«⋯ Все инструменты» с подписью или (узкое окно) только значок «⋯»."""
+        b = self.more_button
+        label = tr("editor.all_tools")
+        b.setAccessibleName(label)
+        b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon if on else Qt.ToolButtonStyle.ToolButtonIconOnly)
+        b.setText(label if on else "")   # значком: название только в подсказке («Все инструменты: …»)
+        b.setToolTip(tr("editor.all_tools_tip") if on else label + "\n" + tr("editor.all_tools_tip"))
+        if on:
+            b.ensurePolished()   # шрифт и отступы из таблицы стилей уже применены: ширина по ним
+            b.setMinimumWidth(0)
+            b.setMaximumWidth(16777215)
+            b.setFixedWidth(max(b.sizeHint().width(), b.fontMetrics().horizontalAdvance(label) + 20 + 26))
+        else:
+            b.setFixedWidth(TOOL_W)
+        self._more_label = on
+
+    def all_tools_sections(self) -> list:
+        """Разделы панели «Все инструменты»: [(заголовок, [инструменты])]: отдельные кнопки, потом группы в порядке ряда."""
+        singles, groups = [], []
+        for kind, key, tools in order_entries(self.tool_strip.order()):
+            if kind == "tool":
+                if self._tool_available(key):
+                    singles.append(key)
+            else:
+                avail = [t for t in tools if self._tool_available(t)]
+                if avail:
+                    groups.append((tr(GROUP_TITLE[key]), avail))
+        return [(tr("editor.group_main"), singles)] + groups
+
+    def build_all_tools_menu(self) -> QMenu:
+        """Панель «Все инструменты»: все инструменты по группам в три столбца, с горячими клавишами."""
+        from PyQt6.QtWidgets import QWidgetAction
+        menu = QMenu(self)
+        style_menu(menu, self.ctx.config)
+        t = theme(self.ctx.config)
+        holder = QWidget()
+        holder.setObjectName("allTools")
+        grid = QHBoxLayout(holder)
+        grid.setContentsMargins(8, 6, 8, 6)
+        grid.setSpacing(14)
+        keys = {tl: k for tl, _g, _tip, k in TOOLS}
+        keys["translate_all"] = "Shift+Y"
+        default = default_tool(self.ctx.config)
+        sections = self.all_tools_sections()
+        if self._tool_available(TRANSLATE):
+            sections = [(title, tools + (["translate_all"] if TRANSLATE in tools else [])) for title, tools in sections]
+        columns = split_columns(sections, 3)
+        self.all_tools_rows = {}
+        dark = t.get("dark")
+        dim = t["text_dim"] if dark else "#6b7280"
+        for col in columns:
+            box = QVBoxLayout()
+            box.setSpacing(1)
+            for title, tools in col:
+                head = QLabel(title)
+                head.setObjectName("allToolsHead")
+                head.setStyleSheet(f"QLabel#allToolsHead {{ color: {dim}; font-size: 12px; font-weight: bold; padding: 8px 6px 3px 6px; }}")
+                box.addWidget(head)
+                for tool in tools:
+                    name = tr("editor.menu_translate_all") if tool == "translate_all" else tool_title(tool)
+                    row = ToolRow(tool, name, keys.get(tool, ""), self._badged_icon(tool) if tool == default
+                                  else icons.icon(tool), current=tool == self.canvas.tool, tokens=t)
+                    row.clicked.connect(lambda _c=False, tl=tool: (menu.close(), self.translate_all() if tl == "translate_all"
+                                                                   else self.select_tool(tl)))
+                    if tool != "translate_all":
+                        row.context.connect(lambda tl, pos: (menu.close(), self.build_tool_menu(tl).exec(pos)))
+                    self.all_tools_rows[tool] = row
+                    box.addWidget(row)
+            box.addStretch(1)
+            grid.addLayout(box)
+        action = QWidgetAction(menu)
+        action.setDefaultWidget(holder)
+        menu.addAction(action)
+        self._all_tools_menu = menu
+        return menu
+
+    def show_all_tools(self):
+        menu = self.build_all_tools_menu()
+        b = self.more_button
+        b.setDown(True)
+        try:
+            menu.exec(b.mapToGlobal(QPoint(0, b.height() + 2)))
+        finally:
+            b.setDown(False)
+
+    # --- 1.32: ширина окна и ступени сворачивания ---------------------------------------------------
+
+    def _stages(self) -> list:
+        """Ступени верхнего ряда по сужению окна: (свёрнутые группы, подпись у «Все инструменты»). Сначала
+        сворачиваются «Рисование», «Текст с картинки», «Скрыть и стереть», «Фигуры»; затем «Все инструменты»
+        остаётся значком; последними «Стрелки и линии» и «Надписи»."""
+        out = [(frozenset(COLLAPSE_ORDER[:k]), True) for k in range(0, 5)]
+        out += [(frozenset(COLLAPSE_ORDER[:k]), False) for k in range(4, len(COLLAPSE_ORDER) + 1)]
+        return out
+
+    def _measure_rows(self):
+        """Сколько ширины нужно каждому ряду в каждом виде, по настоящим размерам кнопок на текущем языке.
+        Считается при сборке панелей, смене языка, оформления и настроек, а не при каждом изменении размера окна."""
+        if getattr(self, "panel_row1", None) is None or getattr(self, "zoom_fit_button", None) is None:
+            return
+        self.panel.ensurePolished()
+        for w in self.panel.findChildren(QWidget):
+            w.ensurePolished()   # размеры по таблице стилей (шрифт, отступы), даже пока окно не показано
+        margins = self.panel.layout().contentsMargins()
+        side = margins.left() + margins.right()
+        row1 = self.panel_row1
+        label_was = getattr(self, "_more_label", True)
+        self._set_more_label(True)
+        more_full = self.more_button.maximumWidth()
+        self.tool_strip.row.invalidate()
+        self.tool_strip.updateGeometry()
+        row1.invalidate()
+        rest = row1.sizeHint().width() - self.tool_strip.sizeHint().width() - more_full
+        self._set_more_label(label_was)
+        self._need_row1 = [side + rest + self.tool_strip.width_for(c) + (more_full if label else TOOL_W)
+                           for c, label in self._stages()]
+        # ряд 2: с большими кнопками «Копировать текст», «Перевести» и без них
+        row2 = self.panel_row2
+        bigs = [w for w in (self.ocr_button, self.tr_block) if w is not None]
+        shown = [w.isVisibleTo(self.panel) for w in bigs]
+        wanted = [self.ctx.config.get("ocr_enabled", True), self.ctx.config.get("translate_enabled", True)]
+        for w, want in zip(bigs, wanted):
+            w.setVisible(want)
+        row2.invalidate()
+        full = row2.sizeHint().width()
+        for w in bigs:
+            w.setVisible(False)
+        row2.invalidate()
+        compact = row2.sizeHint().width()
+        for w, was in zip(bigs, shown):
+            w.setVisible(was)
+        row2.invalidate()
+        self._need_row2 = (side + full, side + compact)
+        # нижняя строка: подписи «Вписать», «Сохранить», «Скопировать» или значки
+        bl = self.bottom.layout()
+        was = getattr(self, "_bottom_compact", False)
+        self._set_bottom_compact(False)
+        bl.invalidate()
+        full = bl.minimumSize().width()
+        self._set_bottom_compact(True)
+        bl.invalidate()
+        compact = bl.minimumSize().width()
+        self._set_bottom_compact(was)
+        bl.invalidate()
+        self._need_bottom = (full, compact)
+        self._stage = self._row2_state = self._bottom_state = None   # вид выбирается заново при следующей подгонке
+
+    def min_content_width(self) -> int:
+        """Самое узкое содержимое окна: всё свёрнуто, второй ряд без больших кнопок, внизу значки."""
+        if not hasattr(self, "_need_row1"):
+            self._measure_rows()
+        return max(self._need_row1[-1], self._need_row2[1], self._need_bottom[1])
+
+    @staticmethod
+    def _pick(needs, width, current):
+        """Первый вид (от самого полного), который помещается; к более полному виду, чем текущий, только с запасом
+        COLLAPSE_SLACK, чтобы кнопки не прыгали туда-обратно, когда окно тянут мышью около порога."""
+        fit = next((i for i, n in enumerate(needs) if n <= width), len(needs) - 1)
+        if current is None or fit >= current:
+            return fit
+        roomy = next((i for i, n in enumerate(needs) if n + COLLAPSE_SLACK <= width), current)
+        return min(current, roomy)
+
+    def _adapt_rows(self, width=None):
+        """Свернуть или развернуть группы, спрятать или показать большие кнопки второго ряда и подписи нижних кнопок
+        по ширине окна."""
+        if getattr(self, "panel_row1", None) is None or getattr(self, "zoom_fit_button", None) is None:
+            return
+        if not hasattr(self, "_need_row1"):
+            self._measure_rows()
+        if width is None:
+            width = self.width() - self._rim()[0]
+        stages = self._stages()
+        stage = self._pick(self._need_row1, width, getattr(self, "_stage", None))
+        self._stage = stage
+        collapsed, label = stages[stage]
+        self.tool_strip.set_collapsed(collapsed)
+        if label != getattr(self, "_more_label", None):
+            self._set_more_label(label)
+        big = self._pick(list(self._need_row2), width, getattr(self, "_row2_state", None))
+        self._row2_state = big
+        self._set_row2_compact(big == 1)
+        low = self._pick(list(self._need_bottom), width, getattr(self, "_bottom_state", None))
+        self._bottom_state = low
+        if (low == 1) != getattr(self, "_bottom_compact", False):
+            self._set_bottom_compact(low == 1)
+
+    def _set_row2_compact(self, on: bool):
+        """Узкое окно: во втором ряду нет больших кнопок «Копировать текст» и «Перевести» (они есть в группе
+        «Текст с картинки»)."""
+        self._row2_compact = on
+        if getattr(self, "ocr_button", None) is not None:
+            self.ocr_button.setVisible(not on and self.ctx.config.get("ocr_enabled", True))
+        if getattr(self, "tr_block", None) is not None:
+            self.tr_block.setVisible(not on and self.ctx.config.get("translate_enabled", True))
+
+    def _set_bottom_compact(self, on: bool):
+        """Узкое окно: «Вписать», «Сохранить», «Скопировать» значками с подсказкой; «Скопировать и закрыть» с подписью."""
+        self._bottom_compact = on
+        fit = self.zoom_fit_button
+        if on:
+            fit.setText("")
+            fit.setIcon(icons.icon("fit"))
+            fit.setIconSize(QSize(20, 20))
+            fit.setFixedWidth(34)
+        else:
+            fit.setIcon(QIcon())
+            fit.setText(tr("editor.zoom_fit"))
+            fit.setFixedWidth(max(76, fit.fontMetrics().horizontalAdvance(fit.text()) + 22))
+        for b, key in ((self.save_button, "editor.save"), (self.copy_button, "editor.copy")):
+            if on:
+                b.setText("")
+                b.setFixedWidth(36)
+                b.setStyleSheet("QPushButton { padding: 0px; }")
+            else:
+                b.setText("  " + tr(key))
+                b.setMinimumWidth(0)
+                b.setMaximumWidth(16777215)
+                b.setStyleSheet("")
+        group = getattr(self, "zoom_group", None)
+        if group is not None:   # «Вписать» стала шире или уже: размер группы масштаба пересчитать сразу (иначе старый)
+            group.layout().invalidate()
+            group.updateGeometry()
+
+    # --- 1.32: колокольчик уведомлений ------------------------------------------------------------
+
+    def _sync_bell(self):
+        """Точка на колокольчике: есть непрочитанное; подсказка со счётом."""
+        bell = getattr(self, "bell_button", None)
+        if bell is None:
+            return
+        try:
+            from . import notifications
+            n = len(notifications.unread(self.ctx.config))
+        except RuntimeError:
+            return
+        bell.ring = QColor(palette(self.ctx.config)["panel"])
+        bell.set_unread(n)
+        bell.setToolTip(tr("editor.bell_tip") + ("\n" + tr("notifications.unread", n=n) if n else ""))
+
+    def build_notifications_menu(self) -> QMenu:
+        """Список уведомлений: заголовок и «Прочитать все», пункты (непрочитанные на подложке), внизу
+        «Проверить обновления»."""
+        from PyQt6.QtWidgets import QWidgetAction
+        from . import notifications
+        menu = QMenu(self)
+        style_menu(menu, self.ctx.config)
+        cfg = self.ctx.config
+        pal = palette(cfg)
+        holder = QWidget()
+        holder.setObjectName("bellList")
+        holder.setFixedWidth(340)
+        col = QVBoxLayout(holder)
+        col.setContentsMargins(4, 2, 4, 2)
+        col.setSpacing(2)
+        head = QHBoxLayout()
+        title = QLabel(tr("notifications.title"))
+        title.setStyleSheet(f"font-weight: bold; font-size: 15px; color: {pal['t']}; padding: 6px 8px 4px 8px;")
+        head.addWidget(title)
+        head.addStretch(1)
+        items = notifications.items(cfg)
+        done = notifications.read_ids(cfg)
+        read_all = QPushButton(tr("notifications.read_all"))
+        read_all.setObjectName("bellLink")
+        read_all.setFlat(True)
+        read_all.setCursor(Qt.CursorShape.PointingHandCursor)
+        read_all.setStyleSheet(f"QPushButton#bellLink {{ border: none; background: transparent; color: {pal['link']};"
+                               f" font-size: 13px; padding: 0 8px; min-height: 24px; }}"
+                               f" QPushButton#bellLink:disabled {{ color: {pal['t2']}; }}")
+        read_all.setEnabled(any(it["id"] not in done and not it.get("history") for it in items))
+        read_all.clicked.connect(lambda: (notifications.mark_read(cfg, [it["id"] for it in items], self.ctx.save_config),
+                                          menu.close()))
+        head.addWidget(read_all)
+        col.addLayout(head)
+        self.notice_rows = {}
+        if not items:
+            empty = QLabel(tr("notifications.empty"))
+            empty.setStyleSheet(f"color: {pal['t2']}; padding: 14px 10px 16px 10px; font-size: 13px;")
+            col.addWidget(empty)
+        for it in items:
+            row = NoticeRow(it, it["id"] not in done and not it.get("history"), pal)
+            row.clicked.connect(lambda _c=False, item=it: (menu.close(), self.open_notice(item)))
+            if row.action_button is not None:
+                row.action_button.clicked.connect(lambda _c=False, item=it: (menu.close(), self.open_notice(item)))
+            self.notice_rows[it["id"]] = row
+            col.addWidget(row)
+        check = QPushButton(tr("updater.menu.check"))
+        check.setObjectName("bellLink")
+        check.setFlat(True)
+        check.setCursor(Qt.CursorShape.PointingHandCursor)
+        check.setStyleSheet(read_all.styleSheet() + " QPushButton#bellLink { padding: 6px 8px 6px 8px; text-align: left; }")
+        check.clicked.connect(lambda: (menu.close(), self._check_updates()))
+        line = QFrame()
+        line.setFixedHeight(1)
+        line.setStyleSheet(f"background: {pal['sep']};")
+        col.addWidget(line)
+        col.addWidget(check, 0, Qt.AlignmentFlag.AlignLeft)
+        action = QWidgetAction(menu)
+        action.setDefaultWidget(holder)
+        menu.addAction(action)
+        self._notices_menu = menu
+        return menu
+
+    def show_notifications(self):
+        menu = self.build_notifications_menu()
+        b = self.bell_button
+        b.setDown(True)
+        try:
+            pos = b.mapToGlobal(QPoint(b.width(), b.height() + 2))
+            menu.exec(QPoint(pos.x() - menu.sizeHint().width(), pos.y()))
+        finally:
+            b.setDown(False)
+
+    def open_notice(self, item):
+        """Пункт колокольчика: «Обновить» (проверка и окно предложения), «Что нового» (заметки версии), сообщение
+        просто отмечается прочитанным."""
+        from . import notifications
+        notifications.mark_read(self.ctx.config, [item["id"]], self.ctx.save_config)
+        if item["kind"] == "update":
+            self._check_updates()
+        elif item["kind"] == "whatsnew":
+            notes = notifications.whats_new_notes(self.ctx.config, item["version"])
+            from . import updater
+            updater.UpdaterUI().whats_new(item["version"], notes)
+
     def _check_updates(self):
         from . import updater
         updater.get_updater(self.ctx).check_now(manual=True)
@@ -2834,12 +4060,21 @@ class EditorWindow(QMainWindow):
         if hasattr(self.ctx, "show_about"):
             self.ctx.show_about()
 
-    def start_tour(self):
-        """Вводный курс поверх окна (первый запуск или по кнопке «Показать знакомство»)."""
+    def _rate(self):
+        if hasattr(self.ctx, "show_rating"):
+            self.ctx.show_rating()
+
+    def start_tour(self, *_args, language=None):
+        """Вводный курс поверх окна (первый запуск или по кнопке «Показать знакомство»).
+
+        language: шаг выбора языка первым. По умолчанию только при самом первом знакомстве (tour_done ещё нет);
+        повторное знакомство из «?», F1, меню значка и настроек начинается сразу с «Знакомство с ClipSD» (1.32)."""
         from .tour import Tour
         if getattr(self, "tour", None) is not None:
             return
-        self.tour = Tour(self)
+        if language is None:
+            language = not self.ctx.config.get("tour_done")
+        self.tour = Tour(self, language=bool(language))
         self.tour.finished.connect(self._tour_finished)
         self.tour.start()
 
@@ -2903,20 +4138,17 @@ class EditorWindow(QMainWindow):
             layer.activate(on)
         self._update_info()
 
-    def _widen_for_panel(self):
-        """Ряд палитры с кнопками режима ластика шире окна (маленький снимок, длинные подписи): окно расширяется
-        до ширины панели, но не шире экрана; иначе подписи «Целиком / Частично» и кнопок справа обрезались."""
-        self.panel.layout().activate()
-        need = self.panel.sizeHint().width() + self._rim()[0]
+    def _refit_width(self):
+        """Ряд изменился (кнопки режима ластика, язык, настройки): ступени считаются заново; если самое узкое
+        содержимое теперь шире окна, окно расширяется до него (не шире экрана). Вместо прежних _widen_for_panel и
+        _widen_for_bottom (1.32)."""
+        self._measure_rows()
+        need = self.min_content_width() + self._rim()[0]
         area = self._screen_area()
+        self.setMinimumWidth(min(need, area.width() - 20))
         if self.width() < need:
             self.resize(min(need, area.width() - 20), self.height())
-
-    def _widen_for_bottom(self):
-        need = self.bottom.sizeHint().width() + self._rim()[0]
-        area = self._screen_area()
-        if self.width() < need:
-            self.resize(min(need, area.width() - 20), self.height())
+        self._adapt_rows()
 
     def exit_translate_mode(self):
         if self.canvas.tool == TRANSLATE:
@@ -3082,8 +4314,36 @@ class EditorWindow(QMainWindow):
             self.close()
 
     def show_context_menu(self, shape, global_pos):
+        """Меню правой кнопки. У объекта (1.32): за рамкой выделения с ручками, чтобы меню не закрывало контур и
+        ручки, за которые объект тянут; на пустом месте снимка у курсора, как обычно."""
         menu = self.build_context_menu(shape)
-        menu.exec(global_pos)
+        menu.ensurePolished()
+        pos = self.context_menu_pos(shape, QPoint(global_pos), menu.sizeHint())
+        menu.exec(pos)
+
+    def selection_frame_global(self, shape) -> QRect:
+        """Рамка выделенного объекта вместе с ручками в экранных координатах (логические точки Qt: при масштабе
+        Windows 125-200 % и на нескольких мониторах те же единицы, что у положения меню)."""
+        r = QRectF(shape.bounding_rect())
+        for pt in shape.handles():
+            r = r.united(QRectF(pt.x() - HANDLE / 2, pt.y() - HANDLE / 2, HANDLE, HANDLE))
+        z = self.canvas.zoom
+        a = self.canvas.mapToGlobal(QPointF(r.left() * z, r.top() * z))
+        b = self.canvas.mapToGlobal(QPointF(r.right() * z, r.bottom() * z))
+        return QRect(QPoint(int(a.x()) - 2, int(a.y()) - 2), QPoint(int(b.x()) + 2, int(b.y()) + 2))
+
+    def context_menu_pos(self, shape, cursor: QPoint, size: QSize) -> QPoint:
+        """Где открыть меню размером size: у объекта за его рамкой (place_menu), на пустом месте у курсора."""
+        screen = QGuiApplication.screenAt(cursor) or self.screen() or QGuiApplication.primaryScreen()
+        area = screen.availableGeometry()
+        if shape is None:
+            return cursor
+        handles = []
+        z = self.canvas.zoom
+        for pt in shape.handles():
+            g = self.canvas.mapToGlobal(QPointF(pt.x() * z, pt.y() * z))
+            handles.append(QPoint(int(g.x()), int(g.y())))
+        return place_menu(self.selection_frame_global(shape), size, cursor, area, handles)
 
     def build_context_menu(self, shape) -> QMenu:
         """Меню правой кнопки: действия с объектом под курсором или со снимком целиком."""
@@ -3202,6 +4462,9 @@ class EditorWindow(QMainWindow):
             layout.insertWidget(i, new)
         self.setWindowTitle(tr("editor.window_title"))
         self._redraw_demo()
+        if self.titlebar is not None:
+            self.titlebar.set_icons(self.top_icons)   # новая группа колокольчика, «?», шестерёнки и глобуса
+        self._sync_bell()
         if self.titlebar is not None:   # подсказки шапки: Свернуть, Развернуть/Восстановить, Закрыть
             self.titlebar.min_button.setToolTip(tr("editor.minimize"))
             self.titlebar.close_button.setToolTip(tr("editor.close"))
@@ -3235,16 +4498,28 @@ class EditorWindow(QMainWindow):
         """Применить оформление из настроек к уже открытому окну."""
         cfg = self.ctx.config
         icons.ICON_COLOR = theme(cfg)["icon"]
+        SELECTED_BAR_COLOR[0] = theme(cfg)["ui_accent"]
         self.setStyleSheet(make_style(cfg))
         self.frame_px = theme(cfg)["ui_frame"]
+        pal = palette(cfg)
+        for sw in list(self.color_buttons.values()) + [self.custom_color]:
+            sw.ring, sw.dark = QColor(pal["t"]), pal["dark"]
+            sw.update()
+        self.bell_button.ring = QColor(pal["panel"])
+        self.ocr_button.setIcon(icons.icon("ocr", soft_colors("ocr", pal["dark"])[1]))
+        self.tr_all_button.setIcon(icons.icon("translate_all", soft_colors("tr", pal["dark"])[1]))
         # Вид рамки меняется сразу; «системный заголовок» действует только на новые окна: у открытого окна
         # он всегда такой, с каким окно создано (иначе пропадут скругления или появится поле тени)
         self.shell.apply(dict(chrome_params(cfg), system=self.system_title))
         # Значки перерисовать в цвете нового оформления
         for tool, button in self.tool_buttons.items():
             button.setIcon(icons.icon(tool))
+        self._sync_groups()
+        self.more_button.setIcon(icons.icon("more"))
+        if getattr(self, "_bottom_compact", False):
+            self.zoom_fit_button.setIcon(icons.icon("fit"))
         for button, name in ((self.undo_button, "undo"), (self.redo_button, "redo"),
-                             (self.insert_button, "insert"), (self.help_button, "help"),
+                             (self.insert_button, "insert"), (self.help_button, "help"), (self.bell_button, "bell"),
                              (self.settings_button, "settings"), (self.language_button, "globe"),
                              (self.save_button, "save"),
                              (self.copy_button, "copy")):
@@ -3257,15 +4532,17 @@ class EditorWindow(QMainWindow):
     def _sync_ocr(self):
         """Распознавание выключено в настройках: кнопки инструмента нет, был выбран он — переходим на «Перемещение»."""
         enabled = self.ctx.config.get("ocr_enabled", True)
-        if OCR in getattr(self, "tool_buttons", {}):
-            self.tool_buttons[OCR].setVisible(enabled)
-        if getattr(self, "ocr_button", None) is not None:
-            self.ocr_button.setVisible(enabled)
         tr_on = self.ctx.config.get("translate_enabled", True)
-        if TRANSLATE in getattr(self, "tool_buttons", {}):
-            self.tool_buttons[TRANSLATE].setVisible(tr_on)
+        if getattr(self, "tool_strip", None) is not None:
+            self.tool_strip._sync_visibility()   # кнопки инструментов и группа «Текст с картинки» по настройкам
+            self._sync_groups()
+        compact = getattr(self, "_row2_compact", False)
+        if getattr(self, "ocr_button", None) is not None:
+            self.ocr_button.setVisible(enabled and not compact)
         if getattr(self, "tr_block", None) is not None:
-            self.tr_block.setVisible(tr_on)
+            self.tr_block.setVisible(tr_on and not compact)
+        if hasattr(self, "_need_row1"):
+            self._measure_rows()   # без распознавания или перевода ряды уже: ступени считаются заново
         if not tr_on and self.canvas.tool == TRANSLATE:
             self.select_tool(MOVE)
         if not enabled and self.canvas.tool == OCR:
@@ -3417,6 +4694,7 @@ class EditorWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self._adapt_rows()   # 1.32: группы, большие кнопки второго ряда и подписи внизу по ширине окна
         if getattr(self, "_zoom_fit_mode", False):
             QTimer.singleShot(0, self.zoom_fit)
 
@@ -3437,19 +4715,21 @@ class EditorWindow(QMainWindow):
         return screen.availableGeometry()
 
     def fit_size(self):
-        """Окно = снимок в рамке + панели; не уже панели инструментов и не больше экрана."""
+        """Окно = снимок в рамке + панели (1.32): по ширине снимка, но не уже самого узкого вида панелей
+        (группы свёрнуты, второй ряд без больших кнопок, внизу значки) и не больше экрана."""
         area = self._screen_area()
         rim_w, rim_h = self._rim()
-        panel_w = self.panel.sizeHint().width() + rim_w
-        bottom_w = self.bottom.sizeHint().width() + rim_w
-
+        self._measure_rows()
+        min_w = self.min_content_width() + rim_w
         image_w = self.canvas.lw() + 2 * FRAME_WIDTH + rim_w      # размер окна считается по снимку 100%, масштаб вида его не меняет
         image_h = self.canvas.lh() + 2 * FRAME_WIDTH + rim_h
+        want_w = min(max(image_w, min_w), area.width() - 20)
+        self._adapt_rows(want_w - rim_w)
+        self.panel.layout().activate()
         bars_h = self.panel.sizeHint().height() + self.bottom.sizeHint().height()
-        want_w = max(image_w, panel_w, bottom_w)
         want_h = image_h + bars_h
-        self.setMinimumWidth(min(max(panel_w, bottom_w), area.width() - 20))
-        self.resize(min(want_w, area.width() - 20), min(want_h, area.height() - 40))
+        self.setMinimumWidth(min(min_w, area.width() - 20))
+        self.resize(want_w, min(want_h, area.height() - 40))
 
     def _rim(self):
         """Сколько окно занимает сверх панелей и снимка: (по ширине, по высоте): поля тени, рамка, своя шапка."""
@@ -3522,7 +4802,7 @@ class EditorWindow(QMainWindow):
         """Снимок уже сохранён автоматически: после правок файл обновляется готовой картинкой."""
         path = getattr(self, "autosave_path", None)
         if path and self.canvas.modified:
-            image.save(path)
+            hidpi.save_image(image, path, self.ctx.config)
 
     def copy_shortcut(self):
         """Ctrl+C: в режиме текста копирует выделенный текст, иначе снимок."""
@@ -3563,8 +4843,10 @@ class EditorWindow(QMainWindow):
         path = ask_save_path(self, self.ctx.config)
         if not path:
             return
-        if not image.save(path):
-            QMessageBox.warning(self, tr("editor.error"), tr("editor.save_error", path=path))
+        if not hidpi.save_image(image, path, self.ctx.config):
+            from .dialogs import MessageCard
+            card = MessageCard(self, tr("editor.error"), tr("editor.save_error", path=path), "error")
+            card.exec()
             return
         self.ctx.config["save_dir"] = os.path.dirname(path)
         self.ctx.notify(tr("editor.saved", path=path))

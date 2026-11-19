@@ -1,6 +1,7 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later. Распространяется по лицензии GNU GPL v3 или более поздней,
 # без каких-либо гарантий; полный текст: файл LICENSE или <https://www.gnu.org/licenses/gpl-3.0.html>.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Выделение области: замороженный экран, затемнение, перекрестие, лупа и размер.
 
 Под Wayland снимок стола приходит с задержкой (см. grab.py), поэтому оверлей умеет работать
@@ -15,6 +16,7 @@ from PyQt6.QtGui import QBrush, QColor, QLinearGradient, QCursor, QFont, QFontMe
 from PyQt6.QtWidgets import QWidget
 
 from . import i18n, language, translate_ui
+from .grab import native_region
 from .i18n import dynamic, tr
 from .i18n import keys as i18n_keys
 from .translate_ui import TranslateMixin
@@ -163,6 +165,9 @@ class RegionSelector(TranslateMixin, QWidget):
         self.lang_rect = QRect()   # чип языка в строке подсказки; пустой: чипа нет
         self.gear_rect = QRect()   # шестерёнка «Настройки» правее чипа языка
         self.bar_hint_reserve = 0  # сколько справа в строке подсказки занято чипом языка и размером
+        self.tour = None           # 1.32: идущее знакомство с окном выделения (SelectorTour)
+        self.tour_force = False    # знакомство по запросу (пункт меню): показывать, даже если уже видели
+        self._tour_demo = False    # рамка у знакомства показана для примера (своей области ещё нет)
 
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -171,6 +176,55 @@ class RegionSelector(TranslateMixin, QWidget):
         self.setGeometry(geometry)
         if desktop is not None:
             self.set_desktop(desktop)
+
+    # --- знакомство с окном выделения (1.32) ---------------------------------
+
+    def maybe_start_tour(self):
+        """Первый показ окна выделения (флаг tour_selector_done в настройках) или знакомство по запросу."""
+        cfg = self.tr_cfg if isinstance(getattr(self, "tr_cfg", None), dict) else None
+        if self.tour is not None or self.translate_mode or self._done:
+            return False
+        if not self.tour_force and (cfg is None or cfg.get("tour_selector_done")):
+            return False
+        self.tour_force = False
+        if cfg is not None:
+            cfg["tour_selector_done"] = True   # отмечается при показе: даже закрытое сразу знакомство повторно не навязывается
+            save = getattr(self, "tr_save", None)
+            if callable(save):
+                save()
+        self.start_tour()
+        return True
+
+    def start_tour(self):
+        """Затемнение с вырезами вокруг кнопок панели. Своей рамки ещё нет: для примера ставится рамка посередине."""
+        from .selector_tour import SelectorTour
+        if self.tour is not None:
+            return
+        self._tour_demo = self.kept is None
+        if self._tour_demo:
+            area = self.hint_anchor()
+            w, h = int(area.width() * 0.38), int(area.height() * 0.30)
+            self.kept = QRect(area.center().x() - w // 2, area.center().y() - h // 2 - area.height() // 12, w, h)
+            self._bar_forget()
+        self.hover_button = None
+        self.tour = SelectorTour(self)
+        self.tour.finished.connect(self._tour_done)
+        self.tour.start()
+        self.update()
+
+    def _tour_done(self):
+        self.tour = None
+        if self._tour_demo:
+            self._tour_demo = False
+            self.kept = None
+            self._bar_forget()
+        self.hover_button = None
+        self.update()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self.tour is not None:
+            self.tour.relayout()
 
     def set_desktop(self, desktop: QPixmap):
         self.desktop = desktop
@@ -817,7 +871,7 @@ class RegionSelector(TranslateMixin, QWidget):
         lang_w, gear_w, dims_w, reserve = 0, 0, 0, 0
         if self.lang_ctx is not None:
             name = i18n.LANGUAGE_NAMES.get(i18n.current(), "")
-            long_w = 8 + 14 + 5 + fm_s.horizontalAdvance(name + " ▾") + 8
+            long_w = 8 + 14 + 5 + 21 + 5 + fm_s.horizontalAdvance(name + " ▾") + 8   # глобус, флаг, название
             if self.kept is not None and not full and lv["text"] and not self.translate_mode:
                 dims_w = fm_s.horizontalAdvance("0000 × 0000") + 8
             lang_w, gear_w = long_w, 28
@@ -1111,25 +1165,29 @@ class RegionSelector(TranslateMixin, QWidget):
             tile = key in self.BAR_TOP
             active = key == "translate" and self.translate_mode   # режим перевода включён: плитка подсвечена
             if key == "copy":
-                fill = QColor("#26b864") if hover else QColor("#1f9d55")
+                from .themes import GREEN, GREEN_BORDER, GREEN_GRADIENT, GREEN_GRADIENT_HOVER, GREEN_HOVER, GREEN_SHADOW, GREEN_SUB
+                fill = QColor(GREEN_HOVER) if hover else QColor(GREEN)   # 1.32: зелёный темнее, белый текст читается
                 if lv["text"]:   # зелёная: лёгкий градиент сверху вниз и тень
                     p.setPen(Qt.PenStyle.NoPen)
-                    p.setBrush(QColor(21, 122, 64, 70))
+                    p.setBrush(QColor(*GREEN_SHADOW))
                     p.drawRoundedRect(QRectF(rect).adjusted(1, 3, -1, 3), 9, 9)
+                    top, bottom = GREEN_GRADIENT_HOVER if hover else GREEN_GRADIENT
                     grad = QLinearGradient(0, rect.top(), 0, rect.bottom())
-                    grad.setColorAt(0, QColor("#2dc06f") if not hover else QColor("#34cf7b"))
-                    grad.setColorAt(1, QColor("#1a8f4e") if not hover else QColor("#20a35c"))
+                    grad.setColorAt(0, QColor(top))
+                    grad.setColorAt(1, QColor(bottom))
                     fill = QBrush(grad)
-                border, fg, sub = QColor("#157a40"), QColor("#ffffff"), QColor(255, 255, 255, 215)
+                border, fg, sub = QColor(GREEN_BORDER), QColor("#ffffff"), QColor(*GREEN_SUB)
             elif key == "manual":
                 fill = QColor("#d6e7fc") if hover else QColor("#e6f0fd")
-                border, fg, sub = QColor(ACCENT), QColor("#0f3a7d"), QColor("#4a6d9c")
+                from .themes import BLUE_SUB
+                border, fg, sub = QColor(ACCENT), QColor("#0f3a7d"), QColor(BLUE_SUB)   # 1.32: 5,2:1 и под курсором
             elif key == "edit":
                 fill = QColor("#f1f6fd") if hover else QColor("#ffffff")
                 border, fg, sub = QColor("#9ec1ee") if not hover else QColor(ACCENT), QColor("#16181c"), QColor("#5a6270")
             else:
                 fill = QColor("#e4effb") if hover else QColor("#f5f6f8")
-                border, fg, sub = QColor(ACCENT) if hover else QColor("#d9dde4"), QColor("#16181c"), QColor("#6b7380")
+                from .themes import TILE_SUB
+                border, fg, sub = QColor(ACCENT) if hover else QColor("#d9dde4"), QColor("#16181c"), QColor(TILE_SUB)   # 1.32: 5,2:1
                 if active:
                     fill, border = QColor("#d6f1ec"), QColor("#0b8f84")
             p.setBrush(fill)
@@ -1213,7 +1271,8 @@ class RegionSelector(TranslateMixin, QWidget):
                     or (key == "trc:overlay" and view_cur == "overlay" and on) or (key == "trc:card" and view_cur == "card")
                 p.setOpacity(1.0 if on else 0.4)
                 p.setPen(QPen(QColor("#0b8f84"), 1))
-                p.setBrush(QColor("#0d9488") if active else QColor("#ccefe9") if hover else QColor("#ffffff"))
+                from .themes import TEAL_BUTTON
+                p.setBrush(QColor(TEAL_BUTTON) if active else QColor("#ccefe9") if hover else QColor("#ffffff"))   # белый текст 5,5:1
                 p.drawRoundedRect(QRectF(rect).adjusted(0.5, 0.5, -0.5, -0.5), 6, 6)
                 p.setPen(QColor("#ffffff") if active else QColor("#0b5f57"))
                 p.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
@@ -1254,10 +1313,13 @@ class RegionSelector(TranslateMixin, QWidget):
         ic_rect = QRect(rect.left() + (8 if long_form else (rect.width() - 14) // 2), rect.center().y() - 7, 14, 14)
         icons.icon("globe").paint(p, ic_rect)
         if long_form:
+            fl = QRect(ic_rect.right() + 6, rect.center().y() - 7, 21, 14)   # флаг текущего языка (1.32), 24x16 в масштабе 7:8
+            p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+            p.drawPixmap(fl, icons.flag_icon(i18n.current()).pixmap(21 * 4, 14 * 4))
             p.setFont(font)
             p.setPen(QColor("#16181c"))
             name = i18n.LANGUAGE_NAMES.get(i18n.current(), "") + " ▾"
-            p.drawText(QRect(ic_rect.right() + 6, rect.top(), rect.right() - ic_rect.right() - 8, rect.height()),
+            p.drawText(QRect(fl.right() + 6, rect.top(), rect.right() - fl.right() - 8, rect.height()),
                        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, name)
         p.restore()
 
@@ -1741,6 +1803,9 @@ class RegionSelector(TranslateMixin, QWidget):
             return False
 
     def keyPressEvent(self, event):
+        if self.tour is not None:
+            self.tour.key(event)   # пока идёт знакомство, горячие клавиши окна выделения ничего не снимают
+            return
         if event.key() == Qt.Key.Key_P and event.modifiers() == Qt.KeyboardModifier.ControlModifier \
                 and self.translate_enabled() and self.pending is None and (self.kept is not None or self.translate_mode):
             self.start_translate_pick()   # Ctrl+P: выделить другое место и перевести
@@ -1815,5 +1880,7 @@ class RegionSelector(TranslateMixin, QWidget):
             pixmap = self.desktop.copy(self.to_physical(sel))
             # Масштаб экрана сохраняем: редактор покажет снимок ровно в размер выделенной области.
             pixmap.setDevicePixelRatio(self.ratio)
+            # Мониторы с разным масштабом: снимок в масштабе того монитора, где область (плотность PNG по нему)
+            pixmap = native_region(pixmap, sel.translated(self.origin))
             self.finished.emit(pixmap, sel.translated(self.origin))
         self.close()

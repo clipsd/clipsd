@@ -1,5 +1,6 @@
 ﻿# ClipSD: build of ClipSD-app.exe, the launcher ClipSD.exe and the installer ClipSD-<version>-Setup.exe for Windows.
 # Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко). SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 #
 # Runs inside the folder made by packaging/stage_windows.py (CI and build_dist.sh).
 # Needs: Python 3.12 x64, Visual Studio 2022+ or Build Tools with "Desktop development with C++" (cl.exe, rc.exe),
@@ -37,6 +38,7 @@ Write-Host "==> PyInstaller: dist\ClipSD-app\ClipSD-app.exe" -ForegroundColor Cy
     --version-file packaging\version_info.txt `
     --paths . `
     --collect-submodules clipshot --collect-data clipshot `
+    --add-data "$Root\CHANGELOG;CHANGELOG" `
     --distpath dist --workpath build `
     --exclude-module tkinter --exclude-module unittest --exclude-module pydoc `
     --exclude-module PyQt6.QtQml --exclude-module PyQt6.QtQuick --exclude-module PyQt6.QtPdf `

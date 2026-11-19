@@ -1,4 +1,5 @@
 // ClipSD: горячие клавиши. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко). SPDX-License-Identifier: GPL-3.0-or-later
+// Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 //
 // Обычное сочетание GNOME хранит одну клавишу, и Alt+W при русской раскладке не срабатывает, если раскладку
 // переключает не GNOME (Alt+Shift через xkb). Два отдельных сочетания на одну клавишу перебивают друг друга.

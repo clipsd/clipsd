@@ -1,5 +1,9 @@
 {
+  "tour.alltools_text": "The “⋯” button opens all tools by group together with their keys. Handy when the window is narrow and the groups are folded, and for learning the keys.",
+  "tour.alltools_title": "All tools",
   "tour.back": "Back",
+  "tour.bell_text": "A dot appears on the bell when there is something new: a new version is out (the Update button), what's new in the installed version, short program messages such as “daily translation limit reached”.",
+  "tour.bell_title": "Notifications",
   "tour.canvas_text": "Draw right on the screenshot. The object you just drew stays selected: you can move it, drag the white handles, change its color and thickness.\n\nRight-click an object for a menu (color, fill, duplicate, bring to front, delete). Double-click text to edit it. Delete: remove. Esc: deselect.",
   "tour.canvas_title": "Screenshot",
   "tour.capture_text": "{hotkey} in any program: the screen freezes, select an area with the mouse, and it opens here. A simple click without selecting captures the whole monitor, Esc cancels.\n\nYou can change {hotkey} to any shortcut you like in settings; the button below opens them right away.\n\nNext time you press {hotkey}, the previous area is highlighted: Enter or a click inside captures the same spot.\n\nThe ClipSD icon in the tray near the clock: right-click opens a menu where you can repeat this tour.",
@@ -22,7 +26,7 @@
   "tour.step": "Step {i} of {total}",
   "tour.text_color_text": "The color of the digit in a number and of the text in a callout. “Auto” picks white or black to suit the fill color.",
   "tour.text_color_title": "Text color",
-  "tour.tools_text": "Left to right: select, callout, text, number, arrows (plain, double-ended, freehand), smooth line, line, rectangle, ellipse, freehand shape, marker, pencil, blur, eraser, crop. Each tool has a single-letter shortcut shown in its tooltip.\n\nYou can reorder the buttons: grab one with the mouse and drag it to a new place. Right-click the row to restore the default order.",
+  "tour.tools_text": "The tools are grouped: arrows and lines, shapes, labels, drawing, hide and erase, text from image. Select and move, Number and Crop always have their own buttons.\n\nA click on a group icon turns on its last used tool, the small ▾ arrow on the right opens the others. In a narrow window groups fold into one button, and the letter keys always work: you see them in the tooltip.\n\nDrag to change the order: a whole group or a tool within its group. Right-click: default tool and standard order.",
   "tour.tools_title": "Tools",
   "tour.undo_text": "The back and forward arrows undo and redo (Ctrl+Z and Ctrl+Y).\n\nThe picture button places another image on top of the screenshot: from the clipboard (Ctrl+V), from a file, or a new capture of a screen area. You can also drag a file into the window.",
   "tour.undo_title": "Undo and insert an image"

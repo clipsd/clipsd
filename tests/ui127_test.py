@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Интерфейс 1.27: окно редактора со своей шапкой и скруглёнными углами (или с системным заголовком по настройке),
 три вида рамки, состав кнопок не изменился, перевод в двух видах («Поверх текста» по умолчанию и «Карточкой»),
 окошко перевода в редакторе отдельное и уходит за пределы окна. Сеть подменяется; распознавание настоящее (Tesseract).
@@ -82,16 +83,16 @@ BASELINE_MAIN = [
     ["QToolButton", "action", "", "Справка: знакомство (F1), обновления, о программе"],
     ["QToolButton", "action", "", "Настройки (Ctrl+,)"],
     ["QToolButton", "action", "", "Язык · Language"],   # 1.31: глобус выбора языка рядом с «?» и шестерёнкой
-    ["QToolButton", "swatch", "", "#D60808"],
-    ["QToolButton", "swatch", "", "#FF8C00"],
-    ["QToolButton", "swatch", "", "#FFD800"],
-    ["QToolButton", "swatch", "", "#2DB400"],
-    ["QToolButton", "swatch", "", "#1E78FF"],
-    ["QToolButton", "swatch", "", "#8B3DFF"],
-    ["QToolButton", "swatch", "", "#000000"],
-    ["QToolButton", "swatch", "", "#808080"],
-    ["QToolButton", "swatch", "", "#FFFFFF"],
-    ["QToolButton", "swatch", "+", "Другой цвет…"],
+    ["SwatchButton", "swatch", "", "#D60808"],   # 1.32: цвета рисуются сами (квадрат с обводкой, кольцо выбранного)
+    ["SwatchButton", "swatch", "", "#FF8C00"],
+    ["SwatchButton", "swatch", "", "#FFD800"],
+    ["SwatchButton", "swatch", "", "#2DB400"],
+    ["SwatchButton", "swatch", "", "#1E78FF"],
+    ["SwatchButton", "swatch", "", "#8B3DFF"],
+    ["SwatchButton", "swatch", "", "#000000"],
+    ["SwatchButton", "swatch", "", "#808080"],
+    ["SwatchButton", "swatch", "", "#FFFFFF"],
+    ["SwatchButton", "swatch", "+", "Другой цвет…"],
     ["QToolButton", "action", "", "Цвет текста в номере и сноске"],
     ["QPushButton", "", "Авто", "Белый или чёрный, смотря по заливке"],
     ["QToolButton", "", "", "#D60808"],
@@ -114,14 +115,14 @@ BASELINE_MAIN = [
     ["QPushButton", "ocrButton", "Копировать текст", "Копировать текст (I): снимок распознаётся, слова подсвечиваются."],
     ["QPushButton", "trAllButton", "Перевести всё", "Перевести весь снимок (Shift+Y)"],
     ["QPushButton", "trButton", "Выделенное", "Перевести выделенное: выделите мышью текст (Y)"],
-    ["QPushButton", "", "−", "Уменьшить масштаб (Ctrl+минус, Ctrl+колесо вниз)"],
-    ["QPushButton", "", "100%", "Вернуть масштаб 100% (Ctrl+0)"],
-    ["QPushButton", "", "+", "Увеличить масштаб (Ctrl+плюс, Ctrl+колесо вверх)"],
-    ["QPushButton", "", "Вписать", "Показать весь снимок в окне (Ctrl+9)"],
+    ["QPushButton", "zoomSeg", "−", "Уменьшить масштаб (Ctrl+минус, Ctrl+колесо вниз)"],   # 1.32: масштаб одной группой
+    ["QPushButton", "zoomSeg", "100%", "Вернуть масштаб 100% (Ctrl+0)"],
+    ["QPushButton", "zoomSeg", "+", "Увеличить масштаб (Ctrl+плюс, Ctrl+колесо вверх)"],
+    ["QPushButton", "zoomSeg", "Вписать", "Показать весь снимок в окне (Ctrl+9)"],
     ["QPushButton", "", "Подряд", "Нажмите на слово и тяните в любую сторону: выделится весь текст подряд до места, где отпустите (как на телефоне)"],
     ["QPushButton", "", "Маркер", "Ведите по нужным словам, как текстовым маркером: попадёт только то, по чему провели. Ctrl + мазок: добавить ещё кусок"],
-    ["QPushButton", "", "Сохранить", "Сохранить в файл (Ctrl+S)"],
-    ["QPushButton", "", "Скопировать", "Скопировать в буфер обмена (Ctrl+C или Enter). Окно остаётся открытым"],
+    ["QPushButton", "light", "Сохранить", "Сохранить в файл (Ctrl+S)"],   # 1.32: лёгкие кнопки
+    ["QPushButton", "light", "Скопировать", "Скопировать в буфер обмена (Ctrl+C или Enter). Окно остаётся открытым"],
     ["QPushButton", "finish", "Скопировать и закрыть", "Скопировать в буфер обмена и закрыть окно (Ctrl+Enter)"],
 ]
 
@@ -214,8 +215,8 @@ ed, ctx = mk()
 check(bool(ed.windowFlags() & Qt.WindowType.FramelessWindowHint) and ed.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground),
       "по умолчанию окно без системной рамки, фон прозрачный (скруглённые углы)")
 check(ed.titlebar is not None and ed.titlebar.isVisible() and ed.titlebar.label.text() == "ClipSD", "своя шапка: «ClipSD»")
-check(not ctx.config["editor_system_title"] and ctx.config["editor_frame_style"] == "glow", "по умолчанию: свой заголовок, вид рамки «glow»")
-check(ed.shell.radius() == 12 and ed.shell.outer() > 0, "скругление 12, поля под тень есть")
+check(not ctx.config["editor_system_title"] and ctx.config["editor_frame_style"] == "thin", "по умолчанию: свой заголовок, вид рамки «thin» (1.32)")
+check(ed.shell.radius() == 8 and ed.shell.outer() > 0, "скругление 8 (вид А 1.32), поля под тень есть")
 done(ed)
 ed, _ = mk(editor_system_title=True)
 check(not (ed.windowFlags() & Qt.WindowType.FramelessWindowHint) and ed.titlebar is None
@@ -290,8 +291,12 @@ done(ed)
 
 # 4. Состав и порядок кнопок панелей не изменились (список снят с main)
 ed, _ = mk(letter(300, 200))
+ed.resize(1600, ed.height())   # 1.32: узкое окно сворачивает группы и подписи; состав сверяется в широком
+settle()
 now = []
-for host in (ed.panel, ed.bottom):
+# 1.32: колокольчик, «?», шестерёнка и глобус живут в своей шапке окна (top_icons), а не в панели
+hosts = [ed.panel, ed.bottom] + ([ed.top_icons] if not ed.panel.isAncestorOf(ed.top_icons) else [])
+for host in hosts:
     for w in host.findChildren((QToolButton, QPushButton)):
         now.append([type(w).__name__, w.objectName(), w.text().strip(), w.toolTip().split("\n")[0]])
 # 1.29.1: «Подряд / Маркер» переехали из нижней панели в фиолетовую полосу режима текста
@@ -299,31 +304,45 @@ for host in (ed.panel, ed.bottom):
 expected = [x for x in BASELINE_MAIN if x[2] not in ("Подряд", "Маркер")]
 quick = [x for x in expected if x[3].startswith(("Отменить", "Повторить"))]
 expected = quick + [x for x in expected if x not in quick]
+# 1.32: кнопки шести групп (видны, когда группа свёрнута) и «⋯ Все инструменты»
+expected += [["GroupButton", "group", "", t] for t in ("Стрелки и линии: Стрелка (A)", "Фигуры: Прямоугольник (R)",
+             "Надписи: Текст (T)", "Рисование: Маркер (M)", "Скрыть и стереть: Размытие (B)", "Текст с картинки: Копировать текст (I)")]
+expected += [["QToolButton", "more", "Все инструменты", "Все инструменты по группам, с горячими клавишами"]]
+expected += [["BellButton", "bell", "", "Уведомления: новая версия, что нового, сообщения программы"]]   # 1.32: колокольчик
 check(sorted(now) == sorted(expected) and now[:2] == quick, f"кнопки панелей: {len(now)} шт., состав как в main, отмена и повтор первыми")
+if sorted(now) != sorted(expected):
+    print("   лишние:", [x for x in now if x not in expected], "нет:", [x for x in expected if x not in now])
 done(ed)
 
 # 5. Вид рамки: по умолчанию «Тонкая линия со свечением», три значения сохраняются и читаются, картинки разные
 dlg = SettingsDialog(dict(appmod.DEFAULTS))
-check(dlg.frame_style.currentData() == "glow" and dlg.frame_style.currentText() == "Тонкая линия со свечением",
+check(dlg.frame_style.currentData() == "thin" and dlg.frame_style.currentText() == "Тонкая линия",
       "настройки: по умолчанию вид рамки 1 («Тонкая линия со свечением»)")
-check([dlg.frame_style.itemText(i) for i in range(3)] == ["Тонкая линия со свечением", "Толстая скруглённая", "Без цветной рамки"],
+check([dlg.frame_style.itemText(i) for i in range(4)] == ["Тонкая линия", "Тонкая линия со свечением", "Толстая скруглённая", "Без цветной рамки"],
       "настройки: три вида рамки по порядку")
 check(dlg.values()["editor_system_title"] is False, "настройки: «Системный заголовок» выключен по умолчанию")
-for key in ("thick", "plain", "glow"):
+for key in ("thick", "plain", "glow", "thin"):
     dlg.frame_style.setCurrentIndex(dlg.frame_style.findData(key))
-    check(dlg.values()["editor_frame_style"] == key, f"настройки: значение {key} сохраняется")
-    dlg2 = SettingsDialog(dict(appmod.DEFAULTS, editor_frame_style=key))
+    check(dlg.values()["editor_frame_style"] == key and dlg.values()["frame_style_132"] is True, f"настройки: значение {key} сохраняется")
+    dlg2 = SettingsDialog(dict(appmod.DEFAULTS, editor_frame_style=key, frame_style_132=True))
     check(dlg2.frame_style.currentData() == key, f"настройки: значение {key} читается")
     dlg2.close()
 dlg.frame_style.setCurrentIndex(dlg.frame_style.findData("plain"))
 check(not dlg.frame.isEnabled() and dlg.frame.toolTip(), "вид 3: толщина рамки неактивна, есть подсказка")
+dlg.frame_style.setCurrentIndex(dlg.frame_style.findData("thin"))
+check(not dlg.frame.isEnabled() and "тонкая" in dlg.frame.toolTip(), "«Тонкая линия»: толщина рамки неактивна, есть подсказка")
 dlg.frame_style.setCurrentIndex(dlg.frame_style.findData("glow"))
-check(dlg.frame.isEnabled(), "вид 1: толщина рамки активна")
+check(dlg.frame.isEnabled(), "вид «со свечением»: толщина рамки активна")
 dlg.close()
+# 1.32: «Свечение» было видом по умолчанию и записано в настройки у всех: до выбора в окне настроек 1.32 оно
+# читается как «Тонкая линия»; выбранное в настройках 1.32 (frame_style_132) остаётся
+from clipshot.editor import frame_style  # noqa: E402
+check(frame_style({"editor_frame_style": "glow"}) == "thin" and frame_style({"editor_frame_style": "glow", "frame_style_132": True}) == "glow"
+      and frame_style({"editor_frame_style": "plain"}) == "plain" and frame_style({}) == "thin", "перенос вида рамки 1.31 → 1.32")
 
 
 def strip(style, theme="standard"):
-    ed, _ = mk(letter(300, 200), editor_frame_style=style, ui_theme=theme)
+    ed, _ = mk(letter(300, 200), editor_frame_style=style, ui_theme=theme, frame_style_132=True)
     img = ed.grab().toImage()
     mid = img.height() // 2
     pix = [img.pixelColor(x, mid).getRgb() for x in range(0, 40)]
@@ -343,11 +362,12 @@ check(0 < thin < thick, f"линия вида 1 тоньше рамки вида
 # смена вида сразу в открытом окне
 ed, ctx = mk(letter(300, 200))
 before = ed.grab().toImage().pixelColor(int(ed.shell.card().left()) + 1, 100).getRgb()
-ctx.config["editor_frame_style"] = "plain"
+ctx.config["editor_frame_style"] = "thick"   # 1.32: с «Тонкой линии» по умолчанию на толстую: разница у края видна
+ctx.config["frame_style_132"] = True
 ed.refresh_theme()
 settle()
 after = ed.grab().toImage().pixelColor(int(ed.shell.card().left()) + 1, 100).getRgb()
-check(before != after and ed.shell.params["style"] == "plain", "смена вида рамки применяется в открытом редакторе сразу")
+check(before != after and ed.shell.params["style"] == "thick", "смена вида рамки применяется в открытом редакторе сразу")
 done(ed)
 # тёмное оформление: фон панелей тёмный, на рамке нет светлых пятен
 ed, _ = mk(letter(300, 200), ui_theme="pro")
@@ -362,7 +382,7 @@ ed, ctx = mk()
 ctx.config["editor_system_title"] = True
 ed.refresh_theme()
 settle()
-check(ed.shell.custom() and ed.shell.radius() == 12 and ed.shell.outer() == 16 and ed.titlebar is not None
+check(ed.shell.custom() and ed.shell.radius() == 8 and ed.shell.outer() == 16 and ed.titlebar is not None
       and bool(ed.shell.edge_at(QPointF(ed.shell.card().left() - 3, ed.shell.card().center().y()))),
       "сценарий А: окно со своей шапкой после включения флажка остаётся прежним (скругления, тень, размер тянется)")
 done(ed)

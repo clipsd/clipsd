@@ -1,6 +1,7 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later. Распространяется по лицензии GNU GPL v3 или более поздней,
 # без каких-либо гарантий; полный текст: файл LICENSE или <https://www.gnu.org/licenses/gpl-3.0.html>.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Текст с картинки (распознавание, OCR).
 
 Linux и Windows с установленным Tesseract: программа tesseract (языки rus+eng).
@@ -727,19 +728,34 @@ FONT_FIELD = 17     # сам текст в поле и команды
 FONT_HINT = 13      # вторая строка с оговоркой: помельче, но читается
 BUTTON_H = 40       # кнопки одной высоты
 
-# Общий вид ClipDialog (белая карточка, скругления, шрифт) плюс размеры для окон с текстом
-DIALOG_EXTRA = f"""
-QLabel#ocrNote {{ font-size: {FONT_BODY}px; color: #16181c; }}
-QLabel#ocrHint {{ font-size: {FONT_HINT}px; color: #5a6270; }}
-QTextEdit#ocrEdit {{ font-size: {FONT_FIELD}px; padding: 8px 10px; border: 1px solid #c8d0db; border-radius: 8px;
-                     background: #ffffff; color: #16181c; }}
-QTextEdit#ocrEdit:focus {{ border: 2px solid #1e78ff; padding: 7px 9px; }}
+# Общий вид ClipDialog (карточка, скругления, шрифт; светлая или тёмная по оформлению) плюс размеры для окон с текстом
+def dialog_extra(dark: bool = False) -> str:
+    from .dialogs import PALETTES
+    c = PALETTES[bool(dark)]
+    return f"""
+QLabel#ocrNote {{ font-size: {FONT_BODY}px; color: {c['text']}; }}
+QLabel#ocrHint {{ font-size: {FONT_HINT}px; color: {c['muted']}; }}
+QTextEdit#ocrEdit {{ font-size: {FONT_FIELD}px; padding: 8px 10px; border: 1px solid {c['line']}; border-radius: 8px;
+                     background: {c['field']}; color: {c['text']}; }}
+QTextEdit#ocrEdit:focus {{ border: 2px solid {c['accent']}; padding: 7px 9px; }}
 """
+
+
+DIALOG_EXTRA = dialog_extra(False)
 BTN_BASE = f"font-size: {FONT_BODY}px; padding: 0px 18px; border-radius: 8px;"
-COPY_STYLE = ("QPushButton { " + BTN_BASE + " background: #ffffff; color: #16181c; border: 1px solid #c8d0db; }"
-              " QPushButton:hover { background: #f1f4f8; }")
-COPIED_STYLE = ("QPushButton { " + BTN_BASE + " background: #1f9d55; color: #ffffff; font-weight: bold;"
-                " border: 1px solid #157a40; }")
+
+
+def copy_style(dark: bool = False) -> str:
+    from .dialogs import PALETTES
+    c = PALETTES[bool(dark)]
+    return ("QPushButton { " + BTN_BASE + f" background: {c['card']}; color: {c['text']}; border: 1px solid {c['line']}; }}"
+            f" QPushButton:hover {{ background: {c['soft']}; }}")
+
+
+COPY_STYLE = copy_style(False)
+from .themes import GREEN as _GREEN, GREEN_BORDER as _GREEN_BORDER   # noqa: E402  (1.32: один зелёный)
+COPIED_STYLE = ("QPushButton { " + BTN_BASE + f" background: {_GREEN}; color: #ffffff; font-weight: bold;"
+                f" border: 1px solid {_GREEN_BORDER}; }}")
 CLOSE_STYLE = COPY_STYLE
 
 
@@ -769,7 +785,7 @@ class TextResultDialog(ClipDialog):
         super().__init__(parent, tr("ocr.window_title"), "", "info", self.WIDTH)
         # не поверх всех окон: окно-спутник редактора, а не отдельное приложение
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, False)
-        self.setStyleSheet(self.styleSheet() + DIALOG_EXTRA)
+        self.setStyleSheet(self.styleSheet() + dialog_extra(self.dark))
         # компактнее обычного ClipDialog: короткий текст должен давать невысокое окно
         self.layout().setContentsMargins(14, 10, 18, 18)
         card_lay = self.card.layout()
@@ -799,7 +815,7 @@ class TextResultDialog(ClipDialog):
         self.hint.setVisible(bool(hint))
         self.body.addWidget(self.hint)
         if help is not None:
-            self.install = InstallBlock(help)
+            self.install = InstallBlock(help, dark=self.dark)
             self.body.addWidget(self.install)
         self.edit = QTextEdit()
         self.edit.setObjectName("ocrEdit")
@@ -813,7 +829,7 @@ class TextResultDialog(ClipDialog):
         self.copy_button = QPushButton(tr("editor.copy"))
         self.copy_button.setFixedHeight(BUTTON_H)
         self.copy_button.setMinimumWidth(150)
-        self.copy_button.setStyleSheet(COPY_STYLE)
+        self.copy_button.setStyleSheet(copy_style(self.dark))
         self.copy_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.copy_button.setVisible(bool(text))
         self.copy_button.clicked.connect(self._copy)
@@ -821,7 +837,7 @@ class TextResultDialog(ClipDialog):
         self.edit.textChanged.connect(self._edited)
         self.close_button = QPushButton(tr("about.close"))
         self.close_button.setFixedHeight(BUTTON_H)
-        self.close_button.setStyleSheet(CLOSE_STYLE)
+        self.close_button.setStyleSheet(copy_style(self.dark))
         self.close_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.close_button.clicked.connect(self.close)
         self.footer_right.addWidget(self.copy_button)
@@ -891,7 +907,7 @@ class TextResultDialog(ClipDialog):
         if self._copied is not None and self.edit.toPlainText() != self._copied:
             self._copied = None
             self.copy_button.setText(tr("editor.copy"))
-            self.copy_button.setStyleSheet(COPY_STYLE)
+            self.copy_button.setStyleSheet(copy_style(self.dark))
 
     def _copy(self):
         text = self.edit.toPlainText()
@@ -941,15 +957,17 @@ class InstallBlock(QFrame):
     Поля на всю ширину окна, длинное переносится по строкам; буквы не меньше 15 px, как в окне с текстом."""
 
     @staticmethod
-    def style_for(tokens=None) -> str:
+    def style_for(tokens=None, dark: bool = False) -> str:
         """Крупный вид для отдельного окна (tokens=None, светлая карточка) или вид под тему окна настроек:
         мельче, цвета и фон из темы, без жёстко белого."""
         if tokens is None:
             body, field = FONT_BODY, FONT_FIELD
-            bg, fg, field_bg, line = "#ffffff", "#16181c", "#f6f7f9", "#c8d0db"
+            from .dialogs import PALETTES
+            c = PALETTES[bool(dark)]
+            bg, fg, field_bg, line = c["card"], c["text"], c["note_bg"] if dark else "#f6f7f9", c["line"]
             button = (f" QFrame#installBlock QPushButton {{ font-size: {FONT_BODY}px; padding: 0px 16px; min-height: 36px;"
-                      f" max-height: 36px; border-radius: 8px; border: 1px solid #c8d0db; background: #ffffff; color: #16181c; }}"
-                      f" QFrame#installBlock QPushButton:hover {{ background: #f1f4f8; }}")
+                      f" max-height: 36px; border-radius: 8px; border: 1px solid {c['line']}; background: {c['card']}; color: {c['text']}; }}"
+                      f" QFrame#installBlock QPushButton:hover {{ background: {c['soft']}; }}")
         else:
             body, field = 13, 13
             bg, fg, field_bg, line = "transparent", tokens["text"], tokens["input_bg"], tokens["button_border"]
@@ -959,10 +977,10 @@ class InstallBlock(QFrame):
                 f" QFrame#installBlock QTextEdit#installField {{ font-size: {field}px; padding: 6px 10px;"
                 f" border: 1px solid {line}; border-radius: 8px; background: {field_bg}; color: {fg}; }}" + button)
 
-    def __init__(self, help: InstallHelp, parent=None, tokens=None):
+    def __init__(self, help: InstallHelp, parent=None, tokens=None, dark: bool = False):
         super().__init__(parent)
         self.setObjectName("installBlock")
-        self.setStyleSheet(self.style_for(tokens))
+        self.setStyleSheet(self.style_for(tokens, dark))
         self._compact = tokens is not None
         box = QVBoxLayout(self)
         box.setContentsMargins(14, 12, 14, 14)
@@ -988,20 +1006,20 @@ class InstallBlock(QFrame):
             self.settings_button.clicked.connect(lambda: open_url(help.settings_url))
             box.addWidget(self.settings_button, 0, Qt.AlignmentFlag.AlignLeft)
         if help.url:
-            link = QLabel(link_colored(f'<a href="{help.url}">{help.url_title or help.url}</a>'))
+            link = QLabel(link_colored(f'<a href="{help.url}">{help.url_title or help.url}</a>', dark))
             link.linkActivated.connect(open_url)   # not Qt's own opener: see sysenv.open_url
             link.setWordWrap(True)
             link.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
             box.addWidget(link)
             self.url_field = self._copy_row(box, help.url, tr("ocr.copy_link"), self._compact)
         if getattr(help, "url2", None):
-            link2 = QLabel(link_colored(f'<a href="{help.url2}">{help.url2_title or help.url2}</a>'))
+            link2 = QLabel(link_colored(f'<a href="{help.url2}">{help.url2_title or help.url2}</a>', dark))
             link2.linkActivated.connect(open_url)
             link2.setWordWrap(True)
             box.addWidget(link2)
             self._copy_row(box, help.url2, tr("ocr.copy_link"), self._compact)
         if sys.platform == "win32" and help.settings_url:
-            link2 = QLabel(link_colored(tr("ocr.second_link", url=TESSERACT_WINDOWS)))
+            link2 = QLabel(link_colored(tr("ocr.second_link", url=TESSERACT_WINDOWS), dark))
             link2.linkActivated.connect(open_url)
             link2.setWordWrap(True)
             box.addWidget(link2)

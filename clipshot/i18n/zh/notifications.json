@@ -1,0 +1,16 @@
+{
+  "notifications.empty": "没有新通知",
+  "notifications.read_all": "全部标为已读",
+  "notifications.title": "通知",
+  "notifications.translate_quota": "翻译：已达到每日上限",
+  "notifications.translate_quota_month": "翻译：已达到 Google 每月上限",
+  "notifications.translate_quota_month_sub": "如果 MyMemory 设为备用服务，将由它继续翻译",
+  "notifications.translate_quota_sub": "翻译服务明天之前不再接受文本",
+  "notifications.unread": "未读：{n}",
+  "notifications.update_button": "更新",
+  "notifications.update_sub": "ClipSD 新版本可以安装",
+  "notifications.update_title": "{version} 版本可用",
+  "notifications.whatsnew_installed": "已安装版本：有哪些变化",
+  "notifications.whatsnew_past": "以前的更新",
+  "notifications.whatsnew_title": "{version} 的新功能"
+}

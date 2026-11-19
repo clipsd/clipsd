@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ClipSD: self-contained Linux build (PyInstaller onedir) -> ClipSD-<version>-linux-x86_64.tar.gz
 # Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко). SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 #
 # Usage: packaging/linux/build_linux.sh [OUT_DIR]        (default OUT_DIR: <repo>/dist)
 # Env:   CLIPSD_BUILD_VENV  build venv (default <repo>/.venv-build-linux; never the program venv)
@@ -32,8 +33,10 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 echo "==> PyInstaller"
+# --add-data: absolute path, PyInstaller resolves a relative one against --specpath ($WORK/spec), not the repository
 "$VENV/bin/python" -m PyInstaller --noconfirm --clean --name clipsd \
   --paths . --collect-submodules clipshot --collect-data clipshot \
+  --add-data "$ROOT/CHANGELOG:CHANGELOG" \
   --distpath "$WORK/dist" --workpath "$WORK/build" --specpath "$WORK/spec" \
   --exclude-module tkinter --exclude-module unittest --exclude-module pydoc \
   --exclude-module PyQt6.QtQml --exclude-module PyQt6.QtQuick --exclude-module PyQt6.QtPdf \
@@ -96,6 +99,9 @@ cp packaging/linux/clipsd-switch packaging/linux/install.sh packaging/linux/unin
 cp packaging/linux/README.txt "$REL/README.txt"
 cp packaging/linux/README.en.txt "$REL/README.en.txt"
 cp LICENSE LICENSE.ru.txt "$REL/"
+# name and icon: additional terms under GPLv3 section 7 (TRADEMARKS.md), plain text next to LICENSE
+cp TRADEMARKS.md "$REL/TRADEMARKS.txt"
+cp TRADEMARKS.ru.md "$REL/TRADEMARKS.ru.txt"
 python3 packaging/make_notices.py linux "$REL/THIRD-PARTY-NOTICES.txt" "$WORK/system-libs.txt"
 cp -r packaging/gnome-extension "$REL/"
 find "$REL" -name '__pycache__' -prune -exec rm -rf {} +

@@ -1,4 +1,5 @@
 ﻿; ClipSD: installer for Windows 10/11 (Inno Setup 6). Copyright (C) 2026 Sergey Dayneko, GPL-3.0-or-later
+; Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 ; Built by packaging\build.ps1 inside the folder made by packaging/stage_windows.py:
 ;   dist\ClipSD-app\       the program (PyInstaller onedir, ClipSD-app.exe)
 ;   dist\launcher\ClipSD.exe  the permanent launcher (C, packaging\launcher\clipsd_launcher.c)
@@ -17,7 +18,7 @@
 
 #define AppName "ClipSD"
 #ifndef AppVersion
-  #define AppVersion "1.31.2"
+  #define AppVersion "1.32.0"
 #endif
 #define LauncherExe "ClipSD.exe"
 #define ProgramExe "ClipSD-app.exe"
@@ -203,6 +204,8 @@ Source: "..\dist\launcher\{#LauncherExe}"; DestDir: "{app}"
 Source: "..\dist\ClipSD-app\*"; DestDir: "{app}\{code:PayloadDir}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE.ru.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\TRADEMARKS.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\TRADEMARKS.ru.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
 ; preview (proba) installers only: the mark next to the program (stage_windows.py writes ..\PREVIEW)
 #if FileExists(AddBackslash(SourcePath) + "..\PREVIEW")

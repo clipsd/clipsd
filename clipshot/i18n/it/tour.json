@@ -1,5 +1,9 @@
 {
+  "tour.alltools_text": "Il pulsante «⋯» apre tutti gli strumenti per gruppo insieme ai loro tasti. Comodo quando la finestra è stretta e i gruppi sono chiusi, e per imparare i tasti.",
+  "tour.alltools_title": "Tutti gli strumenti",
   "tour.back": "Indietro",
+  "tour.bell_text": "Sulla campanella compare un punto quando c'è qualcosa di nuovo: è uscita una nuova versione (pulsante «Aggiorna»), le novità della versione installata, brevi messaggi del programma come «limite giornaliero di traduzione raggiunto».",
+  "tour.bell_title": "Notifiche",
   "tour.canvas_text": "Disegna direttamente sullo screenshot. L'oggetto appena disegnato resta selezionato: puoi spostarlo, trascinare le maniglie bianche, cambiarne colore e spessore.\n\nClic destro su un oggetto: menu (colore, riempimento, duplica, primo piano, elimina). Doppio clic sul testo: modificalo. Delete: elimina. Esc: deseleziona.",
   "tour.canvas_title": "Screenshot",
   "tour.capture_text": "{hotkey} in qualsiasi programma: lo schermo si blocca, seleziona un'area con il mouse e si aprirà qui. Un semplice clic senza selezione cattura l'intero monitor, Esc annulla.\n\nPuoi sostituire {hotkey} con qualsiasi scorciatoia ti sia comoda nelle impostazioni; il pulsante qui sotto le apre subito.\n\nLa prossima volta che premi {hotkey}, l'area precedente viene evidenziata: Enter o un clic all'interno cattura lo stesso punto.\n\nL'icona di ClipSD nell'area di notifica vicino all'orologio: il clic destro apre un menu da cui puoi ripetere questa presentazione.",
@@ -22,7 +26,7 @@
   "tour.step": "Passaggio {i} di {total}",
   "tour.text_color_text": "Il colore della cifra di un numero e del testo di un callout. «Auto» sceglie bianco o nero in base al colore di riempimento.",
   "tour.text_color_title": "Colore del testo",
-  "tour.tools_text": "Da sinistra a destra: selezione, callout, testo, numero, frecce (semplice, doppia, a mano libera), linea fluida, linea, rettangolo, ellisse, forma libera, evidenziatore, matita, sfocatura, gomma, ritaglio. Ogni strumento ha una scorciatoia di una sola lettera, visibile nel suggerimento al passaggio del mouse.\n\nPuoi riordinare i pulsanti: afferrane uno con il mouse e trascinalo in un nuovo punto. Un clic destro sulla riga ripristina l'ordine predefinito.",
+  "tour.tools_text": "Gli strumenti sono raggruppati: frecce e linee, forme, testi, disegno, nascondi e cancella, testo dall'immagine. «Seleziona e sposta», «Numero» e «Ritaglio» hanno sempre un pulsante proprio.\n\nUn clic sull'icona di un gruppo attiva il suo ultimo strumento usato, la piccola freccia ▾ a destra apre gli altri. In una finestra stretta i gruppi si chiudono in un solo pulsante e i tasti-lettera funzionano sempre: si vedono nel suggerimento.\n\nL'ordine si cambia trascinando: un gruppo intero o uno strumento all'interno del suo gruppo. Clic destro: strumento predefinito e ordine standard.",
   "tour.tools_title": "Strumenti",
   "tour.undo_text": "Le frecce indietro e avanti annullano e ripetono (Ctrl+Z e Ctrl+Y).\n\nIl pulsante con l'immagine sovrappone un'altra immagine allo screenshot: dagli appunti (Ctrl+V), da un file o una nuova cattura di un'area dello schermo. Puoi anche semplicemente trascinare un file nella finestra.",
   "tour.undo_title": "Annulla e inserisci un'immagine"

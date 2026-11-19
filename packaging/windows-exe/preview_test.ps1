@@ -1,5 +1,6 @@
 # ClipSD: the preview ("проба") installer, then a real installer over it, then removal (windows.yml, proba/* branches).
 # Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко). SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 #
 #   -SetupPreview  preview installer (packaging/preview_build.py copy): the installed program must say "build: preview"
 #   -SetupRelease  an ordinary installer of a later version: installed over the preview, it must say "build: release"

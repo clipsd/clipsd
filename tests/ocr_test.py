@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Текст с картинки: подготовка картинки, настоящее распознавание (Tesseract или встроенное в Windows),
 инструмент в редакторе, кнопка «Текст» в окне выделения.
 
@@ -198,11 +199,13 @@ ed.present()
 for _ in range(6):
     app.processEvents(); QTest.qWait(20)
 ed.set_zoom(1.0)
+ed.resize(1500, ed.height())   # 1.32: в узком окне группы свёрнуты и больших кнопок нет; здесь окно широкое
 app.processEvents(); QTest.qWait(30); app.processEvents()
 c = ed.canvas
 check(OCR in ed.tool_buttons and ed.tool_buttons[OCR].isVisible(), "кнопка инструмента есть")
 check(ed.ocr_button.isVisible() and "Копировать текст" in ed.ocr_button.text(), "фиолетовая кнопка «Копировать текст»")
-check("#7c3aed" in ed.ocr_button.styleSheet(), "кнопка заметного фиолетового цвета")
+check(ed.ocr_button.objectName() == "ocrButton" and "#5b21b6" in ed.styleSheet() and "#7c3aed" in ed.styleSheet(),
+      "кнопка фиолетовая (1.32: мягкая заливка, фиолетовый текст)")
 
 
 def line_of(word):
@@ -363,13 +366,13 @@ if engine == "tesseract":
 # 3а. Выключено в настройках: кнопок нет, клавиша и вызовы ничего не делают
 ctx.config["ocr_enabled"] = False
 ed.refresh_theme()
-check(not ed.tool_buttons[OCR].isVisible() and not ed.ocr_button.isVisible(), "выключено: кнопки скрыты")
+check(not ed.tool_strip.visible_widget(OCR).isVisible() and not ed.ocr_button.isVisible(), "выключено: кнопки скрыты")
 ed.select_tool(OCR)
 check(c.tool != OCR, "выключено: режим не включается")
 check(not any("текст" in a.text().lower() for a in ed.build_context_menu(None).actions()), "выключено: нет пункта в меню")
 ctx.config["ocr_enabled"] = True
 ed.refresh_theme()
-check(ed.ocr_button.isVisible(), "включено снова: кнопка вернулась")
+check(ed.ocr_button.isVisible() or ed.tool_strip.visible_widget(OCR).isVisible(), "включено снова: кнопка вернулась")
 
 # 3б. Программы распознавания нет: подсказка, команда и ссылка с кнопками «Скопировать»
 if sys.platform != "win32":

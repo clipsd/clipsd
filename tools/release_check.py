@@ -2,6 +2,7 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later. Распространяется по лицензии GNU GPL v3 или более поздней,
 # без каких-либо гарантий; полный текст: файл LICENSE или <https://www.gnu.org/licenses/gpl-3.0.html>.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Build checks run by GitHub Actions before a build.
 
 1. Placeholders that must never reach a release: STABLE_PUBLIC_KEYS in clipshot/update_channel.py
@@ -15,6 +16,8 @@
    STABLE_PUBLIC_KEYS or TEST_PUBLIC_KEYS (always an error).
 4. Urgency: CHANGELOG/<version>/CRITICAL (written by tools/release.sh --critical) makes the build log
    start with "СРОЧНО (исправление безопасности)" as a GitHub warning, so it is seen before signing.
+5. Name and icon (GPLv3 section 7): TRADEMARKS.md and TRADEMARKS.ru.md exist and every source file with the GPL
+   header points to them (tools/trademark_notice.py adds the line). Like placeholders: an error with --strict.
 
 Values are read from the source with ast: nothing of the program is imported.
 Run: python3 tools/release_check.py [--strict] [project]
@@ -126,6 +129,16 @@ def pin_problems(root: Path) -> list:
             for name in sorted(set(linux) & set(windows)) if linux[name] != windows[name]]
 
 
+def trademark_problems(root: Path) -> list:
+    """Additional terms on the name and icon: the two files and the notice in every GPL source header."""
+    problems = [f"{name} is missing" for name in ("TRADEMARKS.md", "TRADEMARKS.ru.md") if not (root / name).is_file()]
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import trademark_notice
+    problems += [f"{rel}: no notice of TRADEMARKS.md (run python3 tools/trademark_notice.py)"
+                 for rel in trademark_notice.missing(root)]
+    return problems
+
+
 URGENT_BANNER = "СРОЧНО (исправление безопасности)"
 
 
@@ -156,6 +169,9 @@ def main(argv) -> int:
     for problem in preview_problems(root):
         print(f"::error::preview build: {problem}")
         failed = True
+    for problem in trademark_problems(root):
+        print(f"::{'error' if strict else 'warning'}::name and icon notice: {problem}")
+        failed = failed or strict
     for problem in placeholder_problems(root):
         print(f"::{'error' if strict else 'warning'}::release placeholder: {problem}")
         failed = failed or strict

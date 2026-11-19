@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Китайский интерфейс: иероглифы и полноширинная пунктуация 、。，：（） берутся из китайского шрифта
 (fonts.CJK_FAMILIES), а не из случайного шрифта системы (узкие знаки с пустотой). Смена языка любым путём
 (i18n.set_language) сразу меняет запасные шрифты; на остальных языках шрифт прежний, без китайских семейств.

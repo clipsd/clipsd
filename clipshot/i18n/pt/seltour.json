@@ -1,0 +1,18 @@
+{
+  "seltour.s1_text": "Contorne com o mouse o trecho de que precisa. A moldura pronta pode ser ajustada pelos cantos e lados, ou movida arrastando por dentro.",
+  "seltour.s1_title": "Selecione uma área",
+  "seltour.s2_text": "A captura vai direto para a área de transferência e a janela se fecha. Basta colar em um mensageiro ou documento. Ctrl+Enter faz o mesmo.",
+  "seltour.s2_title": "Copiar e fechar",
+  "seltour.s3_text": "Abre a captura no editor: setas, números, molduras, texto, desfoque. Enter ou um clique dentro da moldura fazem o mesmo.",
+  "seltour.s3_title": "Editar",
+  "seltour.s4_text": "Remove a moldura para escolher outro lugar. As teclas R e Delete fazem o mesmo.",
+  "seltour.s4_title": "Selecionar de novo",
+  "seltour.s5_text": "Linha superior: gravar vídeo da tela, capturar a tela inteira e copiar o texto da imagem (reconhecimento).",
+  "seltour.s5_title": "Vídeo, tela inteira, texto",
+  "seltour.s6_text": "\"Traduzir seleção\" traduz o texto da moldura. \"Selecionar e traduzir\" espera você contornar o lugar. A tradução aparece em uma janelinha separada.",
+  "seltour.s6_title": "Tradução",
+  "seltour.s7_text": "Embaixo: o idioma do programa e a engrenagem de configurações (atalho, pasta das capturas, lupa).",
+  "seltour.s7_title": "Idioma e configurações",
+  "seltour.s8_text": "A cruz no canto do painel ou Esc fecha a janela sem captura. Você pode repetir este tour pelo menu do ícone perto do relógio.",
+  "seltour.s8_title": "Fechar a janela"
+}

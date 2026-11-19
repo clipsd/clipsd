@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Переводы: у каждого из 12 языков ровно ключи ru (эталон), подстановки {поле} те же, формы чисел полные;
 каждый tr("ключ") в коде есть в каталоге ru; без каталога языка программа говорит по-русски.
 

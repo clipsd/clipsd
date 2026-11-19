@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Собрать архивы ClipSD: Linux (самодостаточная сборка) и исходники для сборки Windows-установщика.
 # (C) 2026 Sergey Dayneko, GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${1:?папка для архивов}"

@@ -12,6 +12,7 @@ body = json.dumps(merged, ensure_ascii=False, indent=0, sort_keys=True)
 (ROOT / "clipshot/i18n/ru_builtin.py").write_text(
     "# ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)\n"
     "# SPDX-License-Identifier: GPL-3.0-or-later.\n"
+    "# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.\n"
     '"""Запасной русский каталог внутри модуля (создаётся tools/build_ru_builtin.py из ru/*.json, руками не править)."""\n'
     "import json\n\nCATALOG = json.loads(r'''" + body.replace("'''", "\\'\\'\\'") + "''')\n", encoding="utf-8")
 print(len(merged), "ключей")

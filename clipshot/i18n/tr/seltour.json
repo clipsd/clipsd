@@ -1,0 +1,18 @@
+{
+  "seltour.s1_text": "Fareyle gereken yeri çevreleyin. Hazır çerçeve köşelerinden ve kenarlarından ayarlanır, içinden sürüklenerek taşınır.",
+  "seltour.s1_title": "Alan seçin",
+  "seltour.s2_text": "Ekran görüntüsü doğrudan panoya gider ve pencere kapanır. Geriye mesajlaşma uygulamasına veya belgeye yapıştırmak kalır. Ctrl+Enter aynısını yapar.",
+  "seltour.s2_title": "Kopyala ve kapat",
+  "seltour.s3_text": "Görüntüyü düzenleyicide açar: oklar, numaralar, çerçeveler, metin, bulanıklaştırma. Enter ve çerçevenin içine tıklamak da aynısını yapar.",
+  "seltour.s3_title": "Düzenle",
+  "seltour.s4_text": "Çerçeveyi kaldırır, başka bir yeri seçebilirsiniz. R ve Delete tuşları da aynısını yapar.",
+  "seltour.s4_title": "Yeniden seç",
+  "seltour.s5_text": "Üst sıra: ekran videosu kaydı, tüm ekranın görüntüsü ve resimden metin kopyalama (tanıma).",
+  "seltour.s5_title": "Video, tüm ekran, metin",
+  "seltour.s6_text": "\"Seçimi çevir\" çerçevedeki metni çevirir. \"Seç ve çevir\" yeri çevrelemenizi bekler. Çeviri ayrı küçük bir pencerede görünür.",
+  "seltour.s6_title": "Çeviri",
+  "seltour.s7_text": "Altta: program dili ve ayar dişlisi (kısayol, görüntü klasörü, büyüteç).",
+  "seltour.s7_title": "Dil ve ayarlar",
+  "seltour.s8_text": "Panelin köşesindeki çarpı veya Esc pencereyi görüntü almadan kapatır. Bu turu saatin yanındaki simge menüsünden tekrarlayabilirsiniz.",
+  "seltour.s8_title": "Pencereyi kapat"
+}

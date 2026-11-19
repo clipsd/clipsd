@@ -1,13 +1,16 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later. Распространяется по лицензии GNU GPL v3 или более поздней,
 # без каких-либо гарантий; полный текст: файл LICENSE или <https://www.gnu.org/licenses/gpl-3.0.html>.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Вводный курс: окно редактора затемняется, по очереди подсвечиваются блоки с пояснением."""
 
-from PyQt6.QtCore import QEvent, QPoint, QRect, QRectF, Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFontMetrics, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from .i18n import tr
+
+from .themes import BLUE_BUTTON, BLUE_BUTTON_BORDER, BLUE_BUTTON_HOVER, LINK   # 1.32: белый текст на синем 5,8:1
 
 CARD_STYLE = """
 #tourCard { background: #ffffff; border: 1px solid #c9ccd1; border-radius: 12px; }
@@ -19,14 +22,14 @@ QPushButton { min-height: 30px; padding: 0 14px; border-radius: 6px; border: 1px
     color: #1c1f24; }
 QPushButton:hover { background: #eef3fb; border-color: #9fb6da; color: #1c1f24; }
 QPushButton:disabled { background: #f4f5f7; border-color: #dfe2e6; color: #8a9099; }
-QPushButton#tourNext { background: #1e78ff; color: white; border: 1px solid #1660d0; font-weight: bold; }
-QPushButton#tourNext:hover { background: #3a8bff; color: white; }
+QPushButton#tourNext { background: %(blue)s; color: white; border: 1px solid %(border)s; font-weight: bold; }
+QPushButton#tourNext:hover { background: %(hover)s; color: white; }
 QPushButton#tourSkip { border: none; background: transparent; color: #5b6068; }
 QPushButton#tourSkip:hover { background: transparent; color: #1c1f24; text-decoration: underline; }
-QPushButton#tourAction { border: none; background: transparent; color: #1660d0; font-weight: bold;
+QPushButton#tourAction { border: none; background: transparent; color: %(link)s; font-weight: bold;
     text-decoration: underline; padding: 0; min-height: 22px; }
-QPushButton#tourAction:hover { background: transparent; color: #1e78ff; }
-"""
+QPushButton#tourAction:hover { background: transparent; color: %(hover)s; }
+""" % {"blue": BLUE_BUTTON, "border": BLUE_BUTTON_BORDER, "hover": BLUE_BUTTON_HOVER, "link": LINK}
 # Карточка всегда белая, поэтому у каждой надписи и кнопки свой явный цвет: цвет из палитры приложения на Windows
 # в тёмной теме светлый, и кнопки языков, «Назад», «Пропустить» были почти белыми на белом (19.11.2026).
 
@@ -34,19 +37,29 @@ QPushButton#tourAction:hover { background: transparent; color: #1e78ff; }
 LANGUAGE_STEP = "language"   # пометка шага выбора языка в таблице шагов
 
 
-def steps(ed):
+def steps(ed, language: bool = True):
     """(что подсветить, заголовок, текст[, (надпись кнопки, действие)]).
 
-    Подсветка — виджет, список виджетов или None (карточка по центру)."""
+    Подсветка — виджет, список виджетов или None (карточка по центру). language=False: без первого шага выбора
+    языка (1.32, слово владельца: при повторном знакомстве из «?», F1, меню значка и настроек он не нужен)."""
+    all_steps = _steps(ed)
+    return all_steps if language else all_steps[1:]
+
+
+def _steps(ed):
     colors = list(ed.color_buttons.values()) + [ed.custom_color]
     sizes = ed.size_group.buttons()
     hotkey = ed.ctx.config.get("hotkey_region") or "Alt+W"
     from .language import menu_title
+    more = getattr(ed, "more_button", None)   # 1.32: «⋯ Все инструменты» и колокольчик
+    bell = getattr(ed, "bell_button", None)
     return [
         (None, menu_title(), tr("tour.lang_text"), LANGUAGE_STEP),   # 1.31: первый экран: выбор языка
         (None, tr("tour.intro_title"), tr("tour.intro_text")),
         (ed.tool_strip, tr("tour.tools_title"), tr("tour.tools_text")),
+        (more, tr("tour.alltools_title"), tr("tour.alltools_text")),
         ([ed.undo_button, ed.insert_button], tr("tour.undo_title"), tr("tour.undo_text")),
+        (bell, tr("tour.bell_title"), tr("tour.bell_text")),
         ([ed.help_button, ed.settings_button], tr("tour.help_title"), tr("tour.help_text")),
         (colors, tr("tour.color_title"), tr("tour.color_text")),
         (ed.text_color_button, tr("tour.text_color_title"), tr("tour.text_color_text")),
@@ -61,11 +74,15 @@ def steps(ed):
 class Tour(QWidget):
     finished = pyqtSignal()
 
-    def __init__(self, editor):
-        host = getattr(editor, "content", None) or editor.centralWidget()   # карточка окна без полей тени
+    def __init__(self, editor, language: bool = True):
+        # 1.32: со своей шапкой окна знакомство затемняет всю карточку окна (колокольчик, «?» и глобус в шапке),
+        # поля тени вокруг неё остаются прозрачными; с системным заголовком: содержимое окна
+        host = getattr(editor, "shell", None) if getattr(editor, "titlebar", None) is not None else None
+        host = host or getattr(editor, "content", None) or editor.centralWidget()
         super().__init__(host)
         self.editor = editor
-        self.steps = steps(editor)
+        self.with_language = language   # первый шаг: выбор языка (только самое первое знакомство)
+        self.steps = steps(editor, language)
         self.index = 0
         self.hole = QRect()
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
@@ -134,6 +151,8 @@ class Tour(QWidget):
             button = QPushButton()
             button.setObjectName("tourLang")
             button.setCheckable(True)
+            button.setIcon(icons.flag_icon(code))   # 1.32: флаг языка; «Как в системе»: глобус
+            button.setIconSize(QSize(24, 16))
             button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             button.clicked.connect(lambda _c=False, c=code: self._language_picked(c))
             self.lang_buttons[code] = button
@@ -144,8 +163,8 @@ class Tour(QWidget):
         self.lang_row.setStyleSheet("QPushButton#tourLang { min-height: 30px; font-size: 13px; padding: 0 4px;"
                                     " background: #ffffff; color: #1c1f24; border: 1px solid #c9ccd1; }"
                                     " QPushButton#tourLang:hover { background: #eef3fb; border-color: #9fb6da; }"
-                                    " QPushButton#tourLang:checked { background: #1e78ff; color: white;"
-                                    " border: 1px solid #1660d0; font-weight: bold; }")
+                                    f" QPushButton#tourLang:checked {{ background: {BLUE_BUTTON}; color: white;"
+                                    f" border: 1px solid {BLUE_BUTTON_BORDER}; font-weight: bold; }}")
         self._fill_languages()
         box.addWidget(self.lang_row)
 
@@ -168,7 +187,7 @@ class Tour(QWidget):
     def retranslate(self):
         """Язык сменён: шаги собираются заново (у редактора новые панели), подписи кнопок на новом языке."""
         from . import language
-        self.steps = steps(self.editor)
+        self.steps = steps(self.editor, self.with_language)
         self.skip.setText(tr("tour.skip"))
         self.back.setText(tr("tour.back"))
         self._fill_languages()
@@ -216,9 +235,10 @@ class Tour(QWidget):
             height += self.lang_row.sizeHint().height() + box.spacing()
         self.card.setFixedHeight(height)
         host = self.parentWidget()
-        if host is not None and height + 24 > host.height() and not self.editor.isMaximized():
+        room = self._card_rect().height() if host is not None else 0
+        if host is not None and height + 24 > room and not self.editor.isMaximized():
             # маленький снимок: окно редактора подрастает, чтобы карточка (выбор языка) поместилась целиком
-            self.editor.resize(self.editor.width(), self.editor.height() + height + 24 - host.height())
+            self.editor.resize(self.editor.width(), self.editor.height() + height + 24 - room)
         self.hole = self._target_rect(target)
         self._place_card()
         self.update()
@@ -247,6 +267,13 @@ class Tour(QWidget):
 
     # --- геометрия -----------------------------------------------------------
 
+    def _card_rect(self) -> QRect:
+        """Видимая карточка окна (без полей тени): её затемняем, в ней ставим карточку шага."""
+        host = self.parentWidget()
+        if host is not None and hasattr(host, "card"):
+            return host.card().toRect()
+        return self.rect()
+
     def _target_rect(self, target) -> QRect:
         if target is None:
             return QRect()
@@ -255,12 +282,14 @@ class Tour(QWidget):
         for w in widgets:
             if w is None or not w.isVisible():
                 continue
-            top_left = w.mapTo(self.parentWidget(), QPoint(0, 0))
+            top_left = self.parentWidget().mapFromGlobal(w.mapToGlobal(QPoint(0, 0)))   # и из шапки окна
             rect = rect.united(QRect(top_left, w.size()))
-        return rect.adjusted(-6, -6, 6, 6) if rect.isValid() else QRect()
+        if not rect.isValid():
+            return QRect()
+        return rect.adjusted(-6, -6, 6, 6).intersected(self._card_rect().adjusted(2, 2, -2, -2))
 
     def _place_card(self):
-        area = self.rect().adjusted(12, 12, -12, -12)
+        area = self._card_rect().adjusted(12, 12, -12, -12)
         size = self.card.size()
         if not self.hole.isValid():
             pos = area.center() - QPoint(size.width() // 2, size.height() // 2)
@@ -287,7 +316,12 @@ class Tour(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         shade = QPainterPath()
-        shade.addRect(QRectF(self.rect()))
+        host = self.parentWidget()
+        if host is not None and hasattr(host, "card"):   # карточка окна со скруглёнными углами, без полей тени
+            radius = host.radius() if hasattr(host, "radius") else 0
+            shade.addRoundedRect(QRectF(self._card_rect()), radius, radius)
+        else:
+            shade.addRect(QRectF(self.rect()))
         if self.hole.isValid():
             cut = QPainterPath()
             cut.addRoundedRect(QRectF(self.hole), 8, 8)

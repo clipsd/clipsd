@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Потоки заданий (проверка почты MyMemory, «Копировать текст»): 30 запусков подряд, поток удаляется только после выхода
 из run(); при ошибке процесс падал бы с «QThread: Destroyed while thread is still running» (код 134).
 Сеть подменена. Запуск: QT_QPA_PLATFORM=offscreen python3 tests/threads_test.py"""

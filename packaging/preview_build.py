@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Make a preview ("проба") copy of the sources: the owner's own test of install and update before
 the real update channel exists.
 

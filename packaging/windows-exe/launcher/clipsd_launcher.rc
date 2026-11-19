@@ -1,4 +1,5 @@
 /* ClipSD launcher resources. Copyright (C) 2026 Sergey Dayneko. SPDX-License-Identifier: GPL-3.0-or-later
+ * Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
  * Compiled by rc.exe from build.ps1 with /I pointing at this folder and at the folder with clipsd.ico.
  * Keep this file ASCII: rc.exe reads it in the ANSI code page.
  */

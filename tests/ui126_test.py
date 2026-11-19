@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Интерфейс 1.26: окно текста крупное и по содержимому, один размер букв в окошке перевода, Ctrl+L переводит рамку,
 подсказка режима не обрезается, полоса перевода помещается в 1280, круглые ручки рамки, настройки с прокруткой.
 Сеть подменяется; распознавание настоящее (нужен Tesseract).
@@ -476,7 +477,7 @@ settle()
 sizes = {(c.width(), c.height()) for c in ch.cards.values()}
 check(len(sizes) == 1, f"выбор оформления: карточки одного размера {sizes}")
 cards = list(ch.cards.values())
-check(len({c.findChild(type(ch.findChild(__import__('PyQt6.QtWidgets', fromlist=['QLabel']).QLabel, 'head')), 'cardNote').height() for c in cards}) == 1,
+check(len({c.findChild(__import__('PyQt6.QtWidgets', fromlist=['QLabel']).QLabel, 'cardNote').height() for c in cards}) == 1,
       "подписи-пояснения одинаковой высоты")
 ch.close()
 

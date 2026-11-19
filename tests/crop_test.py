@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Обрезка в два шага: выделить, поправить (углы, стороны, перенос), подтвердить (кнопка, Enter, двойной щелчок) или отменить.
 
 Запуск: QT_QPA_PLATFORM=offscreen python3 tests/crop_test.py

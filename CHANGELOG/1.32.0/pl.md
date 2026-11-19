@@ -1,0 +1,10 @@
+- Nowy edytor. Narzędzia są zebrane w grupy (strzałki i linie, kształty, napisy, rysowanie i inne). Przycisk „Wszystkie narzędzia” pokazuje je wszystkie naraz, razem z klawiszami. Przy wąskim zrzucie okno edytora też jest wąskie: grupy się zwijają, a wszystkie narzędzia są pod ręką.
+- Menu prawego przycisku. Menu zaznaczonego obiektu nie zasłania już jego ramki i uchwytów: otwiera się obok obiektu.
+- Dzwonek powiadomień. W edytorze pojawił się dzwonek „Powiadomienia”: nowa wersja z przyciskiem „Aktualizuj”, nowości w zainstalowanej wersji i krótkie komunikaty programu. O nowej wersji najpierw informuje dzwonek, a okno z propozycją aktualizacji pojawi się później, jeśli do tego czasu nie zaktualizujesz programu sam.
+- Przewodnik po oknie zaznaczania. Przy pierwszym zrzucie okno krok po kroku pokazuje, co robią przyciski panelu. Można go powtórzyć z menu ikony przy zegarze: „Przewodnik po oknie zaznaczania”.
+- Przy nazwach języków są teraz flagi. Język wybrany w ustawieniach zmienia się od razu, bez zamykania okna.
+- Ustawienia podzielono na sekcje. Lista po lewej (Ogólne, Zrzut, Edytor, Tekst i tłumaczenie, Aktualizacje, O programie), nad nią wyszukiwanie. Okno pamięta, która sekcja była otwarta.
+- Ocena ClipSD. ClipSD można ocenić od 1 do 5 gwiazdek i zostawić opinię: menu ikony lub „?” w edytorze, „Oceń ClipSD”. Czasem program sam zaproponuje ocenę, ale tylko wtedy, gdy nie robisz zrzutu i nie pracujesz w edytorze.
+- Ostrzejsze zrzuty na ekranach ze skalowaniem. Na ekranach ze skalowaniem (125%, 150%, 200%) zrzuty są ostrzejsze: edytor pokazuje je bez rozmycia. W Linuksie przeglądarki i dokumenty wklejają je w oryginalnym rozmiarze, bez rozciągania. W ustawieniach, sekcja „Zrzut”, można wybrać „Rozmiar zrzutu”: pełna rozdzielczość albo jak na ekranie.
+- Spokojniejszy wygląd okien. Spokojniejszy wygląd i czytelniejszy tekst: napisy i przyciski mają większy kontrast, główny zielony przycisk jest ciemniejszy, a okno edytora domyślnie ma cienką ramkę.
+- Okno „O programie”. W oknie „O programie” są teraz warunki użycia nazwy i ikony ClipSD oraz link do aktualności na Telegramie.

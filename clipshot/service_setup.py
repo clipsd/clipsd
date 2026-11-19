@@ -1,6 +1,7 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later. Распространяется по лицензии GNU GPL v3 или более поздней,
 # без каких-либо гарантий; полный текст: файл LICENSE или <https://www.gnu.org/licenses/gpl-3.0.html>.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Окна подключения сервисов перевода (в общем стиле ClipSD, dialogs.ClipDialog):
 почта для MyMemory (50 000 знаков в день) и ключ Google Cloud (500 000 знаков в месяц)."""
 
@@ -8,7 +9,8 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout
 
-from .dialogs import ACCENT, ClipDialog
+from .dialogs import PALETTES, ClipDialog
+from .themes import BLUE_BUTTON   # номера шагов: белый текст 5,8:1 (1.32), акцент давал 4,05:1
 from .i18n import tr
 from .sysenv import open_url
 
@@ -116,7 +118,7 @@ class GoogleSetupDialog(ClipDialog):
             num = QLabel(str(i + 1))
             num.setFixedSize(28, 28)
             num.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            num.setStyleSheet(f"QLabel {{ background: {ACCENT}; color: white; border-radius: 14px; font-weight: bold; }}")
+            num.setStyleSheet(f"QLabel {{ background: {BLUE_BUTTON}; color: white; border-radius: 14px; font-weight: bold; }}")
             label = QLabel(tr(text))
             label.setWordWrap(True)
             label.setFixedWidth(400)   # постоянная ширина: высота строк с переносом считается правильно, текст не режется
@@ -127,9 +129,10 @@ class GoogleSetupDialog(ClipDialog):
             open_b.clicked.connect(lambda _=False, u=url: open_url(u))
             copy_b = QPushButton(tr("service_setup.copy_link"))
             copy_b.setObjectName("clipSmall")
+            pal = PALETTES[self.dark]
             copy_b.setStyleSheet("QPushButton#clipSmall { font-size: 14px; padding: 4px 12px; min-height: 26px;"
-                                 " border-radius: 8px; background: #ffffff; color: #16181c; border: 1px solid #c8d0db; }"
-                                 " QPushButton#clipSmall:hover { background: #f1f4f8; }")   # маленькая светлая кнопка, не текст-ссылка
+                                 f" border-radius: 8px; background: {pal['card']}; color: {pal['text']}; border: 1px solid {pal['line']}; }}"
+                                 f" QPushButton#clipSmall:hover {{ background: {pal['soft']}; }}")   # маленькая светлая кнопка, не текст-ссылка
             copy_b.setCursor(Qt.CursorShape.PointingHandCursor)
             open_b.setFixedHeight(36)
             copy_b.setFixedHeight(36)   # обе кнопки шага одной высоты, на одной линии
@@ -144,7 +147,7 @@ class GoogleSetupDialog(ClipDialog):
         num = QLabel(str(n + 1))
         num.setFixedSize(28, 28)
         num.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        num.setStyleSheet(f"QLabel {{ background: {ACCENT}; color: white; border-radius: 14px; font-weight: bold; }}")
+        num.setStyleSheet(f"QLabel {{ background: {BLUE_BUTTON}; color: white; border-radius: 14px; font-weight: bold; }}")
         grid.addWidget(num, n, 0, Qt.AlignmentFlag.AlignTop)
         box = QVBoxLayout()
         box.setSpacing(6)

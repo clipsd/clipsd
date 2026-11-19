@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Выбор языка интерфейса из разных окон (1.31): меню значка у часов, глобус в редакторе, первый шаг знакомства,
 раздел в настройках. Языки названы на самих себе; смена сразу, без перезапуска программы.
 
@@ -82,7 +83,8 @@ def fill_menu(menu: QMenu, ctx):
     group.setExclusive(True)
     chosen = current_choice(ctx)
     for code, label in entries():
-        action = QAction(label, menu)
+        from . import icons
+        action = QAction(icons.flag_icon(code), label, menu)
         action.setCheckable(True)
         action.setChecked(code == chosen)
         action.setData(code)

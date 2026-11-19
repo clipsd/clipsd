@@ -1,5 +1,6 @@
 {
   "dialogs.close_tip": "Cerrar (Esc)",
+  "dialogs.ok": "Entendido",
   "dialogs.paste": "Pegar",
   "dialogs.paste_tip": "Pegar desde el portapapeles"
 }

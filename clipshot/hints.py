@@ -1,6 +1,7 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later. Распространяется по лицензии GNU GPL v3 или более поздней,
 # без каких-либо гарантий; полный текст: файл LICENSE или <https://www.gnu.org/licenses/gpl-3.0.html>.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Всплывающие подсказки действий (владелец, 18.11.2026: «снизу сделал какую-то строчку, и я её даже прочитать
 не могу, что нужно сделать»).
 
@@ -213,8 +214,9 @@ class ChoicePopup(QFrame):
         row = QHBoxLayout()
         row.setSpacing(10)
         self.yes_button = QPushButton(yes)
-        self.yes_button.setStyleSheet("QPushButton { background: #0d9488; color: white; border: 1px solid #0b766c; }"
-                                      " QPushButton:hover { background: #14b8a6; }")
+        from .themes import TEAL_BUTTON, TEAL_BUTTON_BORDER, TEAL_BUTTON_HOVER   # 1.32: белый текст 5,5:1
+        self.yes_button.setStyleSheet(f"QPushButton {{ background: {TEAL_BUTTON}; color: white; border: 1px solid {TEAL_BUTTON_BORDER}; }}"
+                                      f" QPushButton:hover {{ background: {TEAL_BUTTON_HOVER}; }}")
         self.no_button = QPushButton(no)
         self.no_button.setStyleSheet("QPushButton { background: #3c4043; color: white; border: 1px solid #5b5f66; }"
                                      " QPushButton:hover { background: #4a4e52; }")

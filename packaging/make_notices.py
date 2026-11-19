@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """THIRD-PARTY-NOTICES.txt: the third-party components inside a ClipSD build and the full texts of their licences.
 
     python3 packaging/make_notices.py linux|windows OUT_FILE
@@ -91,7 +92,8 @@ def build(platform: str, extra: str = "") -> str:
         rows.append(f"- {name} {version}\n  licence: {lic}\n  source: {url}")
         files += [t for t in texts if t not in files]
     head = ("ClipSD: third-party components inside this build\n"
-            "ClipSD itself: Copyright (C) 2026 Sergey Dayneko, GNU GPL v3 or later (files LICENSE, LICENSE.ru.txt).\n"
+            "ClipSD itself: Copyright (C) 2026 Sergey Dayneko, GNU GPL v3 or later (files LICENSE, LICENSE.ru.txt),\n"
+            "with additional terms on the name and icon under GPL section 7 (files TRADEMARKS.txt, TRADEMARKS.ru.txt).\n"
             "The source code of every component is available at the address given next to it.\n\n"
             "Portions of this software are copyright (C) 2026 The FreeType Project (www.freetype.org). All rights reserved.\n\n")
     body = "\n".join(rows)

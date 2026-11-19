@@ -1,5 +1,9 @@
 {
+  "tour.alltools_text": "Przycisk „⋯” otwiera wszystkie narzędzia według grup razem z ich klawiszami. Przydaje się, gdy okno jest wąskie, a grupy zwinięte, i do nauki klawiszy.",
+  "tour.alltools_title": "Wszystkie narzędzia",
   "tour.back": "Wstecz",
+  "tour.bell_text": "Na dzwonku pojawia się kropka, gdy jest coś nowego: wyszła nowa wersja (przycisk „Aktualizuj”), co nowego w zainstalowanej wersji, krótkie komunikaty programu, na przykład „dzienny limit tłumaczenia wyczerpany”.",
+  "tour.bell_title": "Powiadomienia",
   "tour.canvas_text": "Rysuj bezpośrednio na zrzucie. Dopiero co narysowany obiekt pozostaje zaznaczony: możesz go przesuwać, ciągnąć za białe uchwyty, zmieniać kolor i grubość.\n\nPrawy przycisk na obiekcie: menu (kolor, wypełnienie, duplikuj, na pierwszy plan, usuń). Dwukrotne kliknięcie tekstu: edycja. Delete: usuń. Esc: odznacz.",
   "tour.canvas_title": "Zrzut",
   "tour.capture_text": "{hotkey} w dowolnym programie: ekran zastyga, zaznacz obszar myszą, a zrzut otworzy się tutaj. Zwykłe kliknięcie bez zaznaczania robi zrzut całego monitora, Esc anuluje.\n\nSkrót {hotkey} możesz w ustawieniach zamienić na dowolny wygodny, przycisk poniżej od razu je otwiera.\n\nPrzy następnym {hotkey} podświetla się poprzedni obszar: Enter lub kliknięcie wewnątrz robi zrzut tego samego miejsca.\n\nIkona ClipSD w zasobniku obok zegara: prawy przycisk otwiera menu, w którym można powtórzyć ten przewodnik.",
@@ -22,7 +26,7 @@
   "tour.step": "Krok {i} z {total}",
   "tour.text_color_text": "Kolor cyfry w numerze i tekstu w objaśnieniu. „Auto” sam wybiera biały lub czarny pod kolor wypełnienia.",
   "tour.text_color_title": "Kolor tekstu",
-  "tour.tools_text": "Od lewej do prawej: zaznaczanie, objaśnienie, tekst, numer, strzałki (zwykła, dwustronna, odręczna), gładka linia, linia, prostokąt, elipsa, kształt odręczny, zakreślacz, ołówek, rozmycie, gumka, kadrowanie. Każde narzędzie ma przypisany klawisz z literą, widoczny w podpowiedzi po najechaniu.\n\nKolejność przycisków można zmienić: chwyć przycisk myszą i przeciągnij w nowe miejsce. Kliknięcie prawym przyciskiem na pasku przywraca domyślną kolejność.",
+  "tour.tools_text": "Narzędzia są zebrane w grupy: strzałki i linie, kształty, napisy, rysowanie, ukryj i wymaż, tekst z obrazu. „Zaznaczanie i przesuwanie”, „Numer” i „Kadrowanie” mają zawsze osobne przyciski.\n\nKliknięcie ikony grupy włącza jej ostatnio użyte narzędzie, mała strzałka ▾ po prawej otwiera pozostałe. W wąskim oknie grupy zwijają się do jednego przycisku, a klawisze-litery działają zawsze: widać je w podpowiedzi.\n\nKolejność zmienia się przeciąganiem: cała grupa albo narzędzie w obrębie swojej grupy. Prawy przycisk: narzędzie domyślne i standardowa kolejność.",
   "tour.tools_title": "Narzędzia",
   "tour.undo_text": "Strzałki wstecz i naprzód: cofnij i ponów (Ctrl+Z i Ctrl+Y).\n\nPrzycisk z obrazkiem nakłada na zrzut inny obraz: ze schowka (Ctrl+V), z pliku lub nowy zrzut obszaru ekranu. Plik można też po prostu przeciągnąć do okna.",
   "tour.undo_title": "Cofanie i wstawianie obrazu"

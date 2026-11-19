@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """The example picture of the tour is in the language of the interface and follows a change of language (1.31.2).
 
 19.11.2026, Windows: ClipSD started in Russian, the owner chose Bulgarian on the first step of the tour; the panels
@@ -102,7 +103,7 @@ check(same(ed.canvas.base, pictures["ru"]), "the example opens in Russian")
 mark = Shape(RECT, "#ff0000", 3, QPointF(100, 100))
 mark.points[1] = QPointF(300, 200)
 ed.canvas.shapes.append(mark)   # a mark the person drew: it must stay
-ed.start_tour()
+ed.start_tour(language=True)   # шаг выбора языка: как при самом первом знакомстве
 settle()
 ed.tour.lang_buttons["bg"].click()
 settle()

@@ -1,0 +1,16 @@
+{
+  "notifications.empty": "Новых уведомлений нет",
+  "notifications.read_all": "Прочитать все",
+  "notifications.title": "Уведомления",
+  "notifications.translate_quota": "Перевод: дневной лимит исчерпан",
+  "notifications.translate_quota_month": "Перевод: месячный лимит Google исчерпан",
+  "notifications.translate_quota_month_sub": "Перевод продолжит MyMemory, если он включён запасным",
+  "notifications.translate_quota_sub": "Сервис перевода не принимает текст до завтра",
+  "notifications.unread": "Непрочитанных: {n}",
+  "notifications.update_button": "Обновить",
+  "notifications.update_sub": "Новая версия ClipSD готова к установке",
+  "notifications.update_title": "Доступна версия {version}",
+  "notifications.whatsnew_installed": "Установленная версия: что изменилось",
+  "notifications.whatsnew_past": "Прошлое обновление",
+  "notifications.whatsnew_title": "Что нового в {version}"
+}

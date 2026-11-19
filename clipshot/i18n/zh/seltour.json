@@ -1,0 +1,18 @@
+{
+  "seltour.s1_text": "用鼠标圈出需要的位置。画好的框可以拖动角和边来调整，也可以在框内拖动来整体移动。",
+  "seltour.s1_title": "选择区域",
+  "seltour.s2_text": "截图直接进入剪贴板，窗口关闭。接着粘贴到聊天软件或文档即可。Ctrl+Enter 效果相同。",
+  "seltour.s2_title": "复制并关闭",
+  "seltour.s3_text": "在编辑器中打开截图：箭头、编号、边框、文字、模糊。Enter 和在框内单击效果相同。",
+  "seltour.s3_title": "编辑",
+  "seltour.s4_text": "去掉选框，可以圈选别的位置。R 键和 Delete 键效果相同。",
+  "seltour.s4_title": "重新选择",
+  "seltour.s5_text": "上排：录制屏幕视频、截取整个屏幕、复制图片中的文字（文字识别）。",
+  "seltour.s5_title": "视频、全屏、文字",
+  "seltour.s6_text": "点“翻译所选内容”，会翻译框内的文字。点“选择并翻译”，会等你圈出位置后再翻译。译文显示在单独的小窗口中。",
+  "seltour.s6_title": "翻译",
+  "seltour.s7_text": "底部：程序语言和设置齿轮（快捷键、截图文件夹、放大镜）。",
+  "seltour.s7_title": "语言和设置",
+  "seltour.s8_text": "面板角上的叉号或 Esc 会不截图直接关闭窗口。可以从时钟旁的托盘图标菜单再次查看此导览。",
+  "seltour.s8_title": "关闭窗口"
+}

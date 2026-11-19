@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <!-- ClipSD launcher manifest. Copyright (C) 2026 Sergey Dayneko. SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md. -->
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <assemblyIdentity type="win32" name="SergeyDayneko.ClipSD.Launcher" version="2.0.0.0" processorArchitecture="*"/>
   <description>ClipSD</description>

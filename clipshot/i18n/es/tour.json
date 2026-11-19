@@ -1,5 +1,9 @@
 {
+  "tour.alltools_text": "El botón «⋯» abre todas las herramientas por grupos junto con sus teclas. Útil cuando la ventana es estrecha y los grupos están plegados, y para aprender las teclas.",
+  "tour.alltools_title": "Todas las herramientas",
   "tour.back": "Atrás",
+  "tour.bell_text": "En la campana aparece un punto cuando hay algo nuevo: ha salido una versión nueva (botón «Actualizar»), novedades de la versión instalada, mensajes breves del programa como «límite diario de traducción alcanzado».",
+  "tour.bell_title": "Notificaciones",
   "tour.canvas_text": "Dibuje directamente sobre la captura. El objeto que acaba de dibujar queda seleccionado: puede moverlo, arrastrar los tiradores blancos, cambiar su color y grosor.\n\nClic derecho en un objeto: menú (color, relleno, duplicar, traer al frente, eliminar). Doble clic en un texto: editarlo. Delete: eliminar. Esc: quitar la selección.",
   "tour.canvas_title": "Captura",
   "tour.capture_text": "{hotkey} en cualquier programa: la pantalla se congela, seleccione un área con el ratón y se abrirá aquí. Un simple clic sin seleccionar captura todo el monitor, Esc cancela.\n\nPuede cambiar {hotkey} por cualquier atajo que prefiera en la configuración; el botón de abajo la abre directamente.\n\nLa próxima vez que pulse {hotkey}, se resaltará el área anterior: Enter o un clic dentro captura el mismo lugar.\n\nEl icono de ClipSD en la bandeja, junto al reloj: el clic derecho abre un menú donde puede repetir este recorrido.",
@@ -22,7 +26,7 @@
   "tour.step": "Paso {i} de {total}",
   "tour.text_color_text": "El color de la cifra de un número y del texto de una llamada. «Auto» elige blanco o negro según el color de relleno.",
   "tour.text_color_title": "Color del texto",
-  "tour.tools_text": "De izquierda a derecha: selección, llamada, texto, número, flechas (simple, doble, a mano alzada), línea suave, línea, rectángulo, elipse, forma libre, resaltador, lápiz, desenfoque, borrador, recorte. Cada herramienta tiene un atajo de una sola letra, que aparece en la información emergente al pasar el ratón.\n\nPuede reordenar los botones: tome uno con el ratón y arrástrelo a un nuevo lugar. Un clic derecho en la fila restablece el orden predeterminado.",
+  "tour.tools_text": "Las herramientas están agrupadas: flechas y líneas, formas, textos, dibujo, ocultar y borrar, texto de la imagen. «Seleccionar y mover», «Número» y «Recortar» tienen siempre su propio botón.\n\nUn clic en el icono de un grupo activa su última herramienta usada; la pequeña flecha ▾ de la derecha abre las demás. En una ventana estrecha los grupos se pliegan en un solo botón y las teclas de letra funcionan siempre: aparecen en la información sobre herramientas.\n\nEl orden se cambia arrastrando: un grupo entero o una herramienta dentro de su grupo. Clic derecho: herramienta predeterminada y orden estándar.",
   "tour.tools_title": "Herramientas",
   "tour.undo_text": "Las flechas atrás y adelante deshacen y rehacen (Ctrl+Z y Ctrl+Y).\n\nEl botón de la imagen coloca otra imagen encima de la captura: desde el portapapeles (Ctrl+V), desde un archivo o una nueva captura de un área de la pantalla. También puede simplemente arrastrar un archivo a la ventana.",
   "tour.undo_title": "Deshacer e insertar una imagen"

@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Масштаб вида в редакторе: кнопки, Ctrl+колесо, клавиши; рисование при любом масштабе; итоговый снимок.
 
 Запуск: QT_QPA_PLATFORM=offscreen python3 tests/zoom_test.py

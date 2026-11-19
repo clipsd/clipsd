@@ -1,5 +1,6 @@
 # ClipSD: first install of the Linux package. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """install.sh WITHOUT CLIPSD_NO_SYSTEM on a machine where the service does not exist yet:
 `systemctl --user stop clipsd.service` returns 5, the install must still finish with exit code 0 (1.31.1 fix).
 Also: when an enabled extension of a working copy already holds Alt+W, no second (GNOME custom) Alt+W is created.

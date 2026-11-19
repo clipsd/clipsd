@@ -1,8 +1,10 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Ширина надписей на 12 языках (1.31): панель окна выделения (подписи и пояснения кнопок не обрезаются, слово плитки
 помещается в плитку, на экране 1280 панель не уходит в «только значки»), редактор (кнопки не сжаты меньше текста,
 окно редактора для маленького снимка не шире 1280), окно настроек (помещается на 1280x720 по ширине),
+окно оценки и окно после оценки (1.32: кнопки не уже текста, ширина не больше 760),
 выбор языка (смена из меню у часов, глобуса редактора, знакомства и настроек; config language записан;
 названия языков на самих себе не переводятся).
 
@@ -138,11 +140,70 @@ def editor_case(lang):
     ed.close()
 
 
+def rating_case(lang):
+    """1.32: окно оценки и окно после отправки: кнопки не уже текста, окна не шире 760, звёзды и подписи видны."""
+    from clipshot import feedback
+    tmp = tempfile.mkdtemp(prefix="clipsd-i18nw-rate-")
+    dlg = feedback.build_rating_dialog({}, directory=tmp)
+    dlg.open_centered()
+    dlg.set_stars(2)
+    settle()
+    check(dlg.width() <= 760, f"{lang}: окно оценки шире 760 ({dlg.width()})")
+    for w in dlg.findChildren(QAbstractButton):
+        if w.isVisible() and w.text().strip() and w not in dlg.star_buttons:
+            need = w.fontMetrics().horizontalAdvance(w.text().replace("&", ""))
+            check(w.width() >= need, f"{lang}: оценка: кнопка «{w.text().strip()}» уже текста ({w.width()} < {need})")
+    hint = dlg.stars_hint
+    check(hint.width() >= hint.fontMetrics().horizontalAdvance(hint.text()), f"{lang}: подпись «{hint.text()}» обрезана")
+    dlg.outcome = "test"
+    dlg.close()
+    done = feedback.Delivery()
+    done.finish("queued")
+    thanks = feedback.build_thanks_dialog(2, "x", done)
+    thanks.open_centered()
+    settle()
+    check(thanks.width() <= 760, f"{lang}: окно после оценки шире 760 ({thanks.width()})")
+    for w in thanks.findChildren(QAbstractButton):
+        if w.isVisible() and w.text().strip():
+            need = w.fontMetrics().horizontalAdvance(w.text().replace("&", ""))
+            check(w.width() >= need, f"{lang}: после оценки: кнопка «{w.text().strip()}» уже текста ({w.width()} < {need})")
+    thanks.close()
+    already = feedback.build_already_dialog({"rating_sent": True, "rating_stars": 4, "rating_day": "2026-11-19"},
+                                            directory=tmp)
+    already.open_centered()
+    settle()
+    check(already.width() <= 760, f"{lang}: окно «Вы уже оценили» шире 760 ({already.width()})")
+    for w in already.findChildren(QAbstractButton):
+        if w.isVisible() and w.text().strip():
+            need = w.fontMetrics().horizontalAdvance(w.text().replace("&", ""))
+            check(w.width() >= need, f"{lang}: «Вы уже оценили»: кнопка «{w.text().strip()}» уже текста")
+    already.close()
+
+
 def settings_case(lang):
     dlg = SettingsDialog(dict(appmod.DEFAULTS))
     dlg.show()
     settle()
     check(dlg.width() <= 1280, f"{lang}: настройки шире 1280 ({dlg.width()})")
+    # 1.32: «Размер снимка» на самом узком экране (1280x720 при 150%: окно 813x420): короткие пункты помещаются в
+    # поле списка с запасом 20% (шрифт системный, в облачной сборке DejaVu Sans), пояснение строкой под списком
+    from PyQt6.QtWidgets import QStyle, QStyleOptionComboBox
+    dlg.resize(813, 420)
+    dlg.show_section("shot")
+    settle()
+    box = dlg.snapshot_size
+    opt = QStyleOptionComboBox()
+    box.initStyleOption(opt)
+    room = box.style().subControlRect(QStyle.ComplexControl.CC_ComboBox, opt, QStyle.SubControl.SC_ComboBoxEditField, box).width()
+    widths = [box.fontMetrics().horizontalAdvance(box.itemText(i)) for i in range(box.count())]
+    print(f"{lang}: «Размер снимка» поле {room}, пункты {widths}")
+    check(max(widths) * 1.2 <= room, f"{lang}: «Размер снимка» без запаса 20% при 1280x720 и 150% (поле {room}, пункты {widths})")
+    hint = dlg.snapshot_size_hint
+    check(hint.wordWrap() and hint.text() == i18n.tr("settings.size_full_hint") and hint.isVisible(),
+          f"{lang}: пояснение «Полное разрешение» строкой под списком")
+    box.setCurrentIndex(1)
+    check(hint.text() == i18n.tr("settings.size_screen_hint") and i18n.tr("settings.size_screen_hint") in box.toolTip(),
+          f"{lang}: пояснение меняется вместе с пунктом")
     dlg.close()
 
 
@@ -151,6 +212,7 @@ for lang in i18n.LANGUAGES:
     selector_case(lang)
     editor_case(lang)
     settings_case(lang)
+    rating_case(lang)
 
 # --- выбор языка из разных окон (раздел 7 плана) ---------------------------------------
 names = set(i18n.LANGUAGE_NAMES.values())
@@ -170,7 +232,9 @@ de.trigger()
 ed.retranslate()
 settle()
 check(i18n.current() == "de" and ctx.config["language"] == "de", "глобус редактора: язык de выбран и записан в config")
-check(ed.save_button.text().strip() == i18n.tr_in("de", "editor.save"), f"редактор перестроен на de: {ed.save_button.text()}")
+# 1.32: в узком окне «Сохранить» значком, язык видно по подсказке
+check(ed.save_button.toolTip() == i18n.tr_in("de", "editor.save_tip") and (ed.save_button.text().strip() in ("", i18n.tr_in("de", "editor.save"))),
+      f"редактор перестроен на de: {ed.save_button.toolTip()}")
 check(ed.language_button.toolTip() == "Sprache · Language", f"подпись глобуса на de {ed.language_button.toolTip()}")
 check(ed.titlebar is None or (ed.titlebar.min_button.toolTip() == i18n.tr_in("de", "editor.minimize")
       and ed.titlebar.close_button.toolTip() == i18n.tr_in("de", "editor.close")
@@ -178,7 +242,7 @@ check(ed.titlebar is None or (ed.titlebar.min_button.toolTip() == i18n.tr_in("de
 labels_de = [a.text() for a in ed.language_button.menu().actions() if not a.isSeparator()]
 check(names <= set(labels_de), "названия языков не переводятся при смене языка")
 # знакомство: первый шаг с выбором языка
-ed.start_tour()
+ed.start_tour(language=True)   # шаг выбора языка: как при самом первом знакомстве
 settle()
 tour = ed.tour
 check(tour.index == 0 and tour.lang_row.isVisible() and not tour.hole.isValid(), "знакомство: первый экран: выбор языка")
@@ -204,6 +268,10 @@ dlg = SettingsDialog(ctx.config)
 dlg.language.setCurrentIndex(dlg.language.findData("en"))
 check(dlg.values()["language"] == "en", "настройки: язык в values()")
 check(names <= {dlg.language.itemText(i) for i in range(dlg.language.count())}, "настройки: языки на самих себе")
+check(i18n.current() == "en", "настройки: язык применяется сразу, без «Сохранить» (1.32)")
+i18n.set_language("bg")   # дальше тест идёт на bg
+ctx.config["language"] = "bg"
+dlg.config["language"] = "bg"
 
 
 # меню у часов: приложение без трея и окон, только меню
@@ -217,7 +285,7 @@ class FakeApp(Ctx):
 
     def capture_region(self, **_k): pass
     capture_fullscreen = open_screen_recording = open_file = open_folder = open_settings = capture_region
-    demo_tour = show_about = capture_region
+    demo_tour = demo_selector_tour = show_about = show_rating = capture_region
 
 
 appmod.CONFIG_PATH = __import__("pathlib").Path(tempfile.mkdtemp(prefix="clipsd-i18nw-cfg-")) / "config.json"

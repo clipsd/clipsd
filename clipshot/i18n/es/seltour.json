@@ -1,0 +1,18 @@
+{
+  "seltour.s1_text": "Rodee con el ratón la zona que necesita. El marco terminado se puede ajustar por las esquinas y los lados, o mover arrastrando desde dentro.",
+  "seltour.s1_title": "Seleccione un área",
+  "seltour.s2_text": "La captura va directamente al portapapeles y la ventana se cierra. Solo queda pegarla en un mensajero o un documento. Ctrl+Enter hace lo mismo.",
+  "seltour.s2_title": "Copiar y cerrar",
+  "seltour.s3_text": "Abre la captura en el editor: flechas, números, marcos, texto, desenfoque. Enter o un clic dentro del marco hacen lo mismo.",
+  "seltour.s3_title": "Editar",
+  "seltour.s4_text": "Quita el marco para poder elegir otro lugar. Las teclas R y Supr hacen lo mismo.",
+  "seltour.s4_title": "Seleccionar de nuevo",
+  "seltour.s5_text": "Fila superior: grabar un vídeo de la pantalla, capturar toda la pantalla y copiar el texto de la imagen (reconocimiento).",
+  "seltour.s5_title": "Vídeo, pantalla completa, texto",
+  "seltour.s6_text": "\"Traducir selección\" traduce el texto del marco. \"Seleccionar y traducir\" espera a que rodee el lugar. La traducción aparece en una ventanita aparte.",
+  "seltour.s6_title": "Traducción",
+  "seltour.s7_text": "Abajo: el idioma del programa y el engranaje de ajustes (atajo, carpeta de capturas, lupa).",
+  "seltour.s7_title": "Idioma y ajustes",
+  "seltour.s8_text": "La cruz en la esquina del panel o Esc cierra la ventana sin captura. Puede repetir este recorrido desde el menú del icono junto al reloj.",
+  "seltour.s8_title": "Cerrar la ventana"
+}

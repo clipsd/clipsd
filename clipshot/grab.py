@@ -1,6 +1,7 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later. Распространяется по лицензии GNU GPL v3 или более поздней,
 # без каких-либо гарантий; полный текст: файл LICENSE или <https://www.gnu.org/licenses/gpl-3.0.html>.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Захват всего рабочего стола.
 
 X11: напрямую через Qt (мгновенно).
@@ -18,7 +19,7 @@ from urllib.parse import unquote, urlparse
 
 from .sysenv import child_env
 
-from PyQt6.QtCore import QObject, QRect, Qt, QTimer, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, QRect, QSize, Qt, QTimer, pyqtSignal, pyqtSlot
 try:  # QtDBus есть только в Linux-сборках PyQt6; в Windows снимок делается через Qt напрямую
     from PyQt6.QtDBus import QDBusConnection, QDBusError, QDBusMessage
 except ImportError:
@@ -82,10 +83,18 @@ def _load(path: str):
     return pixmap
 
 
+# Мониторы с разным масштабом (100 % и 150 %): весь стол собирается в большем масштабе, монитор 100 % в нём растянут.
+# Родные снимки таких мониторов храним до следующего снимка: область на одном мониторе вырезается из его родного.
+_native_shots = []   # [(логическая геометрия монитора, его снимок в родном масштабе)]
+
+
 def grab_qt() -> QPixmap:
     screens = QGuiApplication.screens()
     union = virtual_geometry()
-    ratio = max(screen.devicePixelRatio() for screen in screens)
+    ratios = [screen.devicePixelRatio() for screen in screens]
+    ratio = max(ratios)
+    mixed = max(ratios) - min(ratios) > 0.01
+    _native_shots.clear()
     result = QPixmap(union.size() * ratio)
     result.setDevicePixelRatio(ratio)
     result.fill(Qt.GlobalColor.black)
@@ -93,9 +102,44 @@ def grab_qt() -> QPixmap:
     for screen in screens:
         geo = screen.geometry()
         shot = screen.grabWindow(0)
+        if mixed and shot.devicePixelRatio() < ratio - 0.01:
+            _native_shots.append((QRect(geo), shot))
         painter.drawPixmap(QRect(geo.topLeft() - union.topLeft(), geo.size()), shot)
     painter.end()
     return result
+
+
+def native_region(pixmap: QPixmap, rect: QRect) -> QPixmap:
+    """Снимок области в масштабе её монитора (rect: глобальные точки, pixmap: вырезан из всего стола).
+
+    Один масштаб на всех мониторах: снимок без изменений. Разный, а область целиком на мониторе с меньшим масштабом:
+    берём его родные пиксели (X11, Windows), иначе возвращаем растянутые пиксели к родному масштабу. Тогда плотность
+    в PNG (96 dpi × масштаб) и размер в точках совпадают с тем, что было на этом мониторе."""
+    screens = QGuiApplication.screens()
+    if pixmap.isNull() or len(screens) < 2:
+        return pixmap
+    ratios = [screen.devicePixelRatio() for screen in screens]
+    ratio = pixmap.devicePixelRatio()
+    if max(ratios) - min(ratios) <= 0.01 or abs(ratio - max(ratios)) > 0.01:
+        return pixmap   # масштаб один или стол снят не Qt-шным масштабом (GNOME под Wayland): не трогаем
+    for geo, shot in _native_shots:
+        if geo.contains(rect):
+            native = shot.devicePixelRatio()
+            local = rect.translated(-geo.topLeft())
+            out = shot.copy(QRect(round(local.x() * native), round(local.y() * native),
+                                  max(1, round(local.width() * native)), max(1, round(local.height() * native))))
+            out.setDevicePixelRatio(native)
+            return out
+    screen = QGuiApplication.screenAt(rect.center())
+    if screen is None or not screen.geometry().contains(rect):
+        return pixmap   # область на нескольких мониторах: полный масштаб
+    native = screen.devicePixelRatio()
+    if native >= ratio - 0.01:
+        return pixmap
+    out = pixmap.scaled(QSize(max(1, round(rect.width() * native)), max(1, round(rect.height() * native))),
+                        Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+    out.setDevicePixelRatio(native)
+    return out
 
 
 _EXTERNAL_TOOLS = (

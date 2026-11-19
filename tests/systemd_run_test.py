@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """clipsd-switch with the REAL `systemd-run --user` (no stubs): after an update without clipsd.service (XFCE, MATE,
 Cinnamon: the program autostarts from ~/.config/autostart) the new version must outlive the helper's transient unit.
 
@@ -85,6 +86,13 @@ def units(prefix):
     return [ln.split()[0] for ln in out.splitlines() if ln.strip()]
 
 
+def mine(prefix):
+    """Только службы этого прогона: чужие clipsd-app-*, clipsd-update-* (программа владельца после обновления,
+    прогон теста у другого агента) тест не видит и не останавливает."""
+    return [u for u in units(prefix) if u not in before]
+
+
+before = set(units("clipsd-app-") + units("clipsd-update-"))
 app_units = []
 pid = None
 try:
@@ -100,29 +108,29 @@ try:
     check(data.get("result") == "ok", f"переключение прошло: {data}")
     check(os.readlink(app / "current") == "versions/1.30.1", "current -> versions/1.30.1")
     end = time.time() + 15
-    while time.time() < end and units("clipsd-update-"):
+    while time.time() < end and mine("clipsd-update-"):
         time.sleep(0.5)
-    check(not units("clipsd-update-"), "служба помощника завершилась и убрана")
+    check(not mine("clipsd-update-"), "служба помощника завершилась и убрана")
     time.sleep(10)
     pid = int((state / "app.pid").read_text()) if (state / "app.pid").exists() else None
     alive = pid is not None and Path(f"/proc/{pid}").exists()
     check(alive, f"программа жива через 10 с после завершения помощника (pid {pid})")
     cg = (state / "app.cgroup").read_text() if (state / "app.cgroup").exists() else ""
-    app_units = units("clipsd-app-")
+    app_units = mine("clipsd-app-")
     check("clipsd-app-" in cg and app_units, f"программа в своей службе clipsd-app-*, не в службе помощника ({cg.strip()})")
     got = (state / "app.env").read_text() if (state / "app.env").exists() else ""
     check(all(f"{k}={env[k]}" in got for k in ("DISPLAY", "DBUS_SESSION_BUS_ADDRESS", "XDG_SESSION_TYPE", "XDG_CURRENT_DESKTOP")),
           "программа получила DISPLAY, DBUS_SESSION_BUS_ADDRESS, XDG_SESSION_TYPE, XDG_CURRENT_DESKTOP")
     check(not (state / "switch-pending").exists(), "отметка незавершённого переключения убрана после успеха")
 finally:
-    for u in units("clipsd-app-") + units("clipsd-update-"):
+    for u in mine("clipsd-app-") + mine("clipsd-update-"):
         subprocess.run(["systemctl", "--user", "stop", u], env=env, capture_output=True)
     if pid and Path(f"/proc/{pid}").exists():
         try:
             os.kill(pid, 15)
         except OSError:
             pass
-    check(not units("clipsd-app-") and not units("clipsd-update-"), "после теста временных служб не осталось")
+    check(not mine("clipsd-app-") and not mine("clipsd-update-"), "после теста временных служб не осталось")
 
 print()
 if failures:

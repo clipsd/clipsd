@@ -1,5 +1,6 @@
 # ClipSD: exact build dependencies for Windows (packaging/windows-exe/build.ps1).
 # Copyright (C) 2026 Sergey Dayneko. SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 # Installed with: pip install --require-hashes --only-binary :all: -r requirements-build-windows.txt
 # Python 3.12 x64 (the version of .github/workflows/windows.yml). Every package of the closure is listed
 # (pip refuses an unlisted one with --require-hashes). Hashes: every PyPI wheel of the pinned version usable

@@ -1,5 +1,6 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Интерфейс 1.29.1: понятный выход из режимов редактора. В режимах «Копирование текста», «Обрезка» и «Перевод» сверху
 строка режима (значок, название, пояснение, крупная кнопка выхода на одном месте), инструменты рисования, палитра и толщина
 скрыты; кнопка и Esc выходят, прежний инструмент и обычный вид возвращаются. Ввод текста и ластик: крупная подсказка выхода.
@@ -102,6 +103,7 @@ def mk(**kw):
     themes.apply_app(app, ctx.config)
     ed = EditorWindow(letter(), ctx, QPoint(60, 40))
     ed.present()
+    ed.resize(1500, ed.height())   # 1.32: большие кнопки «Копировать текст» и «Перевести» видны только в широком окне
     settle()
     return ed, ctx
 
@@ -123,7 +125,9 @@ def drawing_hidden(ed):
 
 
 def drawing_shown(ed):
-    parts = [ed.panel, ed.tool_strip, ed.color_buttons["#d60808"], ed.size_group.buttons()[0], ed.undo_button, ed.tool_buttons[RECT]]
+    # 1.32: прямоугольник виден отдельной кнопкой или на значке свёрнутой группы «Фигуры» (после обрезки окно уже)
+    parts = [ed.panel, ed.tool_strip, ed.color_buttons["#d60808"], ed.size_group.buttons()[0], ed.undo_button,
+             ed.tool_strip.visible_widget(RECT)]
     return all(vis(ed, w) for w in parts)
 
 
@@ -226,7 +230,8 @@ settle()
 check("Ms." in QApplication.clipboard().text() and "Dear" not in QApplication.clipboard().text(), "текст: «Скопировать выделенное» копирует только выделенное")
 ed.exit_text_mode()
 check(ed.canvas.tool == RECT and not vis(ed, ed.text_bottom) and vis(ed, ed.bottom) and vis(ed, ed.save_button), "текст: после выхода снова масштаб и «Сохранить»")
-check(ed.ocr_button.text().strip() == "Копировать текст" and vis(ed, ed.ocr_button), "текст: фиолетовая «Копировать текст» остаётся входом")
+check(ed.ocr_button.text().strip() == "Копировать текст" and (vis(ed, ed.ocr_button) or vis(ed, ed.tool_strip.visible_widget(OCR))),
+      "текст: фиолетовая «Копировать текст» (в узком окне группа «Текст с картинки») остаётся входом")
 check(ctx.config["tool"] == "rect", f"текст: режим не запомнен как инструмент ({ctx.config['tool']})")
 done(ed)
 

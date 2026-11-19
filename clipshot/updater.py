@@ -1,6 +1,7 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later. Распространяется по лицензии GNU GPL v3 или более поздней,
 # без каких-либо гарантий; полный текст: файл LICENSE или <https://www.gnu.org/licenses/gpl-3.0.html>.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Program updates: schedule, download, install hand-off, result of the previous attempt, windows.
 
 Trust (keys, signature, expiry, rollback) lives in update_channel.py; this module never installs
@@ -83,7 +84,6 @@ Interfaces with other parts:
 
 import getpass
 import hashlib
-import html
 import http.client
 import json
 import logging
@@ -104,9 +104,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from PyQt6.QtCore import QCoreApplication, QObject, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QAction, QGuiApplication
-from PyQt6.QtWidgets import (QDialog, QHBoxLayout, QLabel, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
-                             QTextBrowser, QVBoxLayout)
+from PyQt6.QtGui import QAction
 
 from . import __version__
 from . import i18n
@@ -1058,213 +1056,9 @@ def send_report(report: str, title: str, endpoint: str = "", opener=None) -> boo
 
 # --- windows ---------------------------------------------------------------
 
-def _notes_browser(markdown: str) -> QTextBrowser:
-    view = QTextBrowser()
-    view.setOpenLinks(False)                     # links of the notes open through sysenv.open_url (clean environment)
-    view.anchorClicked.connect(sysenv.open_url)
-    view.setMarkdown(markdown or tr("updater.notes.none"))
-    view.setMinimumSize(460, 220)
-    return view
-
-
-class OfferDialog(QDialog):
-    """"Version N is available": notes, Update / Later / Skip this version."""
-
-    def __init__(self, manifest: Manifest, installed: str, parent=None, critical=None):
-        super().__init__(parent)
-        self.choice = "later"
-        self.critical = manifest.critical if critical is None else bool(critical)
-        self.setWindowTitle(tr("updater.offer.title_security" if self.critical else "updater.offer.title"))
-        layout = QVBoxLayout(self)
-        heading = QLabel("<b>" + html.escape(tr("updater.offer.heading", version=manifest.version)) + "</b>")
-        heading.setObjectName("heading")
-        layout.addWidget(heading)
-        layout.addWidget(QLabel(tr("updater.offer.installed", current=installed)))
-        if self.critical:
-            security = QLabel("<b>" + html.escape(tr("updater.offer.security")) + "</b>")
-            security.setObjectName("security")
-            security.setWordWrap(True)
-            layout.addWidget(security)
-            later = QLabel(tr("updater.offer.security_later"))
-            later.setWordWrap(True)
-            layout.addWidget(later)
-        layout.addWidget(_notes_browser(manifest.notes_for(i18n.current())))
-        row = QHBoxLayout()
-        self.skip_button = QPushButton(tr("updater.button.skip"))
-        self.later_button = QPushButton(tr("updater.button.later"))
-        self.update_button = QPushButton(tr("updater.button.update"))
-        self.update_button.setDefault(True)
-        row.addWidget(self.skip_button)
-        row.addStretch(1)
-        row.addWidget(self.later_button)
-        row.addWidget(self.update_button)
-        layout.addLayout(row)
-        self.skip_button.setVisible(not self.critical)   # a security fix can be postponed, not skipped
-        self.skip_button.clicked.connect(lambda: self._done("skip"))
-        self.later_button.clicked.connect(lambda: self._done("later"))
-        self.update_button.clicked.connect(lambda: self._done("update"))
-
-    def _done(self, choice):
-        self.choice = choice
-        self.accept()
-
-
-class ProgressDialog(QDialog):
-    def __init__(self, version: str, on_cancel, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(tr("updater.offer.title"))
-        layout = QVBoxLayout(self)
-        self.heading = QLabel(tr("updater.download.title", version=version))
-        layout.addWidget(self.heading)
-        self.bar = QProgressBar()
-        self.bar.setRange(0, 100)
-        layout.addWidget(self.bar)
-        self.status = QLabel("")
-        layout.addWidget(self.status)
-        self.cancel_button = QPushButton(tr("updater.button.cancel"))
-        self.cancel_button.clicked.connect(on_cancel)
-        row = QHBoxLayout()
-        row.addStretch(1)
-        row.addWidget(self.cancel_button)
-        layout.addLayout(row)
-        self.setMinimumWidth(380)
-
-    def set_progress(self, done: int, total: int):
-        self.bar.setValue(int(done * 100 / total) if total else 0)
-        mb = 1024 * 1024
-        self.status.setText(tr("updater.download.progress", done=f"{done / mb:.1f}", total=f"{total / mb:.1f}"))
-
-    def set_stage(self, text: str):
-        """After the download: the same window says what happens now (installing, ClipSD restarts by itself);
-        the bar runs without a percentage and there is nothing to cancel any more."""
-        self.heading.setText(text)
-        self.bar.setRange(0, 0)
-        self.status.setText("")
-        self.status.hide()
-        self.cancel_button.hide()
-
-
-class WhatsNewDialog(QDialog):
-    def __init__(self, version: str, markdown: str, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(tr("updater.whatsnew.title", version=version))
-        layout = QVBoxLayout(self)
-        heading = QLabel("<b>" + html.escape(tr("updater.whatsnew.installed", version=version)) + "</b>")
-        heading.setObjectName("installed")
-        heading.setWordWrap(True)
-        layout.addWidget(heading)
-        title = QLabel(tr("updater.whatsnew.title", version=version))
-        title.setTextFormat(Qt.TextFormat.PlainText)
-        layout.addWidget(title)
-        layout.addWidget(_notes_browser(markdown))
-        row = QHBoxLayout()
-        row.addStretch(1)
-        ok = QPushButton(tr("updater.button.close"))
-        ok.setDefault(True)
-        ok.clicked.connect(self.accept)
-        row.addWidget(ok)
-        layout.addLayout(row)
-
-
-class ReportDialog(QDialog):
-    """Error report of a failed update: the exact text, Copy, the bug report page, e-mail; Send only when
-    REPORT_ENDPOINT is set (the receiver of 1.32)."""
-
-    def __init__(self, report: str, title: str, parent=None, open_url=None, endpoint=None, sender=None):
-        super().__init__(parent)
-        self.report, self.title = report, title
-        self.endpoint = REPORT_ENDPOINT if endpoint is None else endpoint
-        self._open_url = open_url or sysenv.open_url
-        self._sender = sender or send_report
-        self.setWindowTitle(tr("updater.report.title"))
-        layout = QVBoxLayout(self)
-        hint = QLabel(tr("updater.report.hint"))
-        hint.setWordWrap(True)
-        layout.addWidget(hint)
-        self.text = QPlainTextEdit(report)
-        self.text.setReadOnly(True)
-        self.text.setMinimumSize(520, 260)
-        layout.addWidget(self.text)
-        self.status = QLabel("")
-        self.status.setWordWrap(True)
-        layout.addWidget(self.status)
-        row = QHBoxLayout()
-        self.copy_button = QPushButton(tr("updater.button.copy"))
-        self.issue_button = QPushButton(tr("updater.button.open_issue"))
-        self.mail_button = QPushButton(tr("updater.button.email"))
-        self.send_button = QPushButton(tr("updater.button.send"))
-        self.close_button = QPushButton(tr("updater.button.close"))
-        for button in (self.copy_button, self.issue_button, self.mail_button):
-            row.addWidget(button)
-        row.addStretch(1)
-        row.addWidget(self.send_button)
-        row.addWidget(self.close_button)
-        layout.addLayout(row)
-        self.send_button.setVisible(bool(self.endpoint))
-        self.copy_button.clicked.connect(self.copy)
-        self.issue_button.clicked.connect(lambda: self._open_url(self.issue_url()))
-        self.mail_button.clicked.connect(lambda: self._open_url(self.mail_url()))
-        self.send_button.clicked.connect(self.send)
-        self.close_button.clicked.connect(self.accept)
-
-    def issue_url(self) -> str:
-        return issue_url(self.title, self.report)
-
-    def mail_url(self) -> str:
-        return mail_url("ClipSD: " + self.title, self.report)
-
-    def copy(self):
-        QGuiApplication.clipboard().setText(self.report)
-        self.status.setText(tr("updater.report.copied"))
-
-    def send(self) -> bool:
-        ok = self._sender(self.report, self.title, self.endpoint)
-        self.status.setText(tr("updater.report.sent" if ok else "updater.report.send_failed"))
-        if ok:
-            self.send_button.setEnabled(False)
-        return ok
-
-
-class FailedDialog(QDialog):
-    """The update did not go in: what happened, Retry, Send an error report, Close (closed = Close)."""
-
-    def __init__(self, version: str, report: str, title: str, parent=None, open_url=None, hint: str = ""):
-        super().__init__(parent)
-        self.choice = "close"
-        self.report, self.title, self._open_url = report, title, open_url
-        self.report_dialog = None
-        self.setWindowTitle(tr("updater.offer.title"))
-        layout = QVBoxLayout(self)
-        text = QLabel(tr("updater.failed.text", version=version))
-        text.setObjectName("text")
-        text.setWordWrap(True)
-        layout.addWidget(text)
-        if hint:   # what to do for this reason (FAILURE_HINTS), e.g. install by hand when systemd-run is missing
-            note = QLabel(hint)
-            note.setObjectName("hint")
-            note.setWordWrap(True)
-            layout.addWidget(note)
-        row = QHBoxLayout()
-        self.report_button = QPushButton(tr("updater.button.report"))
-        self.close_button = QPushButton(tr("updater.button.close"))
-        self.retry_button = QPushButton(tr("updater.button.retry"))
-        self.retry_button.setDefault(True)
-        row.addWidget(self.report_button)
-        row.addStretch(1)
-        row.addWidget(self.close_button)
-        row.addWidget(self.retry_button)
-        layout.addLayout(row)
-        self.retry_button.clicked.connect(lambda: self._done("retry"))
-        self.close_button.clicked.connect(lambda: self._done("close"))
-        self.report_button.clicked.connect(self.show_report)
-
-    def _done(self, choice):
-        self.choice = choice
-        self.accept()
-
-    def show_report(self):
-        self.report_dialog = closable(ReportDialog(self.report, self.title, self, open_url=self._open_url))
-        self.report_dialog.exec()
+# 1.32: окна в стиле окон ClipSD (карточка, значок программы, зелёная главная кнопка) живут в update_windows.py;
+# логика показа не менялась, только вид. Имена классов и полей прежние.
+from .update_windows import FailedDialog, OfferDialog, ProgressDialog, ReportDialog, WhatsNewDialog  # noqa: E402,F401
 
 
 CLOSABLE = "clipsd_closable"   # property of a window that holds no work: quitting closes it (app.quit_blocker)
@@ -1297,62 +1091,65 @@ class UpdaterUI:
 
     def offer(self, manifest: Manifest, installed: str, critical: bool = False) -> str:
         dialog = closable(OfferDialog(manifest, installed, critical=critical))   # closed = «Позже»
+        dialog.place_centered()
         dialog.exec()
         return dialog.choice
 
     def manual_install(self, version: str) -> None:
-        box = closable(QMessageBox())
-        box.setWindowTitle(tr("updater.offer.title"))
-        box.setText(tr("updater.manual.text", version=version))
-        site = box.addButton(tr("updater.button.open_site"), QMessageBox.ButtonRole.AcceptRole)
-        box.addButton(tr("updater.button.close"), QMessageBox.ButtonRole.RejectRole)
+        from .dialogs import MessageCard
+        box = closable(MessageCard(None, tr("updater.manual.title", version=version), tr("updater.manual.text", version=version),
+                                   "info", primary=tr("updater.button.open_site"), secondary=tr("updater.button.close")))
+        box.place_centered()
         box.exec()
-        if box.clickedButton() is site:
+        if box.choice == "primary":
             self.open_url(SITE_URL)
 
     def whats_new(self, version: str, markdown: str) -> None:
-        closable(WhatsNewDialog(version, markdown)).exec()
+        dialog = closable(WhatsNewDialog(version, markdown))
+        dialog.place_centered()
+        dialog.exec()
 
     def info(self, text: str) -> None:
-        closable(QMessageBox(QMessageBox.Icon.Information, tr("updater.offer.title"), text)).exec()
+        from .dialogs import MessageCard
+        box = closable(MessageCard(None, tr("updater.offer.title"), text, "info"))
+        box.place_centered()
+        box.exec()
 
     def notice(self, text: str) -> None:
         """Non-modal message: it must not block quitting (a modal window counts as busy)."""
-        box = QMessageBox(QMessageBox.Icon.Information, tr("updater.offer.title"), text)
-        box.setModal(False)
+        from .dialogs import MessageCard
+        box = MessageCard(None, tr("updater.offer.title"), text, "info", modal=False)
         box.setWindowModality(Qt.WindowModality.NonModal)
-        box.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self._notice = box
-        box.show()
+        box.open_centered()
 
     def error(self, text: str) -> None:
-        closable(QMessageBox(QMessageBox.Icon.Warning, tr("updater.offer.title"), text)).exec()
+        from .dialogs import MessageCard
+        box = closable(MessageCard(None, tr("updater.error.title"), text, "error"))
+        box.place_centered()
+        box.exec()
 
     def failed(self, version: str, report: str, title: str, hint: str = "") -> str:
         """The failure window: returns "retry" or "close"."""
         self.progress_close()
         dialog = closable(FailedDialog(version, report, title, open_url=self.open_url, hint=hint))
+        dialog.place_centered()
         dialog.exec()
         return dialog.choice
 
     def deferred_notice(self, text: str, on_restart) -> None:
         """Non-modal: the update waits (editor open); "Restart now" tries again at once."""
+        from .update_windows import waiting_card
         self.progress_close()
-        box = QMessageBox(QMessageBox.Icon.Information, tr("updater.offer.title"), text)
-        box.setModal(False)
+        box = closable(waiting_card(text, lambda: QTimer.singleShot(0, on_restart)))
         box.setWindowModality(Qt.WindowModality.NonModal)
-        box.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
-        restart = box.addButton(tr("updater.button.restart_now"), QMessageBox.ButtonRole.AcceptRole)
-        box.addButton(tr("updater.button.close"), QMessageBox.ButtonRole.RejectRole)
-        restart.clicked.connect(lambda: QTimer.singleShot(0, on_restart))
-        closable(box)
         self._notice = box
-        box.show()
+        box.open_centered()
 
     def progress_start(self, version: str, on_cancel) -> None:
         self.progress = closable(ProgressDialog(version, on_cancel))
         self.progress.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.progress.show()
+        self.progress.open_centered()
 
     def progress_stage(self, text: str) -> None:
         if self.progress is not None:
@@ -1569,6 +1366,11 @@ class Updater(QObject):
             pending = manifest
         critical = manifest.critical or (
             pending is not None and uc.compare_versions(manifest.version, pending.version) >= 0)
+        from . import update_prompt   # 1.32: обычное обновление сначала в колокольчике, окно позже (update_prompt)
+        if update_prompt.hold(self, manifest, now, manual, critical):
+            self.busy = False
+            self._save()
+            return
         action = decide(manifest, self.config, self.installed, now, manual, critical)
         if action == "notify" and critical and not manual and not self._critical_due(now):
             action = "none"   # already shown in this run less than a day ago
@@ -1595,6 +1397,9 @@ class Updater(QObject):
         choice = "update" if auto else self.ui.offer(manifest, self.installed, critical=critical)
         if choice == "skip" and critical:
             choice = "later"   # a security fix is never skipped, only postponed
+        if not critical:
+            from . import update_prompt
+            update_prompt.after_offer(self, manifest.version, choice, now)   # «Позже»: ещё 3 дня или 20 снимков
         if choice == "skip":
             skip_version(self.config, manifest.version)
             self._save()
@@ -1960,6 +1765,9 @@ class Updater(QObject):
             _unlink(attempt_path())
             _rmtree(downloads_dir())
             telemetry_event("update_completed", deferred=bool(record.get("deferred")), **attempt_fields(record))
+            from . import notifications   # 1.32: «Что нового» остаётся в колокольчике редактора
+            notifications.remember_whats_new(self.config, self.installed, record.get("notes"))
+            self._save()
             self.ui.whats_new(self.installed, notes_in(record.get("notes"), i18n.current()))
         elif state == "deferred":
             # the switch waits until the program can quit; at start nothing is open, so it goes now
@@ -2051,6 +1859,8 @@ class Updater(QObject):
         self.timer.setInterval(TICK_MS)
         self.timer.timeout.connect(self.tick)
         self.timer.start()
+        from . import update_prompt
+        update_prompt.start(self)   # отложенное окно-предложение ждёт спокойной минуты
 
 
 # --- integration -----------------------------------------------------------

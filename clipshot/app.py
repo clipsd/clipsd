@@ -1,6 +1,7 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later. Распространяется по лицензии GNU GPL v3 или более поздней,
 # без каких-либо гарантий; полный текст: файл LICENSE или <https://www.gnu.org/licenses/gpl-3.0.html>.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """ClipSD: фоновое приложение в трее, глобальная клавиша, захват и окно редактора."""
 
 import argparse
@@ -20,6 +21,7 @@ from PyQt6.QtWidgets import QApplication, QFileDialog, QMenu, QMessageBox, QSyst
 from .editor import OCR as OCR_TOOL, EditorWindow
 from .i18n import tr
 from .grab import DesktopGrabber, claim_shell_name, grab_qt, is_wayland, virtual_geometry
+from . import hidpi
 from .ipc import QUIT_FOR_UPDATE, socket_path
 from .sysenv import child_env, open_url
 from .selector import RegionSelector
@@ -47,11 +49,13 @@ DEFAULTS = {
     "show_zoom": True,
     "show_size": True,
     "last_region": None,
+    "settings_page": "general",     # 1.32: раздел окна настроек, открытый в прошлый раз
+    "tour_selector_done": False,    # 1.32: знакомство с окном выделения уже показано (при первом выделении само)
     "tour_done": False,             # вводный курс уже показан (при первом редакторе показывается сам)
     "ui_theme": "standard",
     "theme_chosen": False,
     "editor_system_title": False,   # окно редактора с системным заголовком (по умолчанию своя шапка и скруглённые углы)
-    "editor_frame_style": "glow",   # вид рамки окна: glow (тонкая линия со свечением), thick (толстая скруглённая), plain (без цветной рамки)
+    "editor_frame_style": "thin",   # вид рамки окна: thin (тонкая линия, 1.32), glow (со свечением), thick (толстая скруглённая), plain (без цветной рамки)
     "hotkey_both_layouts": True,    # сочетание сразу на обе раскладки (через расширение ClipSD в GNOME)          # оформление выбрано при первом запуске         # оформление: standard (светлое) или pro (тёмное, как в видеомонтаже)
     "eraser_mode": "object",        # ластик: object — объект целиком, part — частично
     "ocr_enabled": True,            # текст с картинки: кнопка «Текст», инструмент в редакторе (выкл. = без них)
@@ -68,6 +72,8 @@ DEFAULTS = {
     "default_tool": "",             # инструмент по умолчанию: редактор открывается с ним; пусто: с последним (правая кнопка по инструменту)
     "remember_region": True,        # подсвечивать прошлую область при новом снимке
     "save_format": "png",           # png | jpg — формат по умолчанию при сохранении
+    "snapshot_size": "full",        # full: полное разрешение; screen: как на экране, 100% (уменьшено до размера в точках)
+    "clip_html": hidpi.html_default(),   # в буфер вместе с картинкой HTML с размером в точках (при масштабе экрана ≠ 100%)
     "language": "auto",             # язык интерфейса: код (ru, en, de…) или auto = язык системы; см. language.config_choice
     "save_ask": True,               # True — Ctrl+S открывает окно выбора файла; False — сразу в save_dir            # [x, y, ш, в] прошлой области — предлагается при следующем снимке
 }
@@ -246,6 +252,8 @@ class Clipshot(QObject):
         translate_ui.FloatingTranslation.request_more = self.capture_translate
         self.qapp = qapp
         self.config = load_config(migrate=migrate)
+        from . import notifications   # колокольчик пишет в эти настройки и до первого редактора (лимит перевода)
+        notifications.register(self)
         from . import i18n
         if i18n.choice() != self.config["language"]:
             # настройки 1.x скопированы только что (migrate): язык из них, а не тот, что взят до копирования
@@ -260,6 +268,10 @@ class Clipshot(QObject):
         self.hotkeys = None   # поток своих горячих клавиш (X11 вне GNOME, Windows)
         self.quit_reason = ""  # почему программа выходит: "", "update", "signal"
         self._signal_pipe = None
+        self._rating = None    # окно оценки (feedback.RatingFlow), пока открыто
+        self._rating_timer = None
+        self._rating_quiet_timer = None   # ждёт спокойной минуты, пока правила позволяют окно оценки
+        self._rating_quiet_since = None   # с какого момента (time.monotonic) спокойно; None: не спокойно
         self.command_received.connect(self.handle_command)
 
     # --- запуск --------------------------------------------------------------
@@ -280,6 +292,125 @@ class Clipshot(QObject):
         self._setup_hotkeys()
         from . import updater
         updater.start(self)   # итог прошлой попытки, метка запуска, проверка раз в сутки
+        self._start_rating()
+
+    # --- оценка программы (1.32, feedback.py) ---------------------------------
+
+    RATING_FIRST_MS = 90_000        # первая проверка правил и очереди после запуска
+    RATING_EVERY_MS = 3_600_000     # дальше раз в час, пока программа работает
+    RATING_POLL_MS = 5_000          # пока правила позволяют окно: так часто смотреть, спокойно ли
+
+    def _start_rating(self):
+        from . import feedback
+        feedback.note_use_day(self.config)
+        self.save_config()
+        self._rating_timer = QTimer(self)
+        self._rating_timer.setInterval(self.RATING_EVERY_MS)
+        self._rating_timer.timeout.connect(self._rating_tick)
+        self._rating_timer.start()
+        QTimer.singleShot(self.RATING_FIRST_MS, self._rating_tick)
+
+    def _rating_tick(self):
+        """Очередь неотправленных оценок (в фоне) и предложение оценить, если правила позволяют."""
+        from . import feedback
+        day = self.config.get("last_usage_day")
+        feedback.note_use_day(self.config)   # программа работает сутками: день работы засчитывается и без перезапуска
+        if self.config.get("last_usage_day") != day:
+            self.save_config()
+        feedback.flush_in_background()
+        self.watch_rating_quiet()
+
+    def watch_rating_quiet(self):
+        """Правила показа выполнены: окно оценки придёт в спокойную минуту (1.32, Б1 проверки), как отложенное окно
+        обновления: update_prompt.QUIET подряд нет окна выделения, редактора и других окон ClipSD. Раньше окно
+        приходило через 2,5 с после закрытия редактора, ровно когда человек делает следующий снимок.
+        Зовётся раз в час, после снимка и после закрытия редактора; таймер сам останавливается."""
+        from . import feedback
+        if feedback.is_open(self._rating) or not feedback.should_show_rating(self.config):
+            return
+        if self._rating_quiet_timer is None:
+            self._rating_quiet_timer = QTimer(self)
+            self._rating_quiet_timer.setInterval(self.RATING_POLL_MS)
+            self._rating_quiet_timer.timeout.connect(self.rating_quiet_poll)
+        if not self._rating_quiet_timer.isActive():
+            self._rating_quiet_since = None
+            self._rating_quiet_timer.start()
+
+    def rating_quiet_poll(self, now: float = None) -> bool:
+        """Таймер спокойной минуты для окна оценки. True, если окно показано. now: time.monotonic() (тесты)."""
+        from . import feedback, update_prompt
+        now = time.monotonic() if now is None else now
+        if feedback.is_open(self._rating) or not feedback.should_show_rating(self.config):
+            self._stop_rating_quiet()
+            return False
+        if self.rating_blocker():
+            self._rating_quiet_since = None
+            return False
+        since = self._rating_quiet_since
+        if since is None or since > now:
+            self._rating_quiet_since = now
+            return False
+        if now - since < update_prompt.QUIET.total_seconds():
+            return False
+        if self.maybe_offer_rating():
+            self._stop_rating_quiet()
+            return True
+        return False
+
+    def _stop_rating_quiet(self):
+        self._rating_quiet_since = None
+        if self._rating_quiet_timer is not None:
+            self._rating_quiet_timer.stop()
+
+    def _note_activity(self):
+        """Выделение или закрытый редактор: спокойная минута (окно оценки, отложенное окно обновления) считается
+        заново. Таймеры смотрят раз в несколько секунд и короткий снимок между ними иначе бы не заметили."""
+        self._rating_quiet_since = None
+        updater = getattr(self, "_updater", None)
+        if updater is not None:
+            updater._prompt_quiet_since = None
+
+    def rating_blocker(self) -> str:
+        """Почему окну оценки сейчас не время ("" = спокойно): окно выделения, редактор, модальное окно
+        (update_prompt.busy_reason), меню, любое другое окно ClipSD (настройки, обновление, «О программе»)."""
+        from . import update_prompt
+        reason = update_prompt.busy_reason(self)
+        if reason:
+            return reason
+        if QApplication.activeModalWidget() is not None or QApplication.activePopupWidget() is not None:
+            return "dialog"
+        from PyQt6.QtWidgets import QDialog
+        if any(isinstance(w, QDialog) and w.isVisible() for w in QApplication.topLevelWidgets()):
+            return "dialog"
+        return ""
+
+    def maybe_offer_rating(self) -> bool:
+        """Открыть окно оценки, если правила позволяют и сейчас ничто не мешает (rating_blocker). Само по себе
+        зовётся только после спокойной минуты (rating_quiet_poll)."""
+        from . import feedback
+        if feedback.is_open(self._rating) or not feedback.should_show_rating(self.config):
+            return False
+        if self.rating_blocker():
+            return False
+        self._rating = feedback.RatingFlow(self, auto=True)
+        self._rating.open()
+        return True
+
+    def show_rating(self):
+        """Пункт «Оценить ClipSD» (меню значка и «?» редактора): окно сразу, без правил показа."""
+        from . import feedback
+        flow = self._rating
+        if feedback.is_open(flow):
+            for w in (flow.dialog, flow.thanks):
+                try:
+                    if w is not None and w.isVisible():
+                        w.raise_()
+                        w.activateWindow()
+                        return
+                except RuntimeError:
+                    pass
+        self._rating = feedback.RatingFlow(self, auto=False)
+        self._rating.open()
 
     def shutdown(self):
         """Выход: настройки записаны на диск, канал команд закрыт (сокет освобождён), дальше процесс завершается
@@ -343,6 +474,8 @@ class Clipshot(QObject):
             (tr("app.menu_settings"), lambda: self.open_settings()),
             ("language", None),
             (tr("app.menu_tour"), self.demo_tour),
+            (tr("app.menu_tour_selector"), self.demo_selector_tour),
+            (tr("feedback.rate_title"), self.show_rating),
             (tr("app.menu_about"), self.show_about),
             (None, None),
             (tr("app.menu_quit"), self.qapp.quit),
@@ -381,8 +514,10 @@ class Clipshot(QObject):
         for editor in list(self.editors):
             if hasattr(editor, "retranslate"):
                 editor.retranslate()   # панели строятся заново на новом языке, рисунки и режим остаются
-        if getattr(self, "_settings", None) is not None and self._settings.isVisible():
-            self.notify(tr("common.lang_new_windows"))   # открытое окно настроек перейдёт на язык при следующем открытии
+        selector = getattr(self, "selector", None)
+        if selector is not None:   # окно выделения открыто: подписи и чип языка тут же на новом языке
+            selector._bar_forget()
+            selector.update()
 
     def _tray_tip(self) -> str:
         tip = tr("app.tray_tip", hotkey=self.config['hotkey_region'] or tr("app.tray_click"))
@@ -545,9 +680,40 @@ class Clipshot(QObject):
         self.last_trigger = now
         return False
 
+    CLEAR_WAY_MS = 250   # закрытое перед выделением окно успевает исчезнуть с экрана до снимка: дольше анимации
+                         # закрытия (GNOME 100-150 мс, Windows около 200 мс), задержка почти незаметна
+
+    def clear_way_for_capture(self) -> int:
+        """1.32 (Б1 проверки): Alt+W работает всегда. Окно оценки и окна обновления модальные: под ними окно
+        выделения не получает ни мыши, ни клавиш, а на X11 ещё и держит клавиатуру (застывший экран без выхода).
+        Перед выделением они закрываются, как кнопкой «Позже»: оценка по правилам снова через 30 дней; предложение
+        обновления «Позже» (updater._present: ещё 3 дня или 20 снимков, срочное напомнит через сутки); прочие окна
+        обновления (что нового, сбой, сведения) работы не держат, как и при выходе для обновления (quit_blocker).
+        Возвращает, сколько мс подождать до снимка: 0, если ничего не закрывалось."""
+        from PyQt6.QtWidgets import QDialog
+        closed = self._rating is not None and self._rating.close_for_capture()
+        for _ in range(8):   # окно в окне (сбой обновления -> отчёт): по одному, начиная с верхнего
+            windows = [w for w in QApplication.topLevelWidgets()
+                       if w.isVisible() and w.isModal() and w.property("clipsd_closable")]
+            if not windows:
+                break
+            top = QApplication.activeModalWidget()
+            w = top if top in windows else windows[0]
+            if isinstance(w, QDialog):
+                w.reject()   # exec() окна вернёт выбор по умолчанию: «Позже» (OfferDialog), «Закрыть» (FailedDialog)
+            else:
+                w.close()
+            closed = True
+        return self.CLEAR_WAY_MS if closed else 0
+
+    def _modal_in_the_way(self):
+        """Модальное окно, которое закрывать нельзя (настройки, «О программе», выбор оформления, вопрос редактора)."""
+        modal = QApplication.activeModalWidget()
+        return modal if modal is not None and modal.isVisible() else None
+
     def capture_region(self, delay=0):
         if not self._busy():
-            QTimer.singleShot(delay, self._start_region)
+            QTimer.singleShot(max(delay, self.clear_way_for_capture()), self._start_region)
 
     def capture_translate(self):
         """«Ещё» на окошке перевода: выделить следующий кусок сразу в режиме перевода.
@@ -556,9 +722,18 @@ class Clipshot(QObject):
         if self._busy():
             return
         self._float_hidden = translate_ui.hide_floating()
-        QTimer.singleShot(300, lambda: self._start_region(translate=True))
+        QTimer.singleShot(max(300, self.clear_way_for_capture()), lambda: self._start_region(translate=True))
 
     def _start_region(self, full=False, translate=False):
+        self._note_activity()
+        modal = self._modal_in_the_way()
+        if modal is not None:
+            # Под модальным окном выделение не получило бы ни мыши, ни клавиш: экран застыл бы. Такое окно держит
+            # работу (настройки) или вопрос; вместо выделения оно поднимается, спрятанное на время снимка возвращается.
+            self._region_done(None, QRect())
+            modal.raise_()
+            modal.activateWindow()
+            return
         last = None if full else self._last_region()
         if not is_wayland():
             # X11: снимок мгновенный, оверлей сразу с замороженным кадром.
@@ -571,6 +746,8 @@ class Clipshot(QObject):
             self.selector.start_selection()
             if translate:
                 self.selector.enter_translate()
+            else:
+                self._selector_tour(self.selector)
             return
         # Wayland: снимок готовится 0,5–3 с — оверлей показываем сразу «вживую», кадр подставим позже.
         selector = RegionSelector(None, virtual_geometry(), self.config["show_zoom"], self.config["show_size"],
@@ -598,7 +775,26 @@ class Clipshot(QObject):
         grabber.ready.connect(ready)
         grabber.failed.connect(failed)
         grabber.start()
-        QTimer.singleShot(OVERLAY_DELAY_MS, lambda: self.selector is selector and selector.start_selection())
+        def show_overlay():
+            if self.selector is selector:
+                selector.start_selection()
+                if not translate:
+                    self._selector_tour(selector)
+
+        QTimer.singleShot(OVERLAY_DELAY_MS, show_overlay)
+
+    def _selector_tour(self, selector):
+        """1.32: знакомство с окном выделения: при первом показе или по запросу из меню значка."""
+        selector.tour_force = bool(getattr(self, "_force_selector_tour", False))
+        self._force_selector_tour = False
+        selector.maybe_start_tour()
+
+    def demo_selector_tour(self):
+        """Пункт меню значка: окно выделения с знакомством."""
+        if self.selector is not None:
+            return
+        self._force_selector_tour = True
+        self.capture_region(delay=250)
 
     def _last_region(self):
         if not self.config.get("remember_region", True):
@@ -614,7 +810,7 @@ class Clipshot(QObject):
             return
         self.insert_target = editor
         editor.hide()
-        QTimer.singleShot(350, self._start_region)   # дать окну исчезнуть с экрана до снимка
+        QTimer.singleShot(max(350, self.clear_way_for_capture()), self._start_region)   # дать окну исчезнуть с экрана
 
     def _region_done(self, pixmap, rect):
         hidden = getattr(self, "_float_hidden", None)
@@ -625,6 +821,12 @@ class Clipshot(QObject):
         action = getattr(self.selector, "action", "edit")
         full = getattr(self.selector, "full_mode", False)
         self.selector = None
+        self._note_activity()
+        if pixmap is not None and action != "record":
+            from . import feedback
+            feedback.note_capture(self.config)   # счётчик снимков и дней работы для окна оценки
+            self.save_config()
+            self.watch_rating_quiet()   # 20-й снимок: окно оценки в следующую спокойную минуту
         if action == "record":
             QTimer.singleShot(250, self.open_screen_recording)   # дать окну выделения исчезнуть
             return
@@ -639,6 +841,8 @@ class Clipshot(QObject):
             force_foreground(target)
             return
         if pixmap is not None:
+            from . import update_prompt
+            update_prompt.note_shot(self.config)   # 1.32: снимки до отложенного окна обновления
             if not full:   # весь экран не запоминаем: в следующий раз предлагается прошлая обычная область
                 self.config["last_region"] = [rect.x(), rect.y(), rect.width(), rect.height()]
                 self.save_config()
@@ -660,7 +864,7 @@ class Clipshot(QObject):
     def capture_fullscreen(self, delay=0):
         """Весь экран: окно выделения сразу с рамкой по краю экрана, надписью и кнопками в центре."""
         if not self._busy():
-            QTimer.singleShot(delay, lambda: self._start_region(full=True))
+            QTimer.singleShot(max(delay, self.clear_way_for_capture()), lambda: self._start_region(full=True))
 
     def open_editor(self, image: QImage, origin):
         if image.isNull():
@@ -682,6 +886,8 @@ class Clipshot(QObject):
         updater = getattr(self, "_updater", None)
         if updater is not None:
             QTimer.singleShot(1000, updater.deferred_tick)   # отложенное обновление может пойти сейчас
+        self._note_activity()
+        self.watch_rating_quiet()   # окно оценки не сразу, а после спокойной минуты (rating_quiet_poll)
 
     def open_file(self):
         path, _ = QFileDialog.getOpenFileName(None, tr("app.open_title"), os.path.expanduser("~"),
@@ -725,7 +931,18 @@ class Clipshot(QObject):
         dlg.title.setText(f"ClipSD {build_info.version_label(__version__)}")
         dlg.text(f"© 2026 {__author__}")
         dlg.text(tr("app.about_license"))
+        # Name and icon (TRADEMARKS.md, GPLv3 section 7): the site page exists in Russian and English
+        from html import escape
+        from .i18n import current
+        page = f"https://clipsd.github.io/{'ru' if current() == 'ru' else 'en'}/trademarks.html"
+        terms = dlg.text(f'<a href="{page}">{escape(tr("app.about_trademark"))}</a>')
+        terms.linkActivated.connect(open_url)   # not Qt's own opener: see sysenv.open_url
         dlg.text(tr("app.about_nowarranty"), "clipNote")
+        from . import links   # 1.32: канал Telegram с новостями и обновлениями
+        telegram = dlg.text(f'<a href="{links.TELEGRAM_URL}">{tr("links.telegram_about", url=links.TELEGRAM_SHORT)}</a>')
+        telegram.setToolTip(tr("links.telegram_tip"))
+        telegram.linkActivated.connect(open_url)   # not Qt's own opener: see sysenv.open_url
+        self._about_telegram = telegram
         for url in ("https://clipsd.github.io", "https://github.com/clipsd/clipsd"):
             link = dlg.text(f'<a href="{url}">{url}</a>')
             link.linkActivated.connect(open_url)   # not Qt's own opener: see sysenv.open_url
@@ -778,6 +995,8 @@ class Clipshot(QObject):
                     else:
                         self.config["tour_done"] = True
                         self.demo_tour()
+                elif getattr(dialog, "want_selector_tour", False):
+                    QTimer.singleShot(400, self.demo_selector_tour)
         finally:
             self._settings = None
 
@@ -889,7 +1108,7 @@ class Clipshot(QObject):
         except OSError as exc:
             print(f"Автосохранение: нет папки: {exc}")
             return None
-        if image.save(path):
+        if hidpi.save_image(image, path, self.config):
             return path
         print(f"Автосохранение не удалось: {path}")
         return None
@@ -900,7 +1119,7 @@ class Clipshot(QObject):
         path = ask_save_path(None, self.config)
         if not path:
             return
-        if image.save(path):
+        if hidpi.save_image(image, path, self.config):
             self.config["save_dir"] = os.path.dirname(path)
             self.save_config()
             self.notify(tr("app.saved", path=path))
@@ -908,7 +1127,9 @@ class Clipshot(QObject):
             self.notify(tr("app.save_failed", path=path))
 
     def copy_image(self, image: QImage):
-        QGuiApplication.clipboard().setImage(image)
+        """В буфер: PNG с плотностью экрана и, при масштабе ≠ 100%, HTML с размером в точках (настройки «Размер снимка»
+        и «Вставлять в исходном размере»)."""
+        hidpi.copy_image(image, self.config)
 
     def notify(self, text: str):
         print(text)
@@ -946,7 +1167,8 @@ def demo_image() -> QImage:
     p.setPen(Qt.PenStyle.NoPen)
     p.setBrush(QColor("#ffffff"))
     p.drawRoundedRect(QRectF(60, 60, 780, 400), 14, 14)
-    p.setBrush(QColor("#1e78ff"))
+    from .themes import BLUE_BUTTON
+    p.setBrush(QColor(BLUE_BUTTON))   # шапка примера: белый заголовок 5,8:1 (1.32)
     p.drawRoundedRect(QRectF(60, 60, 780, 56), 14, 14)
     p.drawRect(QRectF(60, 100, 780, 16))
     font = QFont()

@@ -1,6 +1,7 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later. Распространяется по лицензии GNU GPL v3 или более поздней,
 # без каких-либо гарантий; полный текст: файл LICENSE или <https://www.gnu.org/licenses/gpl-3.0.html>.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Режим перевода в окне выделения (кнопка «Перевести», Ctrl+L), как переводчик с камеры телефона.
 
 Экран заморожен. Выделяете мышью кусок: он распознаётся, переводится, и перевод ложится поверх исходного текста,
@@ -351,8 +352,9 @@ class TranslateMixin:
         from .menus import style_menu
         style_menu(menu, self.tr_cfg)
         current = self.tr_cfg.get("translate_to", "auto") or "auto"
+        from . import icons
         for i, (code, title) in enumerate(self._tr_lang_actions()):
-            act = menu.addAction(title)
+            act = menu.addAction(icons.flag_icon(code), title)   # 1.32: флаг языка; «Как в системе» и арабский: глобус
             act.setCheckable(True)
             act.setChecked(code == current)
             act.setData(code)

@@ -1,6 +1,7 @@
 # ClipSD: снимки экрана с редактором. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later. Распространяется по лицензии GNU GPL v3 или более поздней,
 # без каких-либо гарантий; полный текст: файл LICENSE или <https://www.gnu.org/licenses/gpl-3.0.html>.
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Автотест новых функций редактора ClipSD: сноска, стрелки, номера с указателем, ручки, правка.
 
 Запуск: QT_QPA_PLATFORM=offscreen python3 tests/features_test.py [проект] [папка_картинок]
@@ -394,6 +395,26 @@ QTest.keyClick(tour, Qt.Key.Key_Escape)
 app.processEvents()
 check(ed11.tour is None and Ctx.config["tour_done"] is True and ed11.isVisible(),
       "Esc закрывает курс, окно остаётся, курс отмечен пройденным")
+# 1.32: повторное знакомство («?», F1, меню значка, настройки) без шага выбора языка, первое: с ним
+from clipshot.i18n import tr as _tr
+first_steps = len(tour.steps)
+ed11.start_tour()
+check(not ed11.tour.with_language and len(ed11.tour.steps) == first_steps - 1
+      and ed11.tour.steps[0][1] == _tr("tour.intro_title"),
+      "повторное знакомство начинается со «Знакомство с ClipSD», без выбора языка")
+ed11.tour.finish()
+app.processEvents()
+help_tour = next(a for a in ed11.help_menu.actions() if a.text() == _tr("app.menu_tour"))
+help_tour.trigger()
+app.processEvents()
+check(ed11.tour is not None and not ed11.tour.with_language, "«?» → «Знакомство с программой»: без выбора языка")
+ed11.tour.finish()
+app.processEvents()
+QTest.keyClick(ed11, Qt.Key.Key_F1)
+app.processEvents()
+check(ed11.tour is not None and not ed11.tour.with_language, "F1: знакомство без выбора языка")
+ed11.tour.finish()
+app.processEvents()
 ed11.start_tour()
 for _ in range(len(ed11.tour.steps)):
     ed11.tour.next.click()

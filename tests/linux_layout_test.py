@@ -1,5 +1,6 @@
 # ClipSD: layout test of the Linux packaging. Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко)
 # SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """install -> update (switch) -> rollback when the new version does not start -> uninstall.
 
 Everything runs with HOME pointing at a temporary folder; systemctl, systemd-run, gsettings,

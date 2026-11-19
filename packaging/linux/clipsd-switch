@@ -1,6 +1,7 @@
 #!/bin/bash
 # ClipSD: version switch helper. Works without the program itself (pure bash, no Python).
 # Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко). SPDX-License-Identifier: GPL-3.0-or-later
+# Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 #
 # Usage: clipsd-switch [--detach] --from A --to B [--timeout 60] [--exit-wait 60] [--socket PATH]
 #        clipsd-switch --ask-quit [--socket PATH]     (install.sh, uninstall.sh: prints ok | busy:<reason> | none)

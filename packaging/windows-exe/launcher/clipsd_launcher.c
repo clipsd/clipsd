@@ -1,5 +1,6 @@
 /* ClipSD launcher for Windows: {app}\ClipSD.exe.
  * Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко). SPDX-License-Identifier: GPL-3.0-or-later
+ * Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
  *
  * Shortcuts, the pinned taskbar icon and autostart point at this small program, so their path never
  * changes between versions. It lives for a fraction of a second and only touches this layout:
