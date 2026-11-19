@@ -1,0 +1,4 @@
+- Linux: updates install automatically again on newer systems (for example, Ubuntu 26.04). Previously, updates were downloaded but not installed.
+- Linux: text recognition, links and autostart work again on newer systems.
+- If an update fails to install, a window appears with the “Try again” and “Error report” buttons. The report does not include your username or paths to personal folders.
+- After an update, the “What's new” window starts with “Update installed”.

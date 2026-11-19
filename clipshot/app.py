@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 from PyQt6.QtCore import QObject, QPoint, QRect, QRectF, QSocketNotifier, Qt, QTimer, QUrl, pyqtSignal
-from PyQt6.QtGui import QAction, QColor, QDesktopServices, QFont, QGuiApplication, QIcon, QImage, QPainter, QPen, QPixmap
+from PyQt6.QtGui import QAction, QColor, QFont, QGuiApplication, QIcon, QImage, QPainter, QPen, QPixmap
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication, QFileDialog, QMenu, QMessageBox, QSystemTrayIcon
 
@@ -21,6 +21,7 @@ from .editor import OCR as OCR_TOOL, EditorWindow
 from .i18n import tr
 from .grab import DesktopGrabber, claim_shell_name, grab_qt, is_wayland, virtual_geometry
 from .ipc import QUIT_FOR_UPDATE, socket_path
+from .sysenv import child_env, open_url
 from .selector import RegionSelector
 
 # Под Wayland оверлей показывается чуть позже запроса снимка, чтобы не попасть в кадр самому.
@@ -708,6 +709,8 @@ class Clipshot(QObject):
     def demo_tour(self):
         """Знакомство из меню трея: пример снимка и курс по нему."""
         editor = self.open_editor(demo_image(), None)
+        if editor is not None:
+            editor.demo_maker = demo_image   # пример рисует программа: при смене языка он перерисуется на новом
         if editor is not None and self.config.get("tour_done"):
             QTimer.singleShot(500, editor.start_tour)
 
@@ -725,7 +728,7 @@ class Clipshot(QObject):
         dlg.text(tr("app.about_nowarranty"), "clipNote")
         for url in ("https://clipsd.github.io", "https://github.com/clipsd/clipsd"):
             link = dlg.text(f'<a href="{url}">{url}</a>')
-            link.setOpenExternalLinks(True)
+            link.linkActivated.connect(open_url)   # not Qt's own opener: see sysenv.open_url
         close = dlg.primary(tr("about.close"))
         close.clicked.connect(dlg.close)
         dlg.setStyleSheet(dlg.styleSheet() + " QLabel { font-size: 14px; } QLabel#clipNote { font-size: 14px; }"
@@ -750,11 +753,11 @@ class Clipshot(QObject):
         key = "auto_save_dir" if self.config.get("auto_save", True) else "save_dir"
         folder = os.path.expanduser(self.config.get(key) or DEFAULTS[key])
         os.makedirs(folder, exist_ok=True)
-        QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
+        open_url(QUrl.fromLocalFile(folder))
 
     def open_config(self):
         self.save_config()
-        QDesktopServices.openUrl(QUrl.fromLocalFile(str(CONFIG_PATH)))
+        open_url(QUrl.fromLocalFile(str(CONFIG_PATH)))
 
     def open_settings(self, parent=None):
         from .settings import SettingsDialog
@@ -842,7 +845,7 @@ class Clipshot(QObject):
         try:
             import subprocess
             value = subprocess.run(["gsettings", "get", "org.gnome.shell.keybindings", "show-screen-recording-ui"],
-                                   capture_output=True, text=True, timeout=3).stdout.strip()
+                                   capture_output=True, text=True, timeout=3, env=child_env()).stdout.strip()
             if value.startswith("['<"):
                 hotkey = (value.split("'")[1].replace("<Ctrl>", "Ctrl+").replace("<Shift>", "Shift+")
                           .replace("<Alt>", "Alt+").replace("<Super>", "Super+").replace("<Primary>", "Ctrl+"))
@@ -919,8 +922,19 @@ class Clipshot(QObject):
             print(f"Не удалось сохранить настройки: {exc}")
 
 
+DEMO_KEYS = ("app.demo_title", "app.demo_line1", "app.demo_line2", "app.demo_line3", "app.demo_button")
+
+
+def demo_texts() -> dict:
+    """Подписи примера снимка на текущем языке интерфейса (ключ -> текст)."""
+    return {key: tr(key) for key in DEMO_KEYS}
+
+
 def demo_image() -> QImage:
-    """Пример снимка для знакомства с программой."""
+    """Пример снимка для знакомства с программой: все подписи на языке интерфейса (demo_texts), шрифт программы
+    (при китайском с запасными шрифтами CJK, fonts.add_cjk). Окно знакомства перерисовывает его при смене языка
+    (EditorWindow.demo_maker): 19.11.2026 на Windows язык сменили на болгарский, а пример остался по-русски."""
+    texts = demo_texts()
     image = QImage(900, 520, QImage.Format.Format_RGB32)
     p = QPainter(image)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -940,20 +954,18 @@ def demo_image() -> QImage:
     font.setBold(True)
     p.setFont(font)
     p.setPen(QColor("#ffffff"))
-    p.drawText(QRectF(84, 60, 600, 56), Qt.AlignmentFlag.AlignVCenter, tr("app.demo_title"))
+    p.drawText(QRectF(84, 60, 600, 56), Qt.AlignmentFlag.AlignVCenter, texts["app.demo_title"])
     font.setPixelSize(17)
     font.setBold(False)
     p.setFont(font)
     p.setPen(QColor("#33373d"))
-    for i, line in enumerate((tr("app.demo_line1"),
-                              tr("app.demo_line2"),
-                              tr("app.demo_line3"))):
+    for i, line in enumerate((texts["app.demo_line1"], texts["app.demo_line2"], texts["app.demo_line3"])):
         p.drawText(QRectF(84, 150 + i * 34, 740, 30), Qt.AlignmentFlag.AlignVCenter, line)
     p.setBrush(QColor("#2db400"))
     p.setPen(Qt.PenStyle.NoPen)
     p.drawRoundedRect(QRectF(84, 300, 180, 44), 8, 8)
     p.setPen(QColor("#ffffff"))
-    p.drawText(QRectF(84, 300, 180, 44), Qt.AlignmentFlag.AlignCenter, tr("app.demo_button"))
+    p.drawText(QRectF(84, 300, 180, 44), Qt.AlignmentFlag.AlignCenter, texts["app.demo_button"])
     p.end()
     return image
 

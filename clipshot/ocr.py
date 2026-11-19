@@ -17,13 +17,14 @@ import subprocess
 import sys
 import tempfile
 
-from PyQt6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QRect, QRectF, QThread, QTimer, Qt, QUrl, pyqtSignal
-from PyQt6.QtGui import QColor, QDesktopServices, QFontMetrics, QGuiApplication, QImage, QPainter, QTextOption
+from PyQt6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QRect, QRectF, QThread, QTimer, Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QFontMetrics, QGuiApplication, QImage, QPainter, QTextOption
 from PyQt6.QtWidgets import (QFrame, QGraphicsOpacityEffect, QLabel, QPushButton, QSizePolicy, QTextEdit,
                              QVBoxLayout)
 
-from .dialogs import ClipDialog, icon_pixmap
+from .dialogs import ClipDialog, icon_pixmap, link_colored
 from .i18n import tr
+from .sysenv import child_env, open_url
 
 DEFAULT_LANGS = "rus+eng"
 # 1.31: языки распознавания по умолчанию (config ocr_langs = "auto"): язык интерфейса и английский
@@ -181,7 +182,8 @@ def engine_name() -> str:
 
 def tesseract_langs(exe) -> set:
     try:
-        out = subprocess.run([exe, "--list-langs"], capture_output=True, text=True, timeout=20, **_no_window())
+        out = subprocess.run([exe, "--list-langs"], capture_output=True, text=True, timeout=20, env=child_env(),
+                             **_no_window())
     except (OSError, subprocess.TimeoutExpired):
         return set()
     return {line.strip() for line in (out.stdout + out.stderr).splitlines()[1:] if line.strip()}
@@ -387,7 +389,7 @@ def _run_tesseract(exe, path, langs) -> str:
         raise OcrError("ocr.err_no_langs", install_help("missing"))
     try:
         out = subprocess.run([exe, path, "stdout", "-l", "+".join(use), "--psm", "3", "tsv"],
-                             capture_output=True, timeout=TIMEOUT, **_no_window())
+                             capture_output=True, timeout=TIMEOUT, env=child_env(), **_no_window())
     except subprocess.TimeoutExpired:
         raise OcrError("ocr.err_timeout")
     except OSError as exc:
@@ -983,24 +985,24 @@ class InstallBlock(QFrame):
             box.addWidget(hint)
         if help.settings_url:
             self.settings_button = QPushButton(tr("ocr.open_win_settings"))
-            self.settings_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(help.settings_url)))
+            self.settings_button.clicked.connect(lambda: open_url(help.settings_url))
             box.addWidget(self.settings_button, 0, Qt.AlignmentFlag.AlignLeft)
         if help.url:
-            link = QLabel(f'<a href="{help.url}">{help.url_title or help.url}</a>')
-            link.setOpenExternalLinks(True)
+            link = QLabel(link_colored(f'<a href="{help.url}">{help.url_title or help.url}</a>'))
+            link.linkActivated.connect(open_url)   # not Qt's own opener: see sysenv.open_url
             link.setWordWrap(True)
             link.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
             box.addWidget(link)
             self.url_field = self._copy_row(box, help.url, tr("ocr.copy_link"), self._compact)
         if getattr(help, "url2", None):
-            link2 = QLabel(f'<a href="{help.url2}">{help.url2_title or help.url2}</a>')
-            link2.setOpenExternalLinks(True)
+            link2 = QLabel(link_colored(f'<a href="{help.url2}">{help.url2_title or help.url2}</a>'))
+            link2.linkActivated.connect(open_url)
             link2.setWordWrap(True)
             box.addWidget(link2)
             self._copy_row(box, help.url2, tr("ocr.copy_link"), self._compact)
         if sys.platform == "win32" and help.settings_url:
-            link2 = QLabel(tr("ocr.second_link", url=TESSERACT_WINDOWS))
-            link2.setOpenExternalLinks(True)
+            link2 = QLabel(link_colored(tr("ocr.second_link", url=TESSERACT_WINDOWS)))
+            link2.linkActivated.connect(open_url)
             link2.setWordWrap(True)
             box.addWidget(link2)
             self._copy_row(box, TESSERACT_WINDOWS, tr("ocr.copy_link"), self._compact)

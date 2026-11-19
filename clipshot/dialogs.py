@@ -13,6 +13,7 @@ from .i18n import tr
 from .frame_extents import track_frame_extents, refresh_frame_extents
 
 ACCENT = "#1e78ff"
+LINK = "#1660d0"          # link text on the white card
 GREEN = "#1f9d55"
 TEXT = "#16181c"
 MUTED = "#5a6270"
@@ -22,6 +23,7 @@ ICON_GLYPHS = {"warning": "!", "mail": "@", "google": "G", "info": "i"}
 STYLE = f"""
 QFrame#clipCard {{ background: #ffffff; border: 1px solid #d9dee6; border-radius: 14px; }}
 QLabel {{ color: {TEXT}; background: transparent; }}
+QCheckBox, QRadioButton {{ color: {TEXT}; background: transparent; }}
 QLabel#clipTitle {{ font-size: 17px; font-weight: bold; }}
 QLabel#clipSubtitle {{ color: {MUTED}; font-size: 13px; }}
 QLabel#clipNote {{ color: {MUTED}; font-size: 12px; }}
@@ -42,6 +44,14 @@ QPushButton#clipLink:hover {{ text-decoration: underline; }}
 QToolButton#clipClose {{ background: transparent; border: none; border-radius: 15px; color: {MUTED}; font-size: 16px; }}
 QToolButton#clipClose:hover {{ background: #eef1f5; color: {TEXT}; }}
 """
+
+
+def link_colored(text: str) -> str:
+    """Rich text for the white card: links get the colour LINK. Without it a link takes the palette colour, which in the
+    Professional theme or a dark system is a light blue (3.5:1 on white); LINK reads well (5.8:1)."""
+    if "<a " in text and "style=" not in text:
+        text = text.replace("<a ", f'<a style="color: {LINK};" ')
+    return text
 
 
 def icon_pixmap(kind: str, size: int = 44) -> QPixmap:
@@ -147,7 +157,7 @@ class ClipDialog(QDialog):
     # --- наполнение -------------------------------------------------------------
 
     def text(self, text: str, name: str = None) -> QLabel:
-        label = QLabel(text)
+        label = QLabel(link_colored(text))
         label.setWordWrap(True)
         label.setTextFormat(Qt.TextFormat.RichText if "<" in text else Qt.TextFormat.PlainText)
         if name:

@@ -3167,6 +3167,20 @@ class EditorWindow(QMainWindow):
         if hasattr(self.ctx, "open_settings"):
             self.ctx.open_settings(self)
 
+    def _redraw_demo(self):
+        """Пример снимка знакомства (demo_maker задаёт app.demo_tour) рисует программа: при смене языка его подписи
+        перерисовываются на новом языке. Пометки поверх остаются; обрезанный пример не трогается (другой размер)."""
+        maker = getattr(self, "demo_maker", None)
+        canvas = getattr(self, "canvas", None)
+        if maker is None or canvas is None:
+            return
+        image = maker()
+        if image.isNull() or logical_size(canvas.base) != logical_size(image):
+            return
+        canvas.base = image.convertToFormat(QImage.Format.Format_ARGB32_Premultiplied)
+        canvas.base.setDevicePixelRatio(image.devicePixelRatio())
+        canvas.update()
+
     def retranslate(self):
         """Язык сменён (1.31): панели и строки режимов строятся заново на новом языке в том же порядке, что в
         __init__; снимок, рисунки, отмена, инструмент и режим остаются (они живут в холсте)."""
@@ -3187,6 +3201,7 @@ class EditorWindow(QMainWindow):
             old.deleteLater()
             layout.insertWidget(i, new)
         self.setWindowTitle(tr("editor.window_title"))
+        self._redraw_demo()
         if self.titlebar is not None:   # подсказки шапки: Свернуть, Развернуть/Восстановить, Закрыть
             self.titlebar.min_button.setToolTip(tr("editor.minimize"))
             self.titlebar.close_button.setToolTip(tr("editor.close"))

@@ -1,0 +1,4 @@
+- Linux: a atualização volta a ser instalada sozinha nos sistemas mais recentes (por exemplo, Ubuntu 26.04). Antes ela era baixada, mas não instalada.
+- Linux: nos sistemas mais recentes voltam a funcionar o reconhecimento de texto, os links e a inicialização automática.
+- Se uma atualização não for instalada, aparece uma janela com os botões «Tentar novamente» e «Relatório de erro». O relatório não contém nome de usuário nem caminhos para pastas pessoais.
+- Depois da atualização, a janela «Novidades da versão» começa com a linha «Atualização instalada».

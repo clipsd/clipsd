@@ -56,6 +56,17 @@ Interfaces with other parts:
   the mark the helper refreshes the menu entry, icons and the package's GNOME extension from the new
   version (install.sh --refresh-integration). A program run from the sources leaves state_dir()/.source-run,
   so that uninstall.sh keeps the folders it shares with it.
+  systemd-run and the helper get sysenv.child_env(): the environment of the person's session, without the
+  LD_LIBRARY_PATH of the PyInstaller build (with it systemd-run and the coreutils of Ubuntu 26.04 do not even
+  start, 1.31.0 lost its update that way on 19.11.2026). After the start the helper is watched (helper_tick, every
+  second): an exit code other than 0/4, a bound failure result, or no helper holding update.lock 60 s later while
+  this program still runs -> the failure window at once, not 10 minutes later.
+- Failure window (UpdaterUI.failed): "Retry" (no second helper while update.lock is held; the channel is asked
+  again and an already downloaded archive with the signed size and sha256 is used instead of a new download) and
+  "Send an error report": a window with the report text (versions, platform, step, error code, trace_id and
+  attempt_id, the end of the helper's update.log without the home folder and the user name) and "Copy", "Open the
+  bug report page" (GitHub issue with title and body in the address), "Write an e-mail". REPORT_ENDPOINT is
+  empty in 1.31: when the receiver exists (1.32, ADR-0004) setting it adds "Send" to that window.
 - Result files of the helper and the launcher: update-result.json ({from, to, result, reason, time})
   in state_dir() (Linux) or %LOCALAPPDATA%\\ClipSD (Windows); switch_result() uses it only when from,
   to and time belong to the current attempt.
@@ -70,18 +81,21 @@ Interfaces with other parts:
   source is a file instead of https. Release builds never read a channel or a package from a file.
 """
 
+import getpass
 import hashlib
 import html
 import http.client
 import json
 import logging
 import os
+import platform as _platform
 import re
 import shutil
 import subprocess
 import sys
 import tarfile
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -89,14 +103,15 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from PyQt6.QtCore import QCoreApplication, QObject, Qt, QTimer, QUrl, pyqtSignal
-from PyQt6.QtGui import QAction, QDesktopServices
-from PyQt6.QtWidgets import (QDialog, QHBoxLayout, QLabel, QMessageBox, QProgressBar, QPushButton,
+from PyQt6.QtCore import QCoreApplication, QObject, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QAction, QGuiApplication
+from PyQt6.QtWidgets import (QDialog, QHBoxLayout, QLabel, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
                              QTextBrowser, QVBoxLayout)
 
 from . import __version__
 from . import i18n
 from . import build_info
+from . import sysenv
 from . import tls
 from . import update_channel as uc
 from .update_channel import ChannelError, Manifest
@@ -121,6 +136,16 @@ STARTED_MARK = "started-{version}"    # file in mark_dir(); clipsd-switch, insta
 SOURCE_RUN_MARK = ".source-run"       # Linux state_dir(): ClipSD from the sources ran here (uninstall.sh keeps the folder)
 REASON_RE = re.compile(r"[a-z0-9_.\-]{1,60}")   # helper / launcher reasons are short codes
 SITE_URL = "https://clipsd.github.io/"
+HELPER_WATCH_MS = 1_000             # the switch helper is looked at every second after its start
+HELPER_ASK_TICKS = 60               # ... and must hold update.lock (or have asked to quit) within 60 s
+# Error reports of a failed update. REPORT_ENDPOINT: https address of the receiver (Cloudflare Worker, 1.32,
+# ADR-0004); empty = nothing is sent, the report window offers copy, the bug report page and e-mail only.
+REPORT_ENDPOINT = ""
+ISSUE_URL = "https://github.com/clipsd/clipsd/issues/new"
+SUPPORT_EMAIL = "clipsd.app@gmail.com"
+ISSUE_URL_LIMIT = 7_000             # whole address of the issue page (GitHub refuses about 8 KB)
+MAIL_URL_LIMIT = 1_800              # whole mailto: address (mail programs cut long ones)
+REPORT_LOG_LINES = 30               # last lines of the helper's update.log in a report
 # TODO(store): product id from Partner Center once the Store listing exists.
 STORE_PRODUCT_ID = ""
 
@@ -533,6 +558,37 @@ def local_source(name: str, local_root) -> Path:
     return Path(local_root) / name
 
 
+def verified_file(path: Path, size: int, sha256: str) -> bool:
+    """An archive downloaded earlier (a failed attempt kept it for "Retry") with exactly the signed size and sha256."""
+    path = Path(path)
+    try:
+        if not path.is_file() or path.stat().st_size != size:
+            return False
+        digest = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest() == str(sha256).lower()
+    except OSError:
+        return False
+
+
+def clean_downloads(keep=None) -> None:
+    """Remove the downloads folder, or everything in it except the file `keep` (and its folder)."""
+    root = downloads_dir()
+    if keep is None or not Path(keep).is_file():
+        _rmtree(root)
+        return
+    keep = Path(keep)
+    for item in list(root.iterdir()) if root.is_dir() else []:
+        if item == keep.parent:
+            for inner in item.iterdir():
+                if inner != keep:
+                    _rmtree(inner) if inner.is_dir() else _unlink(inner)
+        else:
+            _rmtree(item) if item.is_dir() else _unlink(item)
+
+
 def download_file(url: str, dest: Path, size: int, sha256: str, progress=None, cancel=None,
                   opener=None, timeout: float = NETWORK_TIMEOUT_S, platform: str = "", local_root=None) -> Path:
     """Stream url to dest, checking the exact size and sha256. On any error nothing is left behind.
@@ -779,10 +835,16 @@ def linux_switch_command(version_dir: Path, from_version: str, to_version: str, 
     return helper
 
 
+_helper_process = None   # the helper started in a new session (not through systemd-run): its exit code is watched
+
+
 def launch_linux_switch(version_dir: Path, from_version: str, to_version: str, attempt_id: str,
                         run=subprocess.run, popen=subprocess.Popen, systemd=None, socket=None) -> str:
     """Start the switch helper outside this program's service group. Returns the method used.
-    The helper asks this program to quit over `socket` (ipc.socket_path() by default)."""
+    The helper asks this program to quit over `socket` (ipc.socket_path() by default).
+    Both systemd-run and the helper get sysenv.child_env(): with the LD_LIBRARY_PATH of the PyInstaller build
+    systemd-run and the coreutils of newer systems (Ubuntu 26.04) cannot start at all."""
+    global _helper_process
     if socket is None:
         from .ipc import socket_path
         socket = socket_path()
@@ -793,25 +855,66 @@ def launch_linux_switch(version_dir: Path, from_version: str, to_version: str, a
         pass
     if systemd is None:
         systemd = _user_systemd()
+    env = sysenv.child_env()
+    _helper_process = None
     if systemd:
         try:
             done = run(linux_switch_command(version_dir, from_version, to_version, attempt_id, True, socket),
                        timeout=15, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                       stderr=subprocess.DEVNULL)
+                       stderr=subprocess.DEVNULL, env=env)
             if done.returncode == 0:
                 return "systemd-run"
-        except (OSError, subprocess.SubprocessError):
-            pass
-    popen(linux_switch_command(version_dir, from_version, to_version, attempt_id, False, socket),
-          start_new_session=True, close_fds=True, stdin=subprocess.DEVNULL,
-          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            log.warning("systemd-run for the switch helper failed (%s), starting it in a new session", done.returncode)
+        except (OSError, subprocess.SubprocessError) as exc:
+            log.warning("systemd-run for the switch helper failed (%s), starting it in a new session", exc)
+    _helper_process = popen(linux_switch_command(version_dir, from_version, to_version, attempt_id, False, socket),
+                            start_new_session=True, close_fds=True, stdin=subprocess.DEVNULL,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
     return "setsid"
 
 
-def remove_staging(record: dict, kind: str, installed: str = __version__) -> None:
-    """After a failed attempt: remove what the attempt left (never the running version)."""
-    _rmtree(downloads_dir())
+def helper_exit_code():
+    """Exit code of the helper started in a new session, None while it runs or when it went through systemd-run.
+    Reaping it here also leaves no zombie behind."""
+    proc = _helper_process
+    poll = getattr(proc, "poll", None)
+    if poll is None:
+        return None
+    try:
+        return poll()
+    except OSError:
+        return None
+
+
+def switch_lock_alive() -> bool:
+    """Linux: a clipsd-switch holds update.lock now (the same rule as the helper and the launcher: the pid written
+    into the lock is a running clipsd-switch; a lock without a pid counts for 10 minutes)."""
+    lock = state_dir() / "update.lock"
+    if not lock.is_dir():
+        return False
+    try:
+        pid = int((lock / "pid").read_text(encoding="ascii").strip())
+    except (OSError, ValueError):
+        try:
+            return not (lock / "pid").exists() and time.time() - lock.stat().st_mtime < 600
+        except OSError:
+            return False
+    try:
+        return b"clipsd-switch" in Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return False
+
+
+def remove_staging(record: dict, kind: str, installed: str = __version__, keep_download: bool = False) -> None:
+    """After a failed attempt: remove what the attempt left (never the running version). keep_download: the
+    downloaded archive of the attempt stays for "Retry" (it is checked against the signed sha256 before use)."""
     to_version = str(record.get("to", ""))
+    if keep_download and to_version and (downloads_dir() / to_version).is_dir():
+        for item in list(downloads_dir().iterdir()):
+            if item.name != to_version:
+                _rmtree(item) if item.is_dir() else _unlink(item)
+    else:
+        _rmtree(downloads_dir())
     if kind == "linux" and to_version and to_version != installed:
         target = versions_dir() / to_version
         current = data_dir() / "current"
@@ -824,11 +927,141 @@ def remove_staging(record: dict, kind: str, installed: str = __version__) -> Non
             _rmtree(root / "failed")   # a version the launcher rolled back from
 
 
+# --- error report of a failed update ------------------------------------------
+
+def private_bits() -> list:
+    """(text, replacement) that must not leave the computer: the home folder (also resolved) and the user name."""
+    bits = []
+    for home in {os.path.expanduser("~"), os.path.realpath(os.path.expanduser("~"))}:
+        if home and home not in ("/", "\\"):
+            bits.append((home, "~"))
+    try:
+        user = getpass.getuser()
+    except Exception:   # no user name in the environment or the password database
+        user = ""
+    if len(user) >= 2:
+        bits.append((user, "<user>"))
+    return bits
+
+
+def scrub(text: str, bits=None) -> str:
+    """The report text without the home folder and the user name (whole words: "sdkev" in a path, not in "sdkevin")."""
+    for value, replacement in sorted(bits if bits is not None else private_bits(), key=lambda b: -len(b[0])):
+        if replacement == "<user>":
+            text = re.sub(r"(?<![A-Za-z0-9_.-])" + re.escape(value) + r"(?![A-Za-z0-9_-])", replacement, text)
+        else:
+            text = text.replace(value, replacement)
+    return text
+
+
+def os_description() -> str:
+    """System name for a report: PRETTY_NAME of /etc/os-release (Linux), platform otherwise."""
+    if sys.platform.startswith("linux"):
+        try:
+            for line in Path("/etc/os-release").read_text(encoding="utf-8", errors="replace").splitlines():
+                if line.startswith("PRETTY_NAME="):
+                    return line.split("=", 1)[1].strip().strip('"')
+        except OSError:
+            pass
+    return _platform.platform(terse=True)
+
+
+def helper_log_tail(lines: int = REPORT_LOG_LINES) -> list:
+    """Last lines of the helper's update.log (Linux) or the launcher's (Windows), [] if none."""
+    for path in (mark_dir() / "update.log", data_dir() / "update.log"):
+        try:
+            return path.read_text(encoding="utf-8", errors="replace").splitlines()[-lines:]
+        except OSError:
+            continue
+    return []
+
+
+def failure_report(record: dict, reason: str, stage: str, kind: str = "", installed: str = __version__,
+                   now=None, log_lines=None, bits=None) -> str:
+    """Plain text of the error report (English: it is read by the developer). Nothing personal: the home folder
+    and the user name are replaced, nothing from the settings is included."""
+    now = now or utcnow()
+    session = " ".join(v for v in (os.environ.get("XDG_CURRENT_DESKTOP", ""), os.environ.get("XDG_SESSION_TYPE", "")) if v)
+    lines = [
+        "ClipSD update failure report",
+        f"From version: {record.get('from', installed)}",
+        f"To version: {record.get('to', '')}",
+        f"Running version: {installed}",
+        f"Platform: {record.get('platform') or platform_name()} ({os_description()}, {_platform.machine()})"
+        + (f", session: {session}" if session else ""),
+        f"Install kind: {kind or install_kind()}",
+        f"Channel: {record.get('channel', '')}",
+        f"Step: {stage}",
+        f"Error code: {reason}",
+        f"Attempt started: {record.get('time', '')}",
+        f"Report time: {uc.format_utc(now)}",
+        f"trace_id: {record.get('trace_id', '')}",
+        f"attempt_id: {record.get('attempt_id', '')}",
+    ]
+    if record.get("deferred"):
+        lines.append(f"Deferred: yes ({record.get('deferred_reason', '')}), tries: {record.get('tries', 0)}")
+    result = read_switch_result()
+    if result:
+        lines.append("Helper result: " + json.dumps(result, ensure_ascii=False, sort_keys=True))
+    tail = helper_log_tail() if log_lines is None else list(log_lines)
+    lines.append("")
+    lines.append(f"Update log (last {len(tail)} lines):" if tail else "Update log: none")
+    lines.extend(tail)
+    return scrub("\n".join(lines), bits)
+
+
+def report_title(record: dict, reason: str) -> str:
+    return f"Update {record.get('from', '')} -> {record.get('to', '')} failed: {reason}"
+
+
+def _fit(make, body: str, limit: int) -> str:
+    """The longest address make(body) not longer than limit: the end of the body is cut by lines, then by characters."""
+    url = make(body)
+    marker = "\n[... cut]"
+    while len(url) > limit and body:
+        cut = body.rfind("\n", 0, max(len(body) - 1, 0))
+        body = body[:cut] if cut > len(body) // 2 else body[:int(len(body) * 0.9)]
+        url = make(body + marker)
+    return url
+
+
+def issue_url(title: str, body: str, limit: int = ISSUE_URL_LIMIT) -> str:
+    """GitHub "new issue" page with the title and the report filled in (body cut to a safe length)."""
+    return _fit(lambda b: ISSUE_URL + "?" + urllib.parse.urlencode({"title": title, "body": b},
+                                                                     quote_via=urllib.parse.quote), body, limit)
+
+
+def mail_url(subject: str, body: str, limit: int = MAIL_URL_LIMIT) -> str:
+    """mailto: the support address with a subject and the report (cut to what mail programs accept)."""
+    def make(b):
+        return (f"mailto:{SUPPORT_EMAIL}?subject={urllib.parse.quote(subject, safe='')}"
+                f"&body={urllib.parse.quote(b, safe='')}")
+    return _fit(make, body, limit)
+
+
+def send_report(report: str, title: str, endpoint: str = "", opener=None) -> bool:
+    """POST the report to the receiver (REPORT_ENDPOINT, https only). Only when the person presses "Send" in the
+    report window, which shows exactly this text. True when the receiver answered 2xx."""
+    endpoint = endpoint or REPORT_ENDPOINT
+    if not endpoint or urllib.parse.urlparse(endpoint).scheme != "https":
+        return False
+    data = json.dumps({"kind": "update_failure", "title": title, "report": report,
+                       "version": __version__}, ensure_ascii=False).encode("utf-8")
+    request = urllib.request.Request(endpoint, data=data, method="POST",
+                                     headers={"Content-Type": "application/json", "User-Agent": f"ClipSD/{__version__}"})
+    try:
+        with (opener or https_open)(request, timeout=NETWORK_TIMEOUT_S) as response:
+            return 200 <= getattr(response, "status", 200) < 300
+    except (OSError, urllib.error.URLError, http.client.HTTPException, ValueError):
+        return False
+
+
 # --- windows ---------------------------------------------------------------
 
 def _notes_browser(markdown: str) -> QTextBrowser:
     view = QTextBrowser()
-    view.setOpenExternalLinks(True)
+    view.setOpenLinks(False)                     # links of the notes open through sysenv.open_url (clean environment)
+    view.anchorClicked.connect(sysenv.open_url)
     view.setMarkdown(markdown or tr("updater.notes.none"))
     view.setMinimumSize(460, 220)
     return view
@@ -881,7 +1114,8 @@ class ProgressDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(tr("updater.offer.title"))
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel(tr("updater.download.title", version=version)))
+        self.heading = QLabel(tr("updater.download.title", version=version))
+        layout.addWidget(self.heading)
         self.bar = QProgressBar()
         self.bar.setRange(0, 100)
         layout.addWidget(self.bar)
@@ -900,13 +1134,28 @@ class ProgressDialog(QDialog):
         mb = 1024 * 1024
         self.status.setText(tr("updater.download.progress", done=f"{done / mb:.1f}", total=f"{total / mb:.1f}"))
 
+    def set_stage(self, text: str):
+        """After the download: the same window says what happens now (installing, ClipSD restarts by itself);
+        the bar runs without a percentage and there is nothing to cancel any more."""
+        self.heading.setText(text)
+        self.bar.setRange(0, 0)
+        self.status.setText("")
+        self.status.hide()
+        self.cancel_button.hide()
+
 
 class WhatsNewDialog(QDialog):
     def __init__(self, version: str, markdown: str, parent=None):
         super().__init__(parent)
         self.setWindowTitle(tr("updater.whatsnew.title", version=version))
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("<b>" + html.escape(tr("updater.whatsnew.title", version=version)) + "</b>"))
+        heading = QLabel("<b>" + html.escape(tr("updater.whatsnew.installed", version=version)) + "</b>")
+        heading.setObjectName("installed")
+        heading.setWordWrap(True)
+        layout.addWidget(heading)
+        title = QLabel(tr("updater.whatsnew.title", version=version))
+        title.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(title)
         layout.addWidget(_notes_browser(markdown))
         row = QHBoxLayout()
         row.addStretch(1)
@@ -915,6 +1164,107 @@ class WhatsNewDialog(QDialog):
         ok.clicked.connect(self.accept)
         row.addWidget(ok)
         layout.addLayout(row)
+
+
+class ReportDialog(QDialog):
+    """Error report of a failed update: the exact text, Copy, the bug report page, e-mail; Send only when
+    REPORT_ENDPOINT is set (the receiver of 1.32)."""
+
+    def __init__(self, report: str, title: str, parent=None, open_url=None, endpoint=None, sender=None):
+        super().__init__(parent)
+        self.report, self.title = report, title
+        self.endpoint = REPORT_ENDPOINT if endpoint is None else endpoint
+        self._open_url = open_url or sysenv.open_url
+        self._sender = sender or send_report
+        self.setWindowTitle(tr("updater.report.title"))
+        layout = QVBoxLayout(self)
+        hint = QLabel(tr("updater.report.hint"))
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        self.text = QPlainTextEdit(report)
+        self.text.setReadOnly(True)
+        self.text.setMinimumSize(520, 260)
+        layout.addWidget(self.text)
+        self.status = QLabel("")
+        self.status.setWordWrap(True)
+        layout.addWidget(self.status)
+        row = QHBoxLayout()
+        self.copy_button = QPushButton(tr("updater.button.copy"))
+        self.issue_button = QPushButton(tr("updater.button.open_issue"))
+        self.mail_button = QPushButton(tr("updater.button.email"))
+        self.send_button = QPushButton(tr("updater.button.send"))
+        self.close_button = QPushButton(tr("updater.button.close"))
+        for button in (self.copy_button, self.issue_button, self.mail_button):
+            row.addWidget(button)
+        row.addStretch(1)
+        row.addWidget(self.send_button)
+        row.addWidget(self.close_button)
+        layout.addLayout(row)
+        self.send_button.setVisible(bool(self.endpoint))
+        self.copy_button.clicked.connect(self.copy)
+        self.issue_button.clicked.connect(lambda: self._open_url(self.issue_url()))
+        self.mail_button.clicked.connect(lambda: self._open_url(self.mail_url()))
+        self.send_button.clicked.connect(self.send)
+        self.close_button.clicked.connect(self.accept)
+
+    def issue_url(self) -> str:
+        return issue_url(self.title, self.report)
+
+    def mail_url(self) -> str:
+        return mail_url("ClipSD: " + self.title, self.report)
+
+    def copy(self):
+        QGuiApplication.clipboard().setText(self.report)
+        self.status.setText(tr("updater.report.copied"))
+
+    def send(self) -> bool:
+        ok = self._sender(self.report, self.title, self.endpoint)
+        self.status.setText(tr("updater.report.sent" if ok else "updater.report.send_failed"))
+        if ok:
+            self.send_button.setEnabled(False)
+        return ok
+
+
+class FailedDialog(QDialog):
+    """The update did not go in: what happened, Retry, Send an error report, Close (closed = Close)."""
+
+    def __init__(self, version: str, report: str, title: str, parent=None, open_url=None, hint: str = ""):
+        super().__init__(parent)
+        self.choice = "close"
+        self.report, self.title, self._open_url = report, title, open_url
+        self.report_dialog = None
+        self.setWindowTitle(tr("updater.offer.title"))
+        layout = QVBoxLayout(self)
+        text = QLabel(tr("updater.failed.text", version=version))
+        text.setObjectName("text")
+        text.setWordWrap(True)
+        layout.addWidget(text)
+        if hint:   # what to do for this reason (FAILURE_HINTS), e.g. install by hand when systemd-run is missing
+            note = QLabel(hint)
+            note.setObjectName("hint")
+            note.setWordWrap(True)
+            layout.addWidget(note)
+        row = QHBoxLayout()
+        self.report_button = QPushButton(tr("updater.button.report"))
+        self.close_button = QPushButton(tr("updater.button.close"))
+        self.retry_button = QPushButton(tr("updater.button.retry"))
+        self.retry_button.setDefault(True)
+        row.addWidget(self.report_button)
+        row.addStretch(1)
+        row.addWidget(self.close_button)
+        row.addWidget(self.retry_button)
+        layout.addLayout(row)
+        self.retry_button.clicked.connect(lambda: self._done("retry"))
+        self.close_button.clicked.connect(lambda: self._done("close"))
+        self.report_button.clicked.connect(self.show_report)
+
+    def _done(self, choice):
+        self.choice = choice
+        self.accept()
+
+    def show_report(self):
+        self.report_dialog = closable(ReportDialog(self.report, self.title, self, open_url=self._open_url))
+        self.report_dialog.exec()
 
 
 CLOSABLE = "clipsd_closable"   # property of a window that holds no work: quitting closes it (app.quit_blocker)
@@ -978,10 +1328,35 @@ class UpdaterUI:
     def error(self, text: str) -> None:
         closable(QMessageBox(QMessageBox.Icon.Warning, tr("updater.offer.title"), text)).exec()
 
+    def failed(self, version: str, report: str, title: str, hint: str = "") -> str:
+        """The failure window: returns "retry" or "close"."""
+        self.progress_close()
+        dialog = closable(FailedDialog(version, report, title, open_url=self.open_url, hint=hint))
+        dialog.exec()
+        return dialog.choice
+
+    def deferred_notice(self, text: str, on_restart) -> None:
+        """Non-modal: the update waits (editor open); "Restart now" tries again at once."""
+        self.progress_close()
+        box = QMessageBox(QMessageBox.Icon.Information, tr("updater.offer.title"), text)
+        box.setModal(False)
+        box.setWindowModality(Qt.WindowModality.NonModal)
+        box.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        restart = box.addButton(tr("updater.button.restart_now"), QMessageBox.ButtonRole.AcceptRole)
+        box.addButton(tr("updater.button.close"), QMessageBox.ButtonRole.RejectRole)
+        restart.clicked.connect(lambda: QTimer.singleShot(0, on_restart))
+        closable(box)
+        self._notice = box
+        box.show()
+
     def progress_start(self, version: str, on_cancel) -> None:
-        self.progress = ProgressDialog(version, on_cancel)
+        self.progress = closable(ProgressDialog(version, on_cancel))
         self.progress.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
         self.progress.show()
+
+    def progress_stage(self, text: str) -> None:
+        if self.progress is not None:
+            self.progress.set_stage(text)
 
     def progress_update(self, done: int, total: int) -> None:
         if self.progress is not None:
@@ -994,8 +1369,12 @@ class UpdaterUI:
             self.progress = None
 
     def open_url(self, url: str) -> None:
-        QDesktopServices.openUrl(QUrl(url))
+        sysenv.open_url(url)
 
+
+FAILURE_HINTS = {   # reason of a failed switch -> what the person can do (shown under the text of the failure window)
+    "cannot_detach": "updater.failed.cannot_detach",   # runs as clipsd.service and systemd-run is not available
+}
 
 ERROR_KEYS = {   # error code of the update channel -> text key (clipshot/i18n/<lang>/updater.json)
     "network": "updater.error.check",
@@ -1046,6 +1425,10 @@ class Updater(QObject):
         self._pending = None           # (manifest, trace_id) while downloading
         self._installing = None        # (record, manifest) while the Linux package is unpacked
         self._deferred_timer = None
+        self._helper_timer = None       # watch of the Linux switch helper right after its start
+        self._helper_attempt = ""
+        self._helper_ticks = 0
+        self._auto_update = False       # "Retry" of the failure window: install the found version without the offer
         self._mark_written = False
         self._critical_offered_at = None   # last security fix window of this run (None: not yet)
         self._critical_tried_at = None     # last automatic attempt to remind of it (window or not)
@@ -1120,8 +1503,9 @@ class Updater(QObject):
         self._present(manifest, "notify", True, now)
         return True
 
-    def check_now(self, manual: bool = True) -> bool:
-        """Returns True when a request to the channel was started."""
+    def check_now(self, manual: bool = True, auto: bool = False) -> bool:
+        """Returns True when a request to the channel was started. auto ("Retry" after a failure): a newer
+        version found is installed at once, without the "version N is available" window."""
         if self.kind == "store":
             if manual:
                 self.ui.open_url(f"ms-windows-store://pdp/?productid={STORE_PRODUCT_ID}"
@@ -1142,6 +1526,7 @@ class Updater(QObject):
         if not should_check(self.config, now, manual):
             return False
         self.busy = True
+        self._auto_update = auto
         mark_checked(self.config, now)
         self._save()
         channel = channel_of(self.config)
@@ -1165,6 +1550,7 @@ class Updater(QObject):
         channel = channel_of(self.config)
         if error is not None:
             self.busy = False
+            self._auto_update = False
             log.warning("update check failed: %s", error)
             telemetry_event("update_check_failed", reason=error.code, channel=channel)
             if manual:
@@ -1190,6 +1576,7 @@ class Updater(QObject):
         self._present(manifest, action, critical, now)
 
     def _present(self, manifest: Manifest, action: str, critical: bool, now) -> None:
+        auto, self._auto_update = self._auto_update, False
         if action == "none":
             self.busy = False
             return
@@ -1205,7 +1592,7 @@ class Updater(QObject):
             self.busy = False
             self.ui.manual_install(manifest.version)
             return
-        choice = self.ui.offer(manifest, self.installed, critical=critical)
+        choice = "update" if auto else self.ui.offer(manifest, self.installed, critical=critical)
         if choice == "skip" and critical:
             choice = "later"   # a security fix is never skipped, only postponed
         if choice == "skip":
@@ -1227,13 +1614,18 @@ class Updater(QObject):
         trace_id = trace_id or new_id()
         self._pending = (manifest, trace_id)
         self.cancel.clear()
-        _rmtree(downloads_dir())
         dest = downloads_dir() / manifest.version / safe_file_name(entry["url"])
+        clean_downloads(keep=dest)   # an archive kept from a failed attempt is checked below, all else goes
         local_root = proba_dir() if manifest.channel == "proba" else None   # preview builds only
         self.ui.progress_start(manifest.version, self.cancel.set)
 
         def work():
             try:
+                if verified_file(dest, entry["size"], entry["sha256"]):
+                    log.info("update %s: the archive downloaded before has the signed sha256, used again",
+                             manifest.version)
+                    self._downloaded.emit(dest, None)
+                    return
                 path = download_file(entry["url"], dest, entry["size"], entry["sha256"],
                                      progress=self._progress.emit, cancel=self.cancel,
                                      opener=self.opener, platform=platform, local_root=local_root)
@@ -1247,8 +1639,12 @@ class Updater(QObject):
         self._run(work)
 
     def _on_downloaded(self, path, error):
-        self.ui.progress_close()
         manifest, trace_id = self._pending
+        if error is None and hasattr(self.ui, "progress_stage"):
+            # the same window stays and says what happens now, until ClipSD restarts or a message replaces it
+            self.ui.progress_stage(tr("updater.install.started", version=manifest.version))
+        else:
+            self.ui.progress_close()
         if error is not None:
             self.busy = False
             self._pending = None
@@ -1269,6 +1665,13 @@ class Updater(QObject):
 
     # installing ------------------------------------------------------------
     def install(self, path: Path, manifest: Manifest, trace_id: str):
+        if self.kind == "linux" and switch_lock_alive():
+            # a switch helper is at work (an earlier attempt): never a second one, never unpack under it
+            self.ui.progress_close()
+            self.busy = False
+            self._pending = None
+            self.ui.info(tr("updater.retry.busy"))
+            return
         record = write_attempt(attempt_path(), self.installed, manifest.version, self.clock(), trace_id,
                                channel_of(self.config), manifest.notes)
         telemetry_event("update_started", **attempt_fields(record))
@@ -1306,22 +1709,56 @@ class Updater(QObject):
             self._defer(record, blocker)
             return
         try:
-            method = launch_linux_switch(folder, self.installed, manifest.version, record["attempt_id"])
+            method = self._launch_switch(folder, self.installed, manifest.version, record["attempt_id"])
         except (OSError, ValueError) as exc:
             self._install_failed(record, exc)
             return
         log.info("switch helper started (%s); it asks the program to quit over the local socket", method)
         self._install_started(record, manifest)
+        self._watch_helper(record)
+
+    @staticmethod
+    def _launch_switch(folder, from_version: str, to_version: str, attempt_id: str) -> str:
+        """Start the Linux helper. The result file of an earlier try goes first: it has the same from and to and may be
+        written less than RESULT_CLOCK_SLACK before this attempt, so it would pass for this attempt's result and the
+        watch would report a failure while the new helper is only starting (review of 1.31.2, П2)."""
+        _unlink(mark_dir() / "update-result.json")
+        return launch_linux_switch(folder, from_version, to_version, attempt_id)
 
     def _install_failed(self, record: dict, exc) -> None:
-        code = getattr(exc, "code", type(exc).__name__)
+        code = str(getattr(exc, "code", type(exc).__name__))
         log.warning("update install could not start: %s", exc)
         telemetry_event("update_failed", reason=code, stage="install", **attempt_fields(record))
-        remove_staging(record, self.kind, self.installed)
+        remove_staging(record, self.kind, self.installed, keep_download=True)
         _unlink(attempt_path())
         self.busy = False
         self._pending = None
-        self.ui.error(tr("updater.error.install"))
+        self._show_failure(record, code if REASON_RE.fullmatch(code) else "unknown", "install", "updater.error.install")
+
+    def _show_failure(self, record: dict, reason: str, stage: str, fallback_key: str = "updater.error.failed") -> None:
+        """The failure window (Retry / Send an error report / Close); a UI without it (tests) gets the old message."""
+        version = str(record.get("to", ""))
+        failed = getattr(self.ui, "failed", None)
+        if failed is None:
+            self.ui.progress_close()
+            self.ui.error(tr(fallback_key, version=version))
+            return
+        report = failure_report(record, reason, stage, self.kind, self.installed, self.clock())
+        hint = tr(FAILURE_HINTS[reason]) if reason in FAILURE_HINTS else ""
+        if failed(version, report, report_title(record, reason), hint=hint) == "retry":
+            self.retry_update(record)
+
+    def retry_update(self, record: dict) -> bool:
+        """"Retry" of the failure window. Never a second switch helper (update.lock held by a living one: the
+        person is told to wait). Otherwise the channel is asked again (signed document, the same checks) and the
+        version found is installed at once; the archive kept from the failed attempt is used again when it has the
+        signed size and sha256, else it is downloaded. Returns True when the request to the channel started."""
+        if self.kind == "linux" and switch_lock_alive():
+            self.ui.info(tr("updater.retry.busy"))
+            return False
+        self.busy = False
+        telemetry_event("update_retry", **attempt_fields(record))
+        return self.check_now(manual=True, auto=True)
 
     def _install_started(self, record: dict, manifest: Manifest) -> None:
         self._pending = None
@@ -1351,6 +1788,7 @@ class Updater(QObject):
         return ""
 
     def _defer(self, record: dict, reason: str) -> None:
+        self._stop_helper_watch()
         first = not record.get("deferred")
         record["deferred"] = True
         record["deferred_reason"] = reason
@@ -1364,8 +1802,30 @@ class Updater(QObject):
             telemetry_event("update_deferred", reason=reason, **attempt_fields(record))
             text = wait_text(reason, str(record.get("to", "")))
             # after the reply on the socket is written: a window must never delay "busy"
-            QTimer.singleShot(0, lambda: self.ui.notice(text) if hasattr(self.ui, "notice") else self.ui.info(text))
+            QTimer.singleShot(0, lambda: self._show_wait(text))
         self._watch_deferred()
+
+    def _show_wait(self, text: str) -> None:
+        """The update is downloaded and waits: non-modal message with "Restart now" (a UI without it: notice/info)."""
+        if hasattr(self.ui, "deferred_notice"):
+            self.ui.deferred_notice(text, self.restart_now)
+        elif hasattr(self.ui, "notice"):
+            self.ui.notice(text)
+        else:
+            self.ui.info(text)
+
+    def restart_now(self) -> bool:
+        """"Restart now" of the waiting message: switch at once when nothing blocks quitting any more; otherwise
+        say again what still has to be closed. True when the switch was started."""
+        record = read_attempt(attempt_path())
+        if record is None or not record.get("deferred"):
+            return False
+        reason = self._quit_blocker()
+        if reason:
+            self._show_wait(wait_text(reason, str(record.get("to", ""))))
+            return False
+        self._stop_watch()
+        return self.retry_switch(record)
 
     def _watch_deferred(self) -> None:
         if self._deferred_timer is None:
@@ -1411,22 +1871,74 @@ class Updater(QObject):
             return False
         try:
             if self.kind == "linux":
-                launch_linux_switch(folder, self.installed, to_version, str(record.get("attempt_id", "")))
+                self._launch_switch(folder, self.installed, to_version, str(record.get("attempt_id", "")))
             else:
                 launch_windows_switch(root)
         except (OSError, ValueError) as exc:
             self._fail_attempt(record, type(exc).__name__)
             return False
         log.info("deferred update to %s: switch started (try %d)", to_version, tries)
+        if self.kind == "linux":
+            self._watch_helper(record)
         return True
 
     def _fail_attempt(self, record: dict, reason: str) -> None:
         self._stop_watch()
-        remove_staging(record, self.kind, self.installed)
+        self._stop_helper_watch()
+        remove_staging(record, self.kind, self.installed, keep_download=True)
         _unlink(attempt_path())
         self.busy = False
         telemetry_event("update_failed", reason=reason, stage="switch", **attempt_fields(record))
-        self.ui.error(tr("updater.error.failed", version=str(record.get("to", ""))))
+        self._show_failure(record, reason, "switch")
+
+    # watch of the switch helper (Linux) -------------------------------------
+    def _watch_helper(self, record: dict) -> None:
+        self._helper_attempt = str(record.get("attempt_id", ""))
+        self._helper_ticks = 0
+        if self._helper_timer is None:
+            self._helper_timer = QTimer(self)
+            self._helper_timer.setInterval(HELPER_WATCH_MS)
+            self._helper_timer.timeout.connect(self.helper_tick)
+        self._helper_timer.start()
+
+    def _stop_helper_watch(self) -> None:
+        if self._helper_timer is not None:
+            self._helper_timer.stop()
+
+    def helper_tick(self) -> str:
+        """Every second after the helper was started, while this program still runs (on "ok" it quits and the
+        watch ends with it). "" = still waiting, "done" = nothing to watch (deferred, another attempt), "failed" =
+        the failure window was shown. A living helper (update.lock) is never declared failed: it decides itself.
+        Failed: a result of this attempt that says so, an exit code of the helper other than 0 / 4 (4 = deferred),
+        or no helper holding update.lock HELPER_ASK_TICKS seconds after the start (it died before its lock: the
+        19.11.2026 case, where 1.31.0 waited 10 minutes and then said nothing useful)."""
+        record = read_attempt(attempt_path())
+        if record is None or str(record.get("attempt_id", "")) != self._helper_attempt or record.get("deferred"):
+            self._stop_helper_watch()
+            if record is None or not record.get("deferred"):
+                self.ui.progress_close()   # deferred: the waiting message has replaced it already
+            return "done"
+        self._helper_ticks += 1
+        if switch_lock_alive():
+            return ""
+        result = switch_result(record)
+        outcome = str(result.get("result", ""))
+        reason = ""
+        if outcome in ("failed", "rolled_back", "error"):
+            reason = str(result.get("reason") or outcome)
+        else:
+            code = helper_exit_code()
+            if code not in (None, 0, 4):
+                reason = f"helper_exit_{code}"
+            elif self._helper_ticks >= HELPER_ASK_TICKS:
+                reason = "helper_silent"
+        if not reason:
+            return ""
+        if not REASON_RE.fullmatch(reason):
+            reason = "unknown"
+        log.warning("update to %s: the switch helper failed (%s)", record.get("to"), reason)
+        self._fail_attempt(record, reason)
+        return "failed"
 
     # previous attempt ------------------------------------------------------
     def check_previous_attempt(self) -> str:
@@ -1457,16 +1969,22 @@ class Updater(QObject):
                 self.busy = True
                 self._watch_deferred()
                 QTimer.singleShot(0, self.deferred_tick)
+        elif state == "failed" and self.kind == "linux" and switch_lock_alive():
+            # a helper still holds update.lock: it decides (switch or roll back); look again in a minute
+            self.busy = True
+            QTimer.singleShot(60_000, self.check_previous_attempt)
+            state = "pending"
         elif state == "failed":
-            remove_staging(record, self.kind, self.installed)
+            remove_staging(record, self.kind, self.installed, keep_download=True)
             _unlink(attempt_path())
             self.busy = False
             self._stop_watch()
+            self._stop_helper_watch()
             reason = str(result.get("reason") or result.get("result") or "not_switched")
             if not REASON_RE.fullmatch(reason):
                 reason = "unknown"   # a helper older than reason codes wrote a phrase
             telemetry_event("update_failed", reason=reason, stage="switch", **attempt_fields(record))
-            self.ui.error(tr("updater.error.failed", version=str(record.get("to", ""))))
+            self._show_failure(record, reason, "switch")
         elif state == "pending":
             started = _time(record.get("time")) or self.clock()
             left = (started + SWITCH_TIMEOUT - self.clock()).total_seconds() * 1000

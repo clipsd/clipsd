@@ -11,18 +11,24 @@ from .i18n import tr
 
 CARD_STYLE = """
 #tourCard { background: #ffffff; border: 1px solid #c9ccd1; border-radius: 12px; }
+QLabel { color: #1c1f24; background: transparent; }
 QLabel#tourTitle { font-size: 16px; font-weight: bold; color: #1c1f24; }
 QLabel#tourText { font-size: 13px; color: #33373d; }
-QLabel#tourStep { font-size: 12px; color: #7a7f87; }
-QPushButton { min-height: 30px; padding: 0 14px; border-radius: 6px; border: 1px solid #b9b9b9; background: #fff; }
-QPushButton:hover { background: #eef3fb; border-color: #9fb6da; }
+QLabel#tourStep { font-size: 12px; color: #6b7079; }
+QPushButton { min-height: 30px; padding: 0 14px; border-radius: 6px; border: 1px solid #c9ccd1; background: #ffffff;
+    color: #1c1f24; }
+QPushButton:hover { background: #eef3fb; border-color: #9fb6da; color: #1c1f24; }
+QPushButton:disabled { background: #f4f5f7; border-color: #dfe2e6; color: #8a9099; }
 QPushButton#tourNext { background: #1e78ff; color: white; border: 1px solid #1660d0; font-weight: bold; }
-QPushButton#tourNext:hover { background: #3a8bff; }
+QPushButton#tourNext:hover { background: #3a8bff; color: white; }
 QPushButton#tourSkip { border: none; background: transparent; color: #5b6068; }
+QPushButton#tourSkip:hover { background: transparent; color: #1c1f24; text-decoration: underline; }
 QPushButton#tourAction { border: none; background: transparent; color: #1660d0; font-weight: bold;
     text-decoration: underline; padding: 0; min-height: 22px; }
-QPushButton#tourAction:hover { color: #1e78ff; }
+QPushButton#tourAction:hover { background: transparent; color: #1e78ff; }
 """
+# Карточка всегда белая, поэтому у каждой надписи и кнопки свой явный цвет: цвет из палитры приложения на Windows
+# в тёмной теме светлый, и кнопки языков, «Назад», «Пропустить» были почти белыми на белом (19.11.2026).
 
 
 LANGUAGE_STEP = "language"   # пометка шага выбора языка в таблице шагов
@@ -135,7 +141,9 @@ class Tour(QWidget):
                 grid.addWidget(button, 0, 1, 1, 3)   # «Как в системе (…)» рядом с крупным глобусом
             else:
                 grid.addWidget(button, 1 + (i - 1) // 4, (i - 1) % 4)
-        self.lang_row.setStyleSheet("QPushButton#tourLang { min-height: 30px; font-size: 13px; padding: 0 4px; }"
+        self.lang_row.setStyleSheet("QPushButton#tourLang { min-height: 30px; font-size: 13px; padding: 0 4px;"
+                                    " background: #ffffff; color: #1c1f24; border: 1px solid #c9ccd1; }"
+                                    " QPushButton#tourLang:hover { background: #eef3fb; border-color: #9fb6da; }"
                                     " QPushButton#tourLang:checked { background: #1e78ff; color: white;"
                                     " border: 1px solid #1660d0; font-weight: bold; }")
         self._fill_languages()
@@ -190,7 +198,7 @@ class Tour(QWidget):
         self.title.setText(title)
         self.text.setText(text)
         self.lang_row.setVisible(is_language)
-        self.back.setEnabled(self.index > 0)
+        self.back.setVisible(self.index > 0)   # на первом шаге «Назад» нет, а не бледная отключённая кнопка
         self.next.setText(tr("tour.finish") if self.index == len(self.steps) - 1 else tr("tour.next"))
         # Высота карточки по переносам строк (у QLabel с переносом сам adjustSize её не угадывает).
         self.text.ensurePolished()

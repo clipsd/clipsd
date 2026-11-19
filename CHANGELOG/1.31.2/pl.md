@@ -1,0 +1,4 @@
+- Linux: aktualizacja znów instaluje się sama w nowszych systemach (na przykład Ubuntu 26.04). Wcześniej była pobierana, ale się nie instalowała.
+- Linux: w nowszych systemach znów działają rozpoznawanie tekstu, linki i autostart.
+- Jeśli aktualizacja się nie zainstaluje, pojawi się okno z przyciskami „Spróbuj ponownie” i „Raport o błędzie”. Raport nie zawiera nazwy użytkownika ani ścieżek do folderów osobistych.
+- Po aktualizacji okno „Co nowego” zaczyna się od wiersza „Aktualizacja zainstalowana”.

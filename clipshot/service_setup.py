@@ -4,12 +4,13 @@
 """Окна подключения сервисов перевода (в общем стиле ClipSD, dialogs.ClipDialog):
 почта для MyMemory (50 000 знаков в день) и ключ Google Cloud (500 000 знаков в месяц)."""
 
-from PyQt6.QtCore import Qt, QUrl
-from PyQt6.QtGui import QDesktopServices, QGuiApplication
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout
 
 from .dialogs import ACCENT, ClipDialog
 from .i18n import tr
+from .sysenv import open_url
 
 _open = []
 
@@ -123,11 +124,11 @@ class GoogleSetupDialog(ClipDialog):
             open_b = QPushButton(tr(caption))
             open_b.setObjectName("clipSecondary")
             open_b.setCursor(Qt.CursorShape.PointingHandCursor)
-            open_b.clicked.connect(lambda _=False, u=url: QDesktopServices.openUrl(QUrl(u)))
+            open_b.clicked.connect(lambda _=False, u=url: open_url(u))
             copy_b = QPushButton(tr("service_setup.copy_link"))
             copy_b.setObjectName("clipSmall")
             copy_b.setStyleSheet("QPushButton#clipSmall { font-size: 14px; padding: 4px 12px; min-height: 26px;"
-                                 " border-radius: 8px; background: #ffffff; border: 1px solid #c8d0db; }"
+                                 " border-radius: 8px; background: #ffffff; color: #16181c; border: 1px solid #c8d0db; }"
                                  " QPushButton#clipSmall:hover { background: #f1f4f8; }")   # маленькая светлая кнопка, не текст-ссылка
             copy_b.setCursor(Qt.CursorShape.PointingHandCursor)
             open_b.setFixedHeight(36)

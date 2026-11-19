@@ -16,6 +16,8 @@ import subprocess
 import tempfile
 from urllib.parse import unquote, urlparse
 
+from .sysenv import child_env
+
 from PyQt6.QtCore import QObject, QRect, Qt, QTimer, pyqtSignal, pyqtSlot
 try:  # QtDBus есть только в Linux-сборках PyQt6; в Windows снимок делается через Qt напрямую
     from PyQt6.QtDBus import QDBusConnection, QDBusError, QDBusMessage
@@ -109,7 +111,7 @@ def grab_external():
             continue
         path = _temp_png()
         try:
-            subprocess.run(command(path), timeout=15, check=True,
+            subprocess.run(command(path), timeout=15, check=True, env=child_env(),
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except (subprocess.SubprocessError, OSError):
             continue

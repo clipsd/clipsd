@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (QApplication, QCheckBox, QColorDialog, QComboBox, Q
 
 from .i18n import tr
 from .i18n import keys as i18n_keys
+from .sysenv import child_env
 
 # Русская раскладка → латинская по месту клавиши: сочетание работает при любой раскладке.
 _RU = "йцукенгшщзхъфывапролджэячсмитьбю"
@@ -132,14 +133,14 @@ class ShellExtension:
             out = subprocess.run(["gdbus", "call", "--session", "--dest", "org.gnome.Shell",
                                   "--object-path", "/org/gnome/Shell",
                                   "--method", "org.gnome.Shell.Extensions.GetExtensionInfo", self.uuid],
-                                 capture_output=True, text=True, timeout=5).stdout
+                                 capture_output=True, text=True, timeout=5, env=child_env()).stdout
         except (OSError, subprocess.SubprocessError):
             return False
         return "'state': <1.0>" in out or "'state': <1>" in out
 
     def set(self, key: str, values):
         subprocess.run(["gsettings", "--schemadir", str(self.dir / "schemas"), "set", EXT_SCHEMA, key, str(list(values))],
-                       capture_output=True, timeout=5)
+                       capture_output=True, timeout=5, env=child_env())
 
 
 class GnomeHotkeys:
@@ -154,7 +155,7 @@ class GnomeHotkeys:
 
     @staticmethod
     def _gsettings(*args) -> str:
-        out = subprocess.run(["gsettings", *args], capture_output=True, text=True, timeout=5)
+        out = subprocess.run(["gsettings", *args], capture_output=True, text=True, timeout=5, env=child_env())
         if out.returncode != 0:
             raise RuntimeError(out.stderr.strip() or tr("settings.gsettings_error"))
         return out.stdout.strip()
@@ -284,7 +285,7 @@ def autostart_enabled() -> bool:
         return _startup_lnk().exists()
     unit = _systemd_unit()
     if unit:
-        return subprocess.run(["systemctl", "--user", "is-enabled", "--quiet", unit]).returncode == 0
+        return subprocess.run(["systemctl", "--user", "is-enabled", "--quiet", unit], env=child_env()).returncode == 0
     return _xdg_autostart().exists()
 
 
@@ -313,7 +314,8 @@ def set_autostart(enabled: bool):
         return
     unit = _systemd_unit()
     if unit:
-        subprocess.run(["systemctl", "--user", "enable" if enabled else "disable", unit], capture_output=True)
+        subprocess.run(["systemctl", "--user", "enable" if enabled else "disable", unit], capture_output=True,
+                       env=child_env())
         return
     path = _xdg_autostart()
     if not enabled:

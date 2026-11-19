@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # ClipSD: version switch helper. Works without the program itself (pure bash, no Python).
 # Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко). SPDX-License-Identifier: GPL-3.0-or-later
 #
@@ -22,7 +22,7 @@
 #    and a GNOME extension put there by the package from versions/B (install.sh --refresh-integration);
 #    no mark: points current back at A, starts A, keeps versions/B for diagnosis
 # Result is always written to ~/.local/state/clipsd/update-result.json; "reason" is a short code
-# ([a-z0-9_]: started, busy, no_start_mark, cannot_return, cannot_switch, missing_version, lock_busy)
+# ([a-z0-9_]: started, busy, no_start_mark, cannot_return, cannot_switch, missing_version, lock_busy, cannot_detach)
 # that the program passes to its statistics as it is; bad arguments (bad_version) only go to update.log.
 #
 # The caller must start this script OUTSIDE the service cgroup, otherwise `systemctl restart`
@@ -33,7 +33,52 @@
 # Before the switch the helper writes switch-pending (from, to); a power loss after the switch and before the start
 # mark leaves it behind, and the next start of the program runs --resume: wait for the mark, otherwise roll back.
 # Exit code: 0 switched, 3 rolled back, 2 bad arguments or nothing changed, 4 deferred (program busy).
+#
+# The helper is started by the RUNNING (old) version of the program, from the folder of the NEW one. A ClipSD package up
+# to 1.31.1 passes it the environment of its PyInstaller build: LD_LIBRARY_PATH = <versions/old>/_internal, whose
+# libraries (Ubuntu 22.04) break the system tools of newer systems. On Ubuntu 26.04 /usr/bin/env, mkdir, cat (rust
+# coreutils: "LIBSYSTEMD_254 not found") and systemd-run, systemctl ("OPENSSL_3.4.0 not found") do not start, so
+# 1.31.0 lost its update on 19.11.2026: its systemd-run failed, the helper started in a new session died at the
+# shebang "#!/usr/bin/env bash" and nothing was switched. Hence: #!/bin/bash (bash needs none of those libraries),
+# the environment is cleaned before any other command, and a helper that finds itself inside the program's own
+# service (clipsd.service, where it would be stopped together with the program) moves out through --detach.
 set -uo pipefail
+
+# Remove what the PyInstaller build of the calling program put in for itself (pure bash: no tool runs before this).
+clean_env() {
+  local name parts p kept=()
+  local bundle="${_PYI_ARCHIVE_FILE:+${_PYI_ARCHIVE_FILE%/*}}"
+  in_bundle() {  # a folder of the calling build: next to its executable, or any versions/<v>/_internal of ClipSD
+    case "$1" in
+      "") return 0 ;;
+      */clipsd/versions/*/_internal|*/clipsd/versions/*/_internal/*) return 0 ;;
+    esac
+    [ -n "$bundle" ] && case "$1" in "$bundle"|"$bundle"/*) return 0 ;; esac
+    return 1
+  }
+  if [ -n "${LD_LIBRARY_PATH_ORIG+x}" ]; then
+    LD_LIBRARY_PATH="$LD_LIBRARY_PATH_ORIG"
+  else
+    IFS=: read -r -a parts <<< "${LD_LIBRARY_PATH:-}"
+    for p in "${parts[@]}"; do in_bundle "$p" || kept+=("$p"); done
+    LD_LIBRARY_PATH="$(IFS=:; printf '%s' "${kept[*]}")"
+  fi
+  if [ -n "$LD_LIBRARY_PATH" ]; then export LD_LIBRARY_PATH; else unset LD_LIBRARY_PATH; fi
+  unset LD_LIBRARY_PATH_ORIG
+  for name in QT_PLUGIN_PATH QML2_IMPORT_PATH; do
+    [ -n "${!name:-}" ] || continue
+    kept=()
+    IFS=: read -r -a parts <<< "${!name}"
+    for p in "${parts[@]}"; do in_bundle "$p" || kept+=("$p"); done
+    if [ ${#kept[@]} -gt 0 ]; then export "$name=$(IFS=:; printf '%s' "${kept[*]}")"; else unset "$name"; fi
+  done
+  for name in $(compgen -e); do
+    case "$name" in _PYI_*) unset "$name" ;; esac
+  done
+  # a frozen ClipSD started from here is an independent program, not a child of the caller's build
+  export PYINSTALLER_RESET_ENVIRONMENT=1
+}
+clean_env
 
 APP="${XDG_DATA_HOME:-$HOME/.local/share}/clipsd"
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/clipsd"
@@ -65,6 +110,17 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -n "$SOCK" ] || SOCK="$(default_socket)"
+
+# 0 when this helper runs inside the program's own service (cgroup .../clipsd.service): an older program whose
+# systemd-run failed started it there, and stopping the program (it quits for the update) would stop the helper too.
+# CLIPSD_SWITCH_CGROUP_FILE: tests only (a file with the lines of /proc/self/cgroup).
+in_program_unit() {
+  local line
+  while IFS= read -r line; do
+    case "$line" in */"$UNIT") return 0 ;; esac
+  done 2>/dev/null < "${CLIPSD_SWITCH_CGROUP_FILE:-/proc/self/cgroup}"
+  return 1
+}
 
 result() {  # $1 result, $2 reason code; writes update-result.json (FROM and TO are valid or empty here)
   mkdir -p "$STATE" || return
@@ -105,6 +161,12 @@ env_args() {
   return 0
 }
 
+# CLIPSD_SWITCH_DETACHED: set for the copy started by --detach, which never moves again (no loop when systemd-run fails)
+MOVED=0
+if [ "$DETACH" != 1 ] && [ "$ASK_ONLY" != 1 ] && [ -z "${CLIPSD_SWITCH_DETACHED:-}" ] && in_program_unit; then
+  log "started inside $UNIT: moving out of it (--detach)"
+  DETACH=1 MOVED=1
+fi
 if [ "$DETACH" = 1 ] && [ "$ASK_ONLY" != 1 ]; then
   self="$(readlink -f "$0")"
   mapfile -t envs < <(env_args)
@@ -113,10 +175,18 @@ if [ "$DETACH" = 1 ] && [ "$ASK_ONLY" != 1 ]; then
   # KillMode=process: whatever the helper starts is never stopped together with the helper's unit
   if command -v systemd-run >/dev/null 2>&1 &&
      systemd-run --user --collect --quiet --unit="clipsd-update-$$" --property=KillMode=process "${envs[@]}" \
-       "$self" "${args[@]}" 2>/dev/null; then
+       --setenv=CLIPSD_SWITCH_DETACHED=1 "$self" "${args[@]}" 2>/dev/null; then
     exit 0
   fi
-  setsid -f "$self" "${args[@]}" >/dev/null 2>&1 </dev/null
+  if [ "$MOVED" = 1 ]; then
+    # Still inside the program's service and no way out: a new session stays in the same cgroup, so when the program
+    # quits for the update, systemd stops this helper with it and ClipSD simply disappears. The program is not asked
+    # to quit, nothing is changed; the program (1.31.2 and later) shows the failure window with this reason.
+    log "cannot leave $UNIT: systemd-run failed; the program keeps running, nothing changed"
+    result error cannot_detach
+    exit 2
+  fi
+  CLIPSD_SWITCH_DETACHED=1 setsid -f "$self" "${args[@]}" >/dev/null 2>&1 </dev/null
   exit 0
 fi
 

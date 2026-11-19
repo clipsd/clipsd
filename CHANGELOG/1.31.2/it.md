@@ -1,0 +1,4 @@
+- Linux: l'aggiornamento torna a installarsi da solo sui sistemi più recenti (ad esempio Ubuntu 26.04). Prima veniva scaricato, ma non installato.
+- Linux: sui sistemi più recenti tornano a funzionare il riconoscimento del testo, i link e l'avvio automatico.
+- Se un aggiornamento non si installa, compare una finestra con i pulsanti «Riprova» e «Segnalazione di errore». La segnalazione non contiene il nome utente né percorsi di cartelle personali.
+- Dopo l'aggiornamento la finestra «Novità della versione» inizia con la riga «Aggiornamento installato».

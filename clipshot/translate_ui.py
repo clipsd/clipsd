@@ -764,11 +764,10 @@ class TranslateMixin:
                     elif name == "link" and card.help is not None and card.help.url:
                         self._tr_copy(card.help.url, card.region, tr("translate_ui.link_copied"))
                     elif name == "site" and card.help is not None and card.help.url:
-                        from PyQt6.QtCore import QUrl
-                        from PyQt6.QtGui import QDesktopServices
+                        from .sysenv import open_url
                         url = card.help.url
                         self._tr_leave_for_browser()
-                        QDesktopServices.openUrl(QUrl(url))
+                        open_url(url)
                         return True
                     self.update()
                     return True

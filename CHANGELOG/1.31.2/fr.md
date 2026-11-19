@@ -1,0 +1,4 @@
+- Linux : la mise à jour s'installe de nouveau toute seule sur les systèmes récents (par exemple Ubuntu 26.04). Auparavant, elle était téléchargée mais pas installée.
+- Linux : la reconnaissance de texte, les liens et le démarrage automatique fonctionnent de nouveau sur les systèmes récents.
+- Si une mise à jour ne s'installe pas, une fenêtre avec les boutons « Réessayer » et « Rapport d'erreur » apparaît. Le rapport ne contient ni nom d'utilisateur ni chemins de dossiers personnels.
+- Après une mise à jour, la fenêtre des nouveautés commence par la ligne « Mise à jour installée ».

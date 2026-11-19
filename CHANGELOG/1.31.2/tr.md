@@ -1,0 +1,4 @@
+- Linux: güncelleme yeni sistemlerde (örneğin Ubuntu 26.04) yine kendiliğinden kuruluyor. Önceden indiriliyor ama kurulmuyordu.
+- Linux: yeni sistemlerde metin tanıma, bağlantılar ve otomatik başlatma yeniden çalışıyor.
+- Bir güncelleme kurulamazsa “Yeniden dene” ve “Hata raporu” düğmeleri olan bir pencere açılır. Raporda kullanıcı adı veya kişisel klasör yolları yoktur.
+- Güncellemeden sonra yenilikler penceresi “Güncelleme kuruldu” satırıyla başlar.

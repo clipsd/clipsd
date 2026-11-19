@@ -115,9 +115,10 @@ def _resume_cut_switch():
     helper = os.path.join(os.path.dirname(os.path.realpath(sys.executable)), "clipsd-switch")
     if os.access(helper, os.X_OK):
         import subprocess
+        from clipshot.sysenv import child_env   # without the LD_LIBRARY_PATH of this build (see clipshot/sysenv.py)
         try:
             subprocess.Popen([helper, "--detach", "--resume"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True)
+                             stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True, env=child_env())
         except OSError:
             pass
 

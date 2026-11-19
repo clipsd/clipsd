@@ -682,8 +682,9 @@ fclock.now = NOW + timedelta(minutes=11)
 check(fu.check_previous_attempt() == "failed" and fui.errors, "через 11 минут старая версия: сообщение")
 check([e[0] for e in events] == ["update_failed"] and events[0][1]["reason"] == "not_switched",
       "событие «обновление не удалось»")
-check(not (up.versions_dir() / "2.0.1").exists() and not up.downloads_dir().exists() and not up.attempt_path().exists(),
-      "после сбоя staging и загрузка удалены")
+check(not (up.versions_dir() / "2.0.1").exists() and (up.downloads_dir() / "2.0.1").is_dir() and not up.attempt_path().exists(),
+      "после сбоя распакованная версия удалена, скачанный архив оставлен для «Повторить» (1.31.2)")
+up._rmtree(up.downloads_dir())
 
 # download failure in the full path: damaged file
 up.launch_linux_switch = real_switch
@@ -1044,7 +1045,9 @@ check(up.read_attempt(up.attempt_path())["channel"] == "proba" and pctx.config.g
       "попытка записана с каналом proba, виденная версия proba хранится отдельно")
 _unlink(up.attempt_path())
 _rmtree(up.versions_dir() / "2.0.1")
-# damaged package in the folder: checksum error, nothing installed
+# damaged package in the folder: checksum error, nothing installed (the archive kept from the run above has the
+# signed sha256 and would be used again, so it goes first: here the copy from the folder is checked)
+up._rmtree(up.downloads_dir())
 (folder / PROBA_NAME).write_bytes(proba_pkg[:-1] + b"X")
 switches.clear()
 pu2 = up.Updater(Ctx(), clock=Clock(NOW), kind="linux", installed="2.0.0", ui=UI("update"), sync=True, **KEYS)

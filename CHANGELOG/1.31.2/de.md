@@ -1,0 +1,4 @@
+- Linux: Updates installieren sich auf neueren Systemen (zum Beispiel Ubuntu 26.04) wieder von selbst. Bisher wurde das Update heruntergeladen, aber nicht installiert.
+- Linux: Texterkennung, Links und Autostart funktionieren auf neueren Systemen wieder.
+- Wenn ein Update nicht installiert wird, erscheint ein Fenster mit den Schaltflächen „Erneut versuchen“ und „Fehlerbericht“. Der Bericht enthält weder Ihren Benutzernamen noch Pfade zu persönlichen Ordnern.
+- Nach einem Update beginnt das Fenster „Neu in …“ mit der Zeile „Update installiert“.

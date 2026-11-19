@@ -61,16 +61,68 @@ def tokens(cfg) -> dict:
     return t
 
 
+def light_palette():
+    """Светлая палитра «Стандартного» оформления, одинаковая при любой теме системы.
+
+    Раньше бралась qapp.style().standardPalette(), но Fusion в Qt 6.5+ отдаёт там палитру по теме системы
+    (qt_fusionPalette: при тёмной теме Windows или GNOME текст 240,240,240 на 50,50,50). Наши окна рисуют белые
+    карточки и кнопки, а цвет текста многих надписей берут из палитры: на Windows в тёмной теме кнопки языков
+    знакомства, «Назад», «Пропустить» были почти белыми на белом (19.11.2026). Здесь те же значения, что у
+    светлой Fusion, но всегда светлые."""
+    from PyQt6.QtGui import QColor, QPalette
+    role, group = QPalette.ColorRole, QPalette.ColorGroup
+    black, white = QColor(0, 0, 0), QColor(255, 255, 255)
+    window = QColor(239, 239, 239)
+    light, mid, dark = window.lighter(150), window.darker(130), window.darker(150)
+    shadow = dark.darker(135)
+    highlight = QColor(48, 140, 198)
+    # (windowText, button, light, dark, mid, text, brightText, base, window), как QPalette(windowText, window, ...) в Qt
+    pal = QPalette(black, window, light, dark, mid, black, light, white, window)
+    placeholder = QColor(black)
+    placeholder.setAlpha(128)
+    for r, color in ((role.Midlight, mid.lighter(110)), (role.Shadow, shadow), (role.Highlight, highlight),
+                     (role.HighlightedText, white), (role.AlternateBase, QColor(246, 247, 248)),
+                     (role.ToolTipBase, QColor(255, 255, 220)), (role.ToolTipText, black),
+                     (role.PlaceholderText, placeholder), (role.Link, QColor(22, 96, 208)),
+                     (role.LinkVisited, QColor(107, 63, 160))):
+        pal.setColor(r, color)
+    if hasattr(role, "Accent"):
+        pal.setColor(role.Accent, highlight)
+    disabled_text = QColor(150, 154, 160)   # спокойно-серый, но читаемый (у Fusion 190,190,190 почти не виден)
+    for r in (role.Text, role.WindowText, role.ButtonText):
+        pal.setColor(group.Disabled, r, disabled_text)
+    pal.setColor(group.Disabled, role.Base, window)
+    pal.setColor(group.Disabled, role.Dark, QColor(209, 209, 209).darker(110))
+    pal.setColor(group.Disabled, role.Shadow, shadow.lighter(150))
+    pal.setColor(group.Disabled, role.Highlight, QColor(145, 145, 145))
+    return pal
+
+
+def _color_scheme(qapp, dark: bool) -> None:
+    """Qt 6.8+: попросить у системы светлую или тёмную схему для этой программы (заголовки окон, системные
+    диалоги на Windows); в старых Qt и на платформах без поддержки ничего не делает."""
+    from PyQt6.QtCore import Qt
+    hints = qapp.styleHints() if hasattr(qapp, "styleHints") else None
+    scheme = getattr(Qt, "ColorScheme", None)
+    if hints is not None and scheme is not None and hasattr(hints, "setColorScheme"):
+        try:
+            hints.setColorScheme(scheme.Dark if dark else scheme.Light)
+        except (AttributeError, TypeError, RuntimeError):
+            pass
+
+
 def apply_app(qapp, cfg):
-    """Меню, подсказки и стандартные окна Qt в цветах оформления."""
+    """Меню, подсказки и стандартные окна Qt в цветах оформления. Палитра задаётся всегда явно: тема системы
+    (тёмная Windows, GNOME) не просачивается в окна программы."""
     from PyQt6.QtGui import QColor, QPalette
     t = tokens(cfg)
     qapp.setStyle("Fusion")
+    _color_scheme(qapp, t["dark"])
     if not t["dark"]:
-        qapp.setPalette(qapp.style().standardPalette())
+        qapp.setPalette(light_palette())
         qapp.setStyleSheet("")
         return
-    pal = QPalette()
+    pal = light_palette()   # все роли заданы (у QPalette() по умолчанию палитра приложения, она может быть системной)
     roles = {
         QPalette.ColorRole.Window: t["dialog_bg"], QPalette.ColorRole.WindowText: t["text"],
         QPalette.ColorRole.Base: t["input_bg"], QPalette.ColorRole.AlternateBase: t["ui_panel"],
