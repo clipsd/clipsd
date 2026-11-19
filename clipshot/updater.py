@@ -945,7 +945,7 @@ def private_bits() -> list:
 
 
 def scrub(text: str, bits=None) -> str:
-    """The report text without the home folder and the user name (whole words: "sdkev" in a path, not in "sdkevin")."""
+    """The report text without the home folder and the user name (whole words: "alex" in a path, not in "alexander")."""
     for value, replacement in sorted(bits if bits is not None else private_bits(), key=lambda b: -len(b[0])):
         if replacement == "<user>":
             text = re.sub(r"(?<![A-Za-z0-9_.-])" + re.escape(value) + r"(?![A-Za-z0-9_-])", replacement, text)
