@@ -74,7 +74,7 @@
   "editor.frame_glow": "Trait fin avec halo lumineux",
   "editor.frame_plain": "Sans cadre coloré",
   "editor.frame_thick": "Épais aux coins arrondis",
-  "editor.help_tip": "Visite guidée du programme : où se trouve chaque chose (F1)",
+  "editor.help_tip": "Aide : visite guidée (F1), mises à jour, à propos",
   "editor.hint_crop": "Sélectionnez la zone à conserver",
   "editor.hint_crop_pending": "Tirez les coins et les côtés · clic hors du cadre : nouvelle sélection",
   "editor.hint_crop_sub": "Enter : rogner · Quitter : Esc",

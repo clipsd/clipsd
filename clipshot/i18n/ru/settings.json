@@ -95,5 +95,7 @@
   "settings.tray_menu": "Открыть меню",
   "settings.tray_region": "Снимок области",
   "settings.update_check": "Проверять обновления автоматически",
-  "settings.update_check_tip": "Раз в сутки ClipSD проверяет на странице clipsd.github.io, есть ли новая версия, и предлагает её установить. Проверить вручную: меню значка, «Проверить обновления»."
+  "settings.update_check_tip": "Раз в сутки ClipSD проверяет на странице clipsd.github.io, есть ли новая версия, и предлагает её установить.",
+  "settings.sec_updates": "Обновления",
+  "settings.version_line": "Версия ClipSD {version}"
 }

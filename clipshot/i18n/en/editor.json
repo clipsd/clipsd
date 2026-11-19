@@ -74,7 +74,7 @@
   "editor.frame_glow": "Thin line with a glow",
   "editor.frame_plain": "No colored frame",
   "editor.frame_thick": "Thick rounded",
-  "editor.help_tip": "Program tour: where everything is (F1)",
+  "editor.help_tip": "Help: program tour (F1), updates, about",
   "editor.hint_crop": "Select the area to keep",
   "editor.hint_crop_pending": "Drag the corners and sides · click outside the frame: select again",
   "editor.hint_crop_sub": "Enter: crop · Exit: Esc",

@@ -74,7 +74,7 @@
   "editor.frame_glow": "Dünne Linie mit Leuchten",
   "editor.frame_plain": "Ohne farbigen Rahmen",
   "editor.frame_thick": "Dick und abgerundet",
-  "editor.help_tip": "Einführung: wo sich was befindet (F1)",
+  "editor.help_tip": "Hilfe: Einführung (F1), Updates, Info",
   "editor.hint_crop": "Wählen Sie den Bereich aus, der bleiben soll",
   "editor.hint_crop_pending": "Ecken und Seiten ziehen · Klick außerhalb des Rahmens: neu auswählen",
   "editor.hint_crop_sub": "Enter: zuschneiden · Beenden: Esc",

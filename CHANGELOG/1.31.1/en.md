@@ -1,0 +1,7 @@
+- You can now change the language and open Settings right in the area selection window: at the bottom of the panel, to the left of the size, there is a globe with the language name and a gear.
+- Translation is split into two buttons: “Translate selection” translates the frame that is already there, and “Select and translate” lets you draw around another place. Translating the whole screen moved to the translation bar as the “Whole screen” button.
+- The panel in the selection window is about 15% more compact and now sits next to the frame instead of covering it: below, above, to the right or to the left. It moves inside the frame only when there is no room outside.
+- Settings has a new “Updates” section: the version, a “Check for updates” button and a checkbox for automatic checks. The “?” button in the editor now opens a menu: “Program tour”, “Check for updates” and “About”.
+- In the editor, “Undo” and “Redo” are at the start of the row on their own background. By default the tools are arranged as: move, arrows together, then shapes, then the rest. An order you set yourself stays as it is; you can restore the new one with “Restore the default tool order”.
+- The globe icon is light blue everywhere, so it is easier to find.
+- Linux: fixed the first installation, which could silently stop halfway before.

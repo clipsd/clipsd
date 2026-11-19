@@ -274,8 +274,9 @@ bar = sel._bar_layout()[1]
 check(bar.bottom() < desk_last.top() + 5, "панель стоит над рамкой")
 for name, (hx, hy), want_edge in (("верхняя левая", (100, 520), "tl"), ("верхняя правая", (400, 520), "tr")):
     probe = QPoint(hx, hy - 8)
-    check(bar.contains(probe) and sel._edge_at(probe) == want_edge and not sel._bar_free_at(probe),
-          f"{name} ручка под панелью над рамкой: ручка, не свободное место ({want_edge})")
+    # 1.31.1: панель над рамкой стоит выше подписи размера и ручек, под ручкой её нет; ручка по-прежнему ручка
+    check(not bar.contains(probe) and sel._edge_at(probe) == want_edge and not sel._bar_free_at(probe),
+          f"{name} ручка у панели над рамкой: ручка, панель её не закрывает ({want_edge})")
     drag(sel, probe, probe + QPoint(10, 10))
     check(sel.bar_pos is None, f"{name} ручка: нажатие не переносит панель")
     sel.kept = QRect(desk_last)

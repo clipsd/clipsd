@@ -118,7 +118,7 @@ class Tour(QWidget):
         grid.setHorizontalSpacing(6)
         grid.setVerticalSpacing(6)
         globe = QLabel()
-        globe.setPixmap(icons.icon("globe", "#1660d0").pixmap(34, 34))
+        globe.setPixmap(icons.icon("globe").pixmap(34, 34))
         globe.setAlignment(Qt.AlignmentFlag.AlignCenter)
         grid.addWidget(globe, 0, 0)
         self.lang_buttons = {}

@@ -1,0 +1,7 @@
+- Dans la fenêtre de sélection de zone, vous pouvez changer la langue et ouvrir les paramètres tout de suite : en bas de la barre, à gauche de la taille, un globe avec le nom de la langue et un engrenage.
+- La traduction est séparée en deux boutons : « Traduire la sélection » traduit le cadre déjà en place, « Choisir et traduire » vous laisse entourer un autre endroit. La traduction de tout l'écran passe dans la ligne du mode traduction, bouton « Tout l'écran ».
+- La barre de la fenêtre de sélection est environ 15 % plus compacte et se place à côté du cadre au lieu de le couvrir : dessous, dessus, à droite ou à gauche. Elle ne passe à l'intérieur du cadre que s'il n'y a pas de place à l'extérieur.
+- Les paramètres ont une nouvelle section « Mises à jour » : version, bouton « Rechercher des mises à jour » et case de recherche automatique. Le bouton « ? » de l'éditeur ouvre maintenant un menu : « Visite guidée du programme », « Rechercher des mises à jour » et « À propos ».
+- Dans l'éditeur, « Annuler » et « Rétablir » sont au début de la rangée, sur un fond à part. Par défaut, les outils sont rangés ainsi : déplacer, flèches côte à côte, puis formes, puis le reste. L'ordre que vous avez choisi vous-même ne change pas.
+- L'icône du globe est bleu clair partout, plus facile à repérer.
+- Linux : la première installation est corrigée, elle pouvait auparavant s'arrêter en silence à mi-chemin.

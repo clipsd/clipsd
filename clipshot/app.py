@@ -565,6 +565,7 @@ class Clipshot(QObject):
                                            self.config["show_size"], last, full_screen=full)
             self.selector.ocr_enabled = self.config.get("ocr_enabled", True)
             self.selector.tr_cfg, self.selector.tr_save = self.config, self.save_config
+            self.selector.lang_ctx = self
             self.selector.finished.connect(self._region_done)
             self.selector.start_selection()
             if translate:
@@ -575,6 +576,7 @@ class Clipshot(QObject):
                                   last, full_screen=full)
         selector.ocr_enabled = self.config.get("ocr_enabled", True)
         selector.tr_cfg, selector.tr_save = self.config, self.save_config
+        selector.lang_ctx = self
         selector.finished.connect(self._region_done)
         self.selector = selector
         if translate:
@@ -721,6 +723,9 @@ class Clipshot(QObject):
         dlg.text(f"© 2026 {__author__}")
         dlg.text(tr("app.about_license"))
         dlg.text(tr("app.about_nowarranty"), "clipNote")
+        for url in ("https://clipsd.github.io", "https://github.com/clipsd/clipsd"):
+            link = dlg.text(f'<a href="{url}">{url}</a>')
+            link.setOpenExternalLinks(True)
         close = dlg.primary(tr("about.close"))
         close.clicked.connect(dlg.close)
         dlg.setStyleSheet(dlg.styleSheet() + " QLabel { font-size: 14px; } QLabel#clipNote { font-size: 14px; }"
@@ -759,6 +764,7 @@ class Clipshot(QObject):
             return
         dialog = SettingsDialog(self.config, parent)
         dialog.setWindowIcon(self.icon)
+        dialog.update_ctx = self
         self._settings = dialog
         try:
             if dialog.exec() == dialog.DialogCode.Accepted:

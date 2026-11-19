@@ -95,5 +95,7 @@
   "settings.tray_menu": "Open the menu",
   "settings.tray_region": "Capture an area",
   "settings.update_check": "Check for updates automatically",
-  "settings.update_check_tip": "Once a day, ClipSD checks clipsd.github.io for a new version and offers to install it. To check manually, open the tray icon menu and select “Check for updates”."
+  "settings.update_check_tip": "Once a day, ClipSD checks clipsd.github.io for a new version and offers to install it.",
+  "settings.sec_updates": "Updates",
+  "settings.version_line": "ClipSD version {version}"
 }

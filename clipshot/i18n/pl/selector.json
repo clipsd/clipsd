@@ -9,6 +9,7 @@
   "selector.btn_save": "Zapisz",
   "selector.btn_translate": "Przetłumacz zaznaczenie",
   "selector.btn_translate_all": "Przetłumacz cały ekran",
+  "selector.btn_translate_pick": "Zaznacz i przetłumacz",
   "selector.close_hint": "Zamknij (Esc)",
   "selector.hint_full": "Nie cały ekran? Zaznacz potrzebny obszar myszą · Esc: anuluj",
   "selector.hint_icons": "Najedź na ikonę: pojawi się nazwa",
@@ -30,7 +31,8 @@
   "selector.sub_edit_frame": "lub kliknięcie w ramce",
   "selector.sub_retake_empty": "lub zaznacz na pustym",
   "selector.sub_save_file": "do pliku",
-  "selector.sub_translate": "lub obrysuj nowy",
+  "selector.sub_translate": "ta ramka",
+  "selector.sub_translate_pick": "obrysuj inne miejsce",
   "selector.title_full": "Zrzut całego ekranu",
   "selector.title_monitor": "Zrzut monitora {n}",
   "selector.tr_blocked": "Najpierw zakończ tłumaczenie: Esc",
@@ -45,5 +47,6 @@
   "selector.trc_more": "Więcej ▾",
   "selector.trc_original": "Oryginał",
   "selector.trc_overlay": "Na tekście",
-  "selector.trc_translation": "Tłumaczenie"
+  "selector.trc_translation": "Tłumaczenie",
+  "selector.trc_all": "Cały ekran"
 }

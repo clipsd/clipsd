@@ -95,5 +95,7 @@
   "settings.tray_menu": "打开菜单",
   "settings.tray_region": "区域截图",
   "settings.update_check": "自动检查更新",
-  "settings.update_check_tip": "ClipSD 每天向 clipsd.github.io 查询一次是否有新版本，并提示安装。手动检查：图标菜单中的“检查更新”。"
+  "settings.update_check_tip": "ClipSD 每天向 clipsd.github.io 查询一次是否有新版本，并提示安装。",
+  "settings.sec_updates": "更新",
+  "settings.version_line": "ClipSD 版本 {version}"
 }

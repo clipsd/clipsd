@@ -34,11 +34,8 @@ TRANSLATE = "translate"   # перевод: выделить кусок сним
 ERASER_SIZES = {1: 8, 2: 14, 3: 22, 4: 34, 5: 50}   # диаметр кисти ластика по кнопкам толщины
 
 # (инструмент, значок, подсказка, клавиша)
-TOOLS = [
+TOOLS = [   # порядок по умолчанию (1.31.1): перемещение, стрелки, фигуры, остальное; свой порядок владельца хранится в tool_order
     (MOVE, "", "editor.tip_move", "V"),
-    (CALLOUT, "", "editor.tip_callout", "K"),
-    (TEXT, "", "editor.tip_text", "T"),
-    (NUMBER, "", "editor.tip_number", "N"),
     (ARROW, "", "editor.tip_arrow", "A"),
     (DARROW, "", "editor.tip_darrow", "D"),
     (FARROW, "", "editor.tip_farrow", "F"),
@@ -47,6 +44,9 @@ TOOLS = [
     (RECT, "", "editor.tip_rect", "R"),
     (ELLIPSE, "", "editor.tip_ellipse", "E"),
     (FSHAPE, "", "editor.tip_fshape", "O"),
+    (CALLOUT, "", "editor.tip_callout", "K"),
+    (TEXT, "", "editor.tip_text", "T"),
+    (NUMBER, "", "editor.tip_number", "N"),
     (MARKER, "", "editor.tip_marker", "M"),
     (PENCIL, "", "editor.tip_pencil", "P"),
     (BLUR, "", "editor.tip_blur", "B"),
@@ -1237,6 +1237,7 @@ QToolButton#tool:checked, QToolButton#size:checked {{
 QToolButton#swatch {{ border: 1px solid #8a8a8a; border-radius: 6px; }}
 QToolButton#swatch:checked {{ border: 3px solid {t['swatch_check']}; }}
 QFrame#sep {{ background: {sep}; }}
+QFrame#quickGroup {{ background: {'rgba(255, 255, 255, 22)' if dark else 'rgba(0, 0, 0, 16)'}; border: 1px solid {line}; border-radius: 9px; }}
 QScrollArea, #stage {{ background: {stage}; border: none; }}
 #imageFrame {{ background: {t['image_frame']}; }}
 QPushButton {{ min-height: 30px; padding: 0 14px; border-radius: 8px; font-size: {t['font']}px;
@@ -1976,6 +1977,25 @@ class EditorWindow(QMainWindow):
         # Ряд 1: инструменты (порядок меняется перетаскиванием) | отменить, повторить, настройки
         row1 = QHBoxLayout()
         row1.setSpacing(2)
+        # Быстрый доступ (1.31.1): «Отменить», «Повторить» в начале ряда на своей подложке, как в Excel
+        quick = QFrame()
+        quick.setObjectName("quickGroup")
+        quick_row = QHBoxLayout(quick)
+        quick_row.setContentsMargins(3, 2, 3, 2)
+        quick_row.setSpacing(2)
+        undo = self._tool_button(icons.icon("undo"), tr("editor.undo_tip"), "action", False)
+        self.undo_button = undo
+        undo.clicked.connect(self.canvas.undo)
+        redo = self._tool_button(icons.icon("redo"), tr("editor.redo_tip"), "action", False)
+        self.redo_button = redo
+        redo.clicked.connect(self.canvas.redo)
+        quick_row.addWidget(undo)
+        quick_row.addWidget(redo)
+        self.quick_group = quick
+        row1.addWidget(quick)
+        row1.addSpacing(6)
+        row1.addWidget(_separator())
+        row1.addSpacing(6)
         self.tool_group = QButtonGroup(self)
         self.tool_buttons = {}
         self.tool_strip = ToolStrip()
@@ -1995,14 +2015,6 @@ class EditorWindow(QMainWindow):
         row1.addSpacing(6)
         row1.addWidget(_separator())
         row1.addSpacing(6)
-        undo = self._tool_button(icons.icon("undo"), tr("editor.undo_tip"), "action", False)
-        self.undo_button = undo
-        undo.clicked.connect(self.canvas.undo)
-        redo = self._tool_button(icons.icon("redo"), tr("editor.redo_tip"), "action", False)
-        self.redo_button = redo
-        redo.clicked.connect(self.canvas.redo)
-        row1.addWidget(undo)
-        row1.addWidget(redo)
         insert = self._tool_button(icons.icon("insert"), tr("editor.insert_tip"), "action", False)
         insert.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         menu = QMenu(insert)
@@ -2016,7 +2028,14 @@ class EditorWindow(QMainWindow):
         row1.addStretch(1)
         help_button = self._tool_button(icons.icon("help"), tr("editor.help_tip"),
                                         "action", False)
-        help_button.clicked.connect(self.start_tour)
+        help_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        help_menu = QMenu(help_button)   # 1.31.1: «?» открывает меню: обучение, обновления, о программе
+        style_menu(help_menu, self.ctx.config)
+        help_menu.addAction(tr("app.menu_tour")).triggered.connect(self.start_tour)
+        help_menu.addAction(tr("updater.menu.check")).triggered.connect(self._check_updates)
+        help_menu.addAction(tr("app.menu_about")).triggered.connect(self._show_about)
+        help_button.setMenu(help_menu)
+        self.help_menu = help_menu
         self.help_button = help_button
         row1.addWidget(help_button)
         settings = self._tool_button(icons.icon("settings"), tr("editor.settings_tip"), "action", False)
@@ -2806,6 +2825,14 @@ class EditorWindow(QMainWindow):
         menu.addAction(tr("editor.reset_order")).triggered.connect(
             lambda: self.tool_strip.set_order([t for t, _g, _tip, _k in TOOLS]))
         return menu
+
+    def _check_updates(self):
+        from . import updater
+        updater.get_updater(self.ctx).check_now(manual=True)
+
+    def _show_about(self):
+        if hasattr(self.ctx, "show_about"):
+            self.ctx.show_about()
 
     def start_tour(self):
         """Вводный курс поверх окна (первый запуск или по кнопке «Показать знакомство»)."""

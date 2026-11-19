@@ -74,7 +74,7 @@
   "editor.frame_glow": "Linha fina com brilho",
   "editor.frame_plain": "Sem moldura colorida",
   "editor.frame_thick": "Grossa com cantos arredondados",
-  "editor.help_tip": "Tour pelo programa: onde fica cada coisa (F1)",
+  "editor.help_tip": "Ajuda: tour (F1), atualizações, sobre",
   "editor.hint_crop": "Selecione a área que deseja manter",
   "editor.hint_crop_pending": "Arraste os cantos e lados · clique fora da moldura: selecionar de novo",
   "editor.hint_crop_sub": "Enter: recortar · Sair: Esc",

@@ -10,11 +10,11 @@
 
 import sys
 
-from PyQt6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, pyqtSignal
+from PyQt6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QBrush, QColor, QLinearGradient, QCursor, QFont, QFontMetrics, QGuiApplication, QImage, QPainter, QPen, QPixmap, QRegion
 from PyQt6.QtWidgets import QWidget
 
-from . import translate_ui
+from . import i18n, language, translate_ui
 from .i18n import dynamic, tr
 from .i18n import keys as i18n_keys
 from .translate_ui import TranslateMixin
@@ -158,6 +158,11 @@ class RegionSelector(TranslateMixin, QWidget):
         self.hover_button = None
         self.bar_level = None
         self.bar_hint_text = ""
+        # Выбор языка в нижней строке панели (1.31.1): приложение (ctx с set_language и config); None: чипа нет
+        self.lang_ctx = None
+        self.lang_rect = QRect()   # чип языка в строке подсказки; пустой: чипа нет
+        self.gear_rect = QRect()   # шестерёнка «Настройки» правее чипа языка
+        self.bar_hint_reserve = 0  # сколько справа в строке подсказки занято чипом языка и размером
 
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -523,14 +528,14 @@ class RegionSelector(TranslateMixin, QWidget):
                    ("full", "selector.btn_full_shot", "Ctrl+A"),
                    ("ocr", "selector.btn_ocr", "Ctrl+T"),
                    ("translate", "selector.btn_translate", "Ctrl+L"),
-                   ("translate_all", "selector.btn_translate_all", "Ctrl+Shift+L"),
+                   ("translate_pick", "selector.btn_translate_pick", "Ctrl+P"),
                    ("save", "selector.btn_save", "Ctrl+S"),
                    ("edit", "selector.btn_edit", "Enter"),
                    ("manual", "selector.btn_retake", "selector.keys_retake"),
                    ("copy", "selector.btn_copy", "Ctrl+Enter"))
     # 1.29.1: сверху пять плиток, снизу четыре кнопки справа налево по частоте: «Скопировать и закрыть», «Выделить заново»,
     # «Редактировать», «Сохранить»; ширина по тексту, чем правее, тем шире; слева значок в цветном квадрате.
-    BAR_TOP = ("record", "full", "ocr", "translate", "translate_all")
+    BAR_TOP = ("record", "full", "ocr", "translate", "translate_pick")
     BAR_BOTTOM = ("save", "edit", "manual", "copy")
     BAR_WEIGHTS = {"save": 1.0, "edit": 1.2, "manual": 1.4, "copy": 1.65}
 
@@ -542,12 +547,12 @@ class RegionSelector(TranslateMixin, QWidget):
     def BAR_SUB(self):
         return {"save": tr("selector.sub_save_file"), "edit": tr("selector.sub_edit_frame"),
                 "manual": tr("selector.sub_retake_empty"), "copy": tr("selector.sub_copy_clipboard"),
-                "translate": tr("selector.sub_translate")}
+                "translate": tr("selector.sub_translate"), "translate_pick": tr("selector.sub_translate_pick")}
     BAR_ICONS = {"full": "fullscreen", "edit": "pencil", "copy": "copy", "save": "save", "record": "record",
-                 "manual": "region", "ocr": "ocr", "translate": "translate", "translate_all": "translate_all"}
+                 "manual": "region", "ocr": "ocr", "translate": "translate", "translate_pick": "translate_pick"}
     # цвет у главных кнопок фоном, у плиток только значком
     BAR_ICON_COLORS = {"record": "#d92d20", "full": "#2a6df4", "save": "#5a6270", "ocr": "#7c3aed",
-                       "translate": "#0d9488", "translate_all": "#0d9488", "edit": "#0b6fd6", "manual": "#0b4fb3",
+                       "translate": "#0d9488", "translate_pick": "#0d9488", "edit": "#0b6fd6", "manual": "#0b4fb3",
                        "copy": "#f4fff8"}
     BAR_SQUARE = {"save": ("#e3e6eb", "#5a6270"), "edit": ("#d6e7fc", "#0b6fd6"),   # цвет квадрата и значка нижних кнопок
                   "manual": ("#1e6fe0", "#ffffff"), "copy": ("#4fc487", "#ffffff")}
@@ -561,7 +566,7 @@ class RegionSelector(TranslateMixin, QWidget):
                 continue
             if key == "ocr" and not getattr(self, "ocr_enabled", True):
                 continue
-            if key in ("translate", "translate_all") and not self.translate_enabled():
+            if key in ("translate", "translate_pick") and not self.translate_enabled():
                 continue
             out.append((key, tr(b[1]), tr(b[2]) if b[2].startswith("selector.") else i18n_keys(b[2])))
         return out
@@ -625,18 +630,18 @@ class RegionSelector(TranslateMixin, QWidget):
     @dynamic
     def TR_HINTS_FIRST(self):
         return (tr("selector.tr_hint_first_long"), tr("selector.tr_hint_first"), tr("selector.tr_hint_first_short"))
-    BAR_PAD = 12       # поля панели
-    BAR_GAP = 8        # промежутки между кнопками
+    BAR_PAD = 10       # поля панели (1.31.1: компактнее на 15%)
+    BAR_GAP = 6        # промежутки между кнопками
     BAR_CROSS = 26     # крестик «Закрыть (Esc)» на правом верхнем углу панели
 
     # Размеры панели: подбираются по ширине экрана, не по рамке. «Широкая» и «средняя» с подписями, «узкая» значками.
     BAR_LEVELS = (
-        {"name": "wide", "label": 13, "small": 11, "tile_h": 80, "btn_h": 64, "icon": 22, "tile_min": 134, "text": True,
-         "bl": 16, "bs": 12.5, "sq": 38, "pl": 12, "gp": 11, "rm": 12},
-        {"name": "mid", "label": 12, "small": 10, "tile_h": 76, "btn_h": 58, "icon": 20, "tile_min": 118, "text": True,
-         "bl": 13, "bs": 10, "sq": 32, "pl": 8, "gp": 8, "rm": 6},
-        {"name": "narrow", "label": 13, "small": 11, "tile_h": 40, "btn_h": 56, "icon": 20, "tile_min": 56, "text": False,
-         "bl": 13, "bs": 11, "sq": 0, "pl": 14, "gp": 8},
+        {"name": "wide", "label": 12, "small": 10, "tile_h": 74, "btn_h": 52, "icon": 20, "tile_min": 114, "text": True,
+         "bl": 15, "bs": 11, "sq": 32, "pl": 10, "gp": 9, "rm": 10},
+        {"name": "mid", "label": 11, "small": 10, "tile_h": 70, "btn_h": 48, "icon": 18, "tile_min": 102, "text": True,
+         "bl": 12, "bs": 10, "sq": 28, "pl": 7, "gp": 6, "rm": 5},
+        {"name": "narrow", "label": 12, "small": 10, "tile_h": 34, "btn_h": 46, "icon": 18, "tile_min": 48, "text": False,
+         "bl": 12, "bs": 10, "sq": 0, "pl": 12, "gp": 6},
     )
 
     def _bar_fonts(self, level=None):
@@ -692,7 +697,8 @@ class RegionSelector(TranslateMixin, QWidget):
         texts = {b[0]: b[1] for b in self._bar_buttons()}
         if lv["text"]:
             words = max([fm_l.horizontalAdvance(w) for k in top for w in texts[k].split()] or [0]) + 16
-            sub = fm_s.horizontalAdvance(self.BAR_SUB["translate"]) + 14 if "translate" in top else 0
+            sub = max(fm_s.horizontalAdvance(self.BAR_SUB[k]) for k in ("translate", "translate_pick") if k in top) + 14 \
+                if "translate" in top else 0
             tile_min = max(lv["tile_min"], words, sub)
             mins = {}
             for k in self.BAR_BOTTOM:
@@ -723,16 +729,48 @@ class RegionSelector(TranslateMixin, QWidget):
             area = screen.geometry().translated(-self.origin) if screen else self.rect()
         return area.intersected(self.rect()) if area.intersects(self.rect()) else self.rect()
 
+    BAR_PLACES = ("below", "above", "right", "left")   # куда ставить панель вне рамки, по порядку (1.31.1)
+    BAR_CHIP_H = 24        # высота чипа языка и шестерёнки в нижней строке
+    BAR_SIDE_GAP = 12      # зазор между рамкой и панелью сбоку (ручки сторон выступают за рамку)
+    BAR_HYSTERESIS = 20    # запас у порога: уйти с прежнего места на более выгодное можно, только если там с запасом
+
     def _bar_layout(self):
         """Где панель и её кнопки: [(ключ, подпись, клавиша, прямоугольник)], прямоугольник панели, строка подсказки.
-        Размер панели подбирается по ширине экрана и содержимому, не по рамке: подписи не обрезаются."""
+        Панель стоит вне рамки, чтобы не закрывать выделенное: под ней, над ней, справа, слева; только если снаружи
+        нигде не помещается (рамка почти во весь экран), внутри у нижнего края."""
+        if (self.kept is None and not self.translate_mode) or self.kept is None or self.full_mode or self.bar_pos is not None:
+            return self._bar_layout_for("below")
+        prev = getattr(self, "_bar_place", None)
+        order = list(self.BAR_PLACES)
+        for i, place in enumerate(order):
+            # на более «старшее» место, чем нынешнее, переходим только с запасом: панель не дёргается у порога
+            slack = self.BAR_HYSTERESIS if prev in order and i < order.index(prev) else 0
+            res = self._bar_layout_for(place, slack)
+            if self._bar_ok:
+                self._bar_place = place
+                return res
+        self._bar_place = "inside"
+        return self._bar_layout_for("inside")
+
+    def _bar_layout_for(self, place, slack=0):
+        """Раскладка панели при заданном месте (below, above, right, left, inside); self._bar_ok: место подошло."""
+        self._bar_ok = True
         if self.kept is None and not self.translate_mode:
+            self.lang_rect = self.gear_rect = QRect()
             return [], QRect(), QRect()
         r = self.kept
         full = self.full_mode
         area = self._bar_area()
         gap, bp = self.BAR_GAP, self.BAR_PAD
         room = area.width() - 8 - self.BAR_CROSS // 2   # запас справа под крестик, выступающий за угол
+        side_room = None
+        if place in ("right", "left") and r is not None:
+            gapx = self.BAR_SIDE_GAP + slack
+            if place == "right":
+                side_room = area.right() - (r.right() + gapx) - self.BAR_CROSS // 2 - 4
+            else:
+                side_room = (r.left() - gapx) - (area.left() + 8)
+            room = side_room
         for lv in self.BAR_LEVELS:
             inner, mins, top_keys = self._bar_sizes(lv)
             if inner + 2 * bp <= room:
@@ -764,16 +802,36 @@ class RegionSelector(TranslateMixin, QWidget):
                 chips_total = sum(chip_ws) + chip_gap * (len(chips) - 1)
                 title_h += chip_h + 10
                 bar_w = max(bar_w, chips_total + 40)
-        bar_w = min(bar_w, max(200, area.width() - 8 - self.BAR_CROSS // 2))
+        if side_room is not None:
+            if bar_w > side_room:
+                self._bar_ok = False
+        else:
+            bar_w = min(bar_w, max(200, area.width() - 8 - self.BAR_CROSS // 2))
         inner = bar_w - 2 * bp
         # строка подсказки: самый полный вариант, который помещается в одну строку; иначе последний в две
         variants = self._bar_hint_variants(lv)
         bold_small = QFont(small_font)
         bold_small.setBold(True)
         fm_h = QFontMetrics(bold_small) if self.translate_mode else fm_s   # строка режима перевода жирная
-        hint_text = next((t for t in variants if fm_h.horizontalAdvance(t) + 24 <= inner), variants[-1])
-        hint_lines = 1 if fm_h.horizontalAdvance(hint_text) + 24 <= inner else 2
+        # чип языка справа в строке подсказки, левее размера «1040 × 600»; не помещается с названием: один глобус
+        lang_w, gear_w, dims_w, reserve = 0, 0, 0, 0
+        if self.lang_ctx is not None:
+            name = i18n.LANGUAGE_NAMES.get(i18n.current(), "")
+            long_w = 8 + 14 + 5 + fm_s.horizontalAdvance(name + " ▾") + 8
+            if self.kept is not None and not full and lv["text"] and not self.translate_mode:
+                dims_w = fm_s.horizontalAdvance("0000 × 0000") + 8
+            lang_w, gear_w = long_w, 28
+            for cand in (long_w, 28):
+                lang_w = cand
+                reserve = cand + gear_w + 4 + dims_w + 6
+                if any(fm_h.horizontalAdvance(t) + 24 <= inner - reserve for t in variants):
+                    break
+        text_room = inner - reserve
+        hint_text = next((t for t in variants if fm_h.horizontalAdvance(t) + 24 <= text_room), variants[-1])
+        hint_lines = 1 if fm_h.horizontalAdvance(hint_text) + 24 <= text_room else 2
         hint_h = hint_lines * fm_s.height() + (12 if self.translate_mode else 6)
+        if lang_w and hint_lines == 1:
+            hint_h = max(hint_h, self.BAR_CHIP_H + 4)   # чип языка и шестерёнка 24 px: удобно попадать мышью
         # строка перевода: кнопки языка, «Перевод/Оригинал», «Поверх текста/Карточкой», «Скопировать», «Ещё» (для окошка,
         # которое переведено последним или выбрано щелчком); не помещаются в ряд: переносятся
         ctl_units, ctl_rows, ctl_h = [], 0, 0
@@ -795,11 +853,21 @@ class RegionSelector(TranslateMixin, QWidget):
             y = area.bottom() - bar_h - 56
         else:
             x = max(area.left() + 8, min(r.center().x() - bar_w // 2, area.right() - bar_w - self.BAR_CROSS // 2 - 4))
-            y = r.top() + r.height() + 6                       # вплотную под рамкой
-            if y + bar_h > area.bottom() - 4:
-                y = r.top() - bar_h - 6                            # не влезает: над рамкой
-            if y < area.top() + self.BAR_CROSS // 2 + 4:
-                # И сверху нет места: внутри рамки у нижнего края, с отступом от сторон (их можно тянуть)
+            top_lim = area.top() + self.BAR_CROSS // 2 + 4
+            if place == "below":
+                y = r.top() + r.height() + 6                       # вплотную под рамкой
+                self._bar_ok = y + bar_h <= area.bottom() - 4 - slack
+            elif place == "above":
+                # над рамкой; подпись размера «ш/в» стоит над левым углом, панель её не закрывает
+                y = r.top() - bar_h - (36 if self.show_size else 6)
+                self._bar_ok = y >= top_lim + slack
+            elif place in ("right", "left"):
+                gapx = self.BAR_SIDE_GAP
+                x = r.left() + r.width() + gapx if place == "right" else r.left() - gapx - bar_w
+                y = max(top_lim, min(r.center().y() - bar_h // 2, area.bottom() - bar_h - 4))
+                self._bar_ok = self._bar_ok and bar_h <= area.height() - self.BAR_CROSS // 2 - 8 - slack
+            else:
+                # Снаружи нигде нет места: внутри рамки у нижнего края, с отступом от сторон (их можно тянуть)
                 y = r.top() + r.height() - bar_h - 2 * self.GRIP - 4
                 x = max(x, r.left() + 2 * self.GRIP + 4)
         if full:
@@ -842,6 +910,19 @@ class RegionSelector(TranslateMixin, QWidget):
             bx += w + gap
         hint = QRect(x + bp, by + bh_btn + gap, inner, hint_h - 2)
         self.bar_hint_text = hint_text
+        self.bar_hint_reserve = reserve
+        self.lang_rect = self.gear_rect = QRect()
+        if lang_w:
+            ch = self.BAR_CHIP_H
+            if hint_lines > 1:
+                cy = hint.top() + 3
+            elif self.translate_mode:
+                cy = hint.top() + (fm_h.height() + 8 - ch) // 2   # по центру первой строки (бирюзовой)
+            else:
+                cy = hint.top() + (hint.height() - ch) // 2
+            right = hint.right() - dims_w - (8 if self.translate_mode else 0)
+            self.gear_rect = QRect(right - gear_w, cy, gear_w, ch)
+            self.lang_rect = QRect(right - gear_w - 4 - lang_w, cy, lang_w, ch)
         self.tr_ctl_rects = []
         if ctl_units:
             cur_x, cur_y = hint.left() + 8, hint.top() + hint_lines * fm_s.height() + 10
@@ -855,7 +936,7 @@ class RegionSelector(TranslateMixin, QWidget):
                 cur_x += 6
         # Крестик «Закрыть (Esc)» на правом верхнем углу панели, вне рядов
         size = self.BAR_CROSS
-        self.bar_close_rect = QRect(bar.right() - size // 2 + 2, bar.top() - size // 2 + 3, size, size)
+        self.bar_close_rect = QRect(bar.right() - size // 2 + 4, bar.top() - size // 2 + 3, size, size)
         return buttons, bar, hint
 
     BAR_DISABLED_IN_TR = ("copy", "edit", "save", "ocr", "record", "full")   # в режиме перевода не работают
@@ -884,18 +965,22 @@ class RegionSelector(TranslateMixin, QWidget):
         pad = 22
         spec = [[("trc:lang", lang)], [("trc:tr", tr("selector.trc_translation")), ("trc:orig", tr("selector.trc_original"))],
                 [("trc:overlay", tr("selector.trc_overlay")), ("trc:card", tr("selector.trc_card"))],
-                [("trc:copy", tr("selector.short_copy"))], [("trc:more", tr("selector.trc_more"))]]
+                [("trc:copy", tr("selector.short_copy"))], [("trc:all", tr("selector.trc_all"))],
+                [("trc:more", tr("selector.trc_more"))]]
         return [[(k, t, fm.horizontalAdvance(t) + pad) for k, t in group] for group in spec]
 
     def _tr_ctl_enabled(self, key) -> bool:
         w, card, done, _o, _v = self._tr_ctl_state()
-        return bool(w is not None and (done or key == "trc:more"))
+        return bool(key in ("trc:more", "trc:all") or (w is not None and done))
 
     def _tr_ctl(self, key):
         """Нажата кнопка строки перевода: действие над выбранным окошком."""
         w, card, done, orig, view = self._tr_ctl_state()
         rect = next((r for k, _t, r in self.tr_ctl_rects if k == key), QRect())
         gpos = self.mapToGlobal(rect.bottomLeft())
+        if key == "trc:all":
+            self.start_translate_all()   # «Весь экран»: из верхнего ряда убран, живёт здесь и на Ctrl+Shift+L
+            return
         if key == "trc:more":
             if w is not None:
                 w._tr_more_menu_at(gpos, parent=self)
@@ -949,6 +1034,10 @@ class RegionSelector(TranslateMixin, QWidget):
         buttons = self._bar_layout()[0]
         if buttons and self.bar_close_rect.adjusted(-3, -3, 3, 3).contains(pos):
             return "cancel"
+        if buttons and not self.lang_rect.isEmpty() and self.lang_rect.contains(pos):
+            return "lang"
+        if buttons and not self.gear_rect.isEmpty() and self.gear_rect.contains(pos):
+            return "settings"
         for key, _text, _short, rect in buttons:
             if rect.contains(pos):
                 return key
@@ -1113,7 +1202,9 @@ class RegionSelector(TranslateMixin, QWidget):
             lines = 1 if fm_b.horizontalAdvance(self.bar_hint_text) + 24 <= hint.width() else 2
             text_h = lines * fm_b.height() + 8
             shown = self.BAR_TR_BLOCKED if self.hover_button in self.BAR_DISABLED_IN_TR else self.bar_hint_text
-            p.drawText(QRect(hint.left() + 8, hint.top(), hint.width() - 16, text_h), flags, shown)
+            if self.hover_button in ("lang", "settings"):
+                shown = self._chip_tip(self.hover_button)
+            p.drawText(QRect(hint.left() + 8, hint.top(), hint.width() - 16 - self.bar_hint_reserve, text_h), flags, shown)
             w_cur, card_cur, _d, orig_cur, view_cur = self._tr_ctl_state()
             for key, text, rect in self.tr_ctl_rects:
                 on = self._tr_ctl_enabled(key)
@@ -1132,16 +1223,83 @@ class RegionSelector(TranslateMixin, QWidget):
             text = self.bar_hint_text
             if self.hover_button in ("cancel", "corner"):
                 text = tr("selector.close_hint")
+            elif self.hover_button in ("lang", "settings"):
+                text = self._chip_tip(self.hover_button)
             elif hovered_text:
                 text = hovered_text   # название и клавиши кнопки под курсором
             elif self.kept is not None and not self.full_mode and lv["text"]:
                 phys = self.to_physical(self.kept)
                 dims = f"{phys.width()} × {phys.height()}"
-                if fm_s.horizontalAdvance(text) + fm_s.horizontalAdvance(dims) + 24 <= hint.width():
+                if fm_s.horizontalAdvance(text) + fm_s.horizontalAdvance(dims) + 24 + self.lang_rect.width() + self.gear_rect.width() + 4 <= hint.width():
                     p.drawText(hint, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, dims)
-            p.drawText(hint, flags, text)
+            p.drawText(hint.adjusted(0, 0, -self.bar_hint_reserve, 0), flags, text)
+        self._draw_lang_chip(p, small_font)
         self._draw_close(p)
         p.restore()
+
+    def _draw_lang_chip(self, p: QPainter, font):
+        """Чип языка: глобус, название языка на нём самом и «▾»; места мало: один глобус."""
+        from . import icons
+        if self.lang_rect.isEmpty():
+            return
+        self._draw_gear(p)
+        rect = self.lang_rect
+        hover = self.hover_button == "lang"
+        p.save()
+        p.setOpacity(1.0)
+        p.setBrush(QColor("#dbe6f7") if hover else QColor("#eceef2"))
+        p.setPen(QPen(QColor(ACCENT) if hover else QColor("#b8c0cc"), 1))
+        p.drawRoundedRect(QRectF(rect).adjusted(0.5, 0.5, -0.5, -0.5), 7, 7)
+        long_form = rect.width() > 30
+        ic_rect = QRect(rect.left() + (8 if long_form else (rect.width() - 14) // 2), rect.center().y() - 7, 14, 14)
+        icons.icon("globe").paint(p, ic_rect)
+        if long_form:
+            p.setFont(font)
+            p.setPen(QColor("#16181c"))
+            name = i18n.LANGUAGE_NAMES.get(i18n.current(), "") + " ▾"
+            p.drawText(QRect(ic_rect.right() + 6, rect.top(), rect.right() - ic_rect.right() - 8, rect.height()),
+                       Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, name)
+        p.restore()
+
+    @staticmethod
+    def _chip_tip(key):
+        return language.menu_title() if key == "lang" else tr("app.menu_settings").rstrip("…")
+
+    def _draw_gear(self, p: QPainter):
+        """Шестерёнка «Настройки» рядом с чипом языка: тот же вид, один значок."""
+        from . import icons
+        rect = self.gear_rect
+        hover = self.hover_button == "settings"
+        p.save()
+        p.setOpacity(1.0)
+        p.setBrush(QColor("#dbe6f7") if hover else QColor("#eceef2"))
+        p.setPen(QPen(QColor(ACCENT) if hover else QColor("#b8c0cc"), 1))
+        p.drawRoundedRect(QRectF(rect).adjusted(0.5, 0.5, -0.5, -0.5), 7, 7)
+        icons.icon("settings", "#3c4350").paint(p, QRect(rect.center().x() - 7, rect.center().y() - 7, 14, 14))
+        p.restore()
+
+    def _open_settings(self):
+        """Шестерёнка: окно выделения закрывается без снимка (как Esc), настройки открываются, как из меню значка."""
+        ctx = self.lang_ctx
+        self._finish(None)
+        if ctx is not None and hasattr(ctx, "open_settings"):
+            QTimer.singleShot(0, ctx.open_settings)
+
+    def _lang_menu(self):
+        """Щелчок по чипу языка: то же меню, что у глобуса в редакторе; под чипом, а у нижнего края экрана над ним."""
+        if self.lang_ctx is None or self.lang_rect.isEmpty():
+            return
+        menu = language.make_menu(self.lang_ctx, self)
+        menu.ensurePolished()
+        below = self.mapToGlobal(self.lang_rect.bottomLeft())
+        above = self.mapToGlobal(self.lang_rect.topLeft())
+        screen = QGuiApplication.screenAt(below) or QGuiApplication.primaryScreen()
+        h = menu.sizeHint().height()
+        pos = below if below.y() + h <= screen.availableGeometry().bottom() else QPoint(above.x(), above.y() - h)
+        menu.exec(pos)
+        menu.deleteLater()
+        self.hover_button = None
+        self.update()
 
     def _draw_close(self, p: QPainter):
         self._draw_cross(p, QRectF(self.bar_close_rect), self.hover_button == "cancel")
@@ -1197,6 +1355,10 @@ class RegionSelector(TranslateMixin, QWidget):
         self.enter_translate()
         if ready:
             self._tr_spawn_floating(region)
+
+    def start_translate_pick(self):
+        """Кнопка «Выделить и перевести» и Ctrl+P: режим перевода без перевода стоящей рамки; обведённое место переводится."""
+        self.enter_translate()
 
     def _tr_after_spawn(self, spawned=True, full=False, win=None):
         if full:
@@ -1319,8 +1481,10 @@ class RegionSelector(TranslateMixin, QWidget):
         (выход из режима), кнопки строки перевода; остальные в режиме перевода не работают (нарисованы бледными)."""
         if key.startswith("trc:"):
             self._tr_ctl(key)
-        elif key == "translate_all":
-            self.start_translate_all()
+        elif key == "lang":
+            self._lang_menu()
+        elif key == "settings":
+            self._open_settings()
         elif key == "cancel":
             self._finish(None)
         elif key == "manual" or key.startswith("mon:"):
@@ -1359,6 +1523,9 @@ class RegionSelector(TranslateMixin, QWidget):
         if action == "cancel":
             self._finish(None)
             return
+        if action == "lang":
+            self._lang_menu()
+            return
         if action.startswith("mon:"):
             v = action[4:]
             self.select_monitor(None if v == "all" else int(v))
@@ -1372,8 +1539,11 @@ class RegionSelector(TranslateMixin, QWidget):
         if action == "translate":
             self.start_translate()
             return
-        if action == "translate_all":
-            self.start_translate_all()
+        if action == "translate_pick":
+            self.start_translate_pick()
+            return
+        if action == "settings":
+            self._open_settings()
             return
         self.action = action
         # Запись видео ведёт встроенная запись системы: наш снимок не нужен, окно выделения просто закрываем
@@ -1571,6 +1741,10 @@ class RegionSelector(TranslateMixin, QWidget):
             return False
 
     def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_P and event.modifiers() == Qt.KeyboardModifier.ControlModifier \
+                and self.translate_enabled() and self.pending is None and (self.kept is not None or self.translate_mode):
+            self.start_translate_pick()   # Ctrl+P: выделить другое место и перевести
+            return
         if self.translate_mode and event.key() == Qt.Key.Key_L and self.translate_enabled() and self.pending is None \
                 and event.modifiers() & Qt.KeyboardModifier.ControlModifier \
                 and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:

@@ -67,6 +67,8 @@ old_ext_uuids() {
   return 0
 }
 sysd() { [ "$NO_SYSTEM" = 1 ] || systemctl --user "$@" >/dev/null 2>&1; }
+# a failed GNOME setting is a warning, never the end of the installation (set -e)
+gset() { gsettings set "$@" || warn "$(t "Не удалось записать настройку GNOME" "Could not write a GNOME setting"): $*"; }
 
 # schemas are read into a variable first: `grep -q` closing the pipe early would fail the pipeline under pipefail
 has_schema() { local all; all="$(gsettings list-schemas 2>/dev/null)" || return 1; grep -qx "$1" <<< "$all"; }
@@ -201,7 +203,7 @@ cp -a "$SRC/." "$STAGE/"
 # 2. Stop the running copy (any version, including 1.x); a foreign command is never asked to quit
 if [ "$NO_SYSTEM" != 1 ]; then
   [ "$BIN_OURS" = 1 ] && [ -e "$BIN" ] && timeout 10 "$BIN" --quit >/dev/null 2>&1 || true
-  sysd stop clipsd.service
+  sysd stop clipsd.service || true   # the service may not exist yet (first install): systemctl returns 5
   sleep 1
 fi
 
@@ -252,8 +254,8 @@ RestartSec=2
 WantedBy=graphical-session.target
 UNIT
   rm -f "$AUTOSTART"
-  sysd daemon-reload
-  sysd enable clipsd.service
+  sysd daemon-reload || warn "$(t "systemd не перечитал службы" "systemd did not reload units")"
+  sysd enable clipsd.service || warn "$(t "Служба не включена для автозапуска" "The service was not enabled for autostart")"
   sysd restart clipsd.service || warn "$(t "Служба не запустилась" "The service did not start"): $BIN"
   say "$(t "ClipSD запущен как служба и будет стартовать при входе в систему" "ClipSD is running as a service and will start when you log in")"
 else
@@ -279,16 +281,28 @@ fi
 if has_gnome; then
   # Alt+W of the built-in GNOME screenshot tool goes to ClipSD; the previous value is saved for uninstall.
   if has_schema org.gnome.shell.keybindings; then
-    current="$(gsettings get org.gnome.shell.keybindings show-screenshot-ui)"
+    current="$(gsettings get org.gnome.shell.keybindings show-screenshot-ui 2>/dev/null || echo '@as []')"
     [ -f "$APP/gnome-screenshot-keys.bak" ] || printf '%s\n' "$current" > "$APP/gnome-screenshot-keys.bak"
     cleaned="$(printf '%s' "$current" | sed -E "s/'<[Aa]lt>([Ww]|[Cc]yrillic_tse)'(, )?//g; s/, \]/]/")"
-    gsettings set org.gnome.shell.keybindings show-screenshot-ui "$cleaned"
+    gset org.gnome.shell.keybindings show-screenshot-ui "$cleaned"
   fi
-  gsettings set $KB_BASE custom-keybindings "$(list_add "$(gsettings get $KB_BASE custom-keybindings)" "$KB_PATH")"
-  gsettings set "$KB_BASE.custom-keybinding:$KB_PATH" name "$(t "ClipSD: снимок области" "ClipSD: area screenshot")"
-  gsettings set "$KB_BASE.custom-keybinding:$KB_PATH" command "$BIN --region"
-  gsettings set "$KB_BASE.custom-keybinding:$KB_PATH" binding "<Alt>w"
-  say "$(t "Alt+W назначен на ClipSD (запасное сочетание, работает сразу на латинской раскладке)" "Alt+W now opens ClipSD (a fallback shortcut, works right away with a Latin layout)")"
+
+  # Fallback Alt+W of GNOME: only when no enabled extension already holds the same keys (two grabs of Alt+W fight)
+  set_fallback_key() {
+    gset $KB_BASE custom-keybindings "$(list_add "$(gsettings get $KB_BASE custom-keybindings 2>/dev/null || echo '@as []')" "$KB_PATH")"
+    gset "$KB_BASE.custom-keybinding:$KB_PATH" name "$(t "ClipSD: снимок области" "ClipSD: area screenshot")"
+    gset "$KB_BASE.custom-keybinding:$KB_PATH" command "$BIN --region"
+    gset "$KB_BASE.custom-keybinding:$KB_PATH" binding "<Alt>w"
+    say "$(t "Alt+W назначен на ClipSD (запасное сочетание, работает сразу на латинской раскладке)" "Alt+W now opens ClipSD (a fallback shortcut, works right away with a Latin layout)")"
+  }
+  drop_fallback_key() {
+    local cur
+    cur="$(gsettings get $KB_BASE custom-keybindings 2>/dev/null || echo '@as []')"
+    if list_has "$cur" "$KB_PATH"; then
+      gset $KB_BASE custom-keybindings "$(list_del "$cur" "$KB_PATH")"
+      gsettings reset-recursively "$KB_BASE.custom-keybinding:$KB_PATH" >/dev/null 2>&1 || true
+    fi
+  }
 
   # Extension: the old one (1.x) goes if it is ours, the new one is put in place and switched on.
   enabled="$(gsettings get org.gnome.shell enabled-extensions 2>/dev/null || echo '@as []')"
@@ -319,7 +333,8 @@ if has_gnome; then
     enabled="$(list_add "$enabled" "$EXT_UUID")"
     say "$(t "Расширение «ClipSD: hotkeys» (Alt+W на любой раскладке, например Alt+Ц) включится после выхода из системы и повторного входа" "The extension \"ClipSD: hotkeys\" (Alt+W on any keyboard layout, for example Alt+Ц) will be enabled after you log out and back in")"
   fi
-  gsettings set org.gnome.shell enabled-extensions "$enabled"
+  gset org.gnome.shell enabled-extensions "$enabled"
+  if [ -n "$KEEP_OLD" ]; then drop_fallback_key; else set_fallback_key; fi
 else
   warn "$(t "Не GNOME: назначьте Alt+W в настройках клавиатуры на команду" "Not running GNOME: assign Alt+W to the following command in the keyboard settings"): $BIN --region"
   warn "$(t "(в сеансе X11 ClipSD перехватывает Alt+W сам, ничего делать не нужно)" "(in an X11 session, ClipSD handles Alt+W itself, so no action is needed)")"

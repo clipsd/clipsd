@@ -413,7 +413,7 @@ def selector(width, kept=None, cfg=None, translate=False):
     return sel
 
 
-TOP5 = ["record", "full", "ocr", "translate", "translate_all"]
+TOP5 = ["record", "full", "ocr", "translate", "translate_pick"]
 BOTTOM4 = ["save", "edit", "manual", "copy"]
 for width, level in ((1280, "wide"), (800, "mid"), (480, "narrow")):
     sel = selector(width, QRect(width // 2 - 150, 90, 300, 200))
@@ -426,19 +426,19 @@ for width, level in ((1280, "wide"), (800, "mid"), (480, "narrow")):
           and rects["save"].top() > rects["record"].bottom(), f"{width}: «Сохранить» стоит в нижнем ряду, не в верхнем")
     ws = [rects[k].width() for k in BOTTOM4]
     check(all(a <= b for a, b in zip(ws, ws[1:])) and ws[1] < ws[3], f"{width}: нижние кнопки, чем правее, тем шире {ws}")
-    check(rects["record"].left() == rects["save"].left() and abs(rects["translate_all"].right() - rects["copy"].right()) <= 1,
+    check(rects["record"].left() == rects["save"].left() and abs(rects["translate_pick"].right() - rects["copy"].right()) <= 1,
           f"{width}: края рядов совпадают")
     check(sel.bar_level["name"] == level, f"{width}: размер панели «{sel.bar_level['name']}»")
     lv = sel.bar_level
     if lv["text"]:
-        check(rects["copy"].height() == lv["btn_h"] and (level != "wide" or lv["btn_h"] == 64), f"{width}: высота нижних кнопок {rects['copy'].height()}")
+        check(rects["copy"].height() == lv["btn_h"] and (level != "wide" or lv["btn_h"] == 52), f"{width}: высота нижних кнопок {rects['copy'].height()}")
         bl, bs = sel._bar_bfonts(lv)
         fb, fs = QFontMetrics(bl), QFontMetrics(bs)
         bad = [k for k in BOTTOM4 if fb.horizontalAdvance(texts[k]) > rects[k].width() - lv["pl"] - lv["sq"] - lv["gp"] - 4
                or fs.horizontalAdvance(sel.BAR_SUB[k]) > rects[k].width() - lv["pl"] - lv["sq"] - lv["gp"] - 4]
         check(not bad, f"{width}: подписи и пояснения нижних кнопок не обрезаются {bad}")
         if level == "wide":
-            check(lv["bl"] == 16 and abs(lv["bs"] - 12.5) < 0.01 and lv["sq"] == 38, "широкий: название 16, пояснение 12,5, квадрат значка 38")
+            check(lv["bl"] == 15 and abs(lv["bs"] - 11) < 0.01 and lv["sq"] == 32, "широкий (1.31.1, компактнее): название 15, пояснение 11, квадрат значка 32")
     else:
         check(sel._bar_label("copy", "", lv) == "Скопировать" and sel._bar_label("manual", "", lv) == "Заново",
               f"{width}: узкий режим: значки и короткие подписи")

@@ -1,0 +1,7 @@
+- Nella finestra di selezione dell'area si possono cambiare subito la lingua e aprire le impostazioni: in basso nella barra, a sinistra della dimensione, ci sono un globo con il nome della lingua e un ingranaggio.
+- La traduzione è divisa in due pulsanti: «Traduci la selezione» traduce il riquadro già presente, «Scegli e traduci» permette di tracciare un altro punto. La traduzione di tutto lo schermo passa nella riga della modalità di traduzione, con il pulsante «Tutto lo schermo».
+- La barra nella finestra di selezione è circa il 15% più compatta e si posiziona accanto al riquadro invece che sopra: sotto, sopra, a destra o a sinistra. Va dentro il riquadro solo se fuori non c'è spazio.
+- Nelle impostazioni c'è una nuova sezione «Aggiornamenti»: versione, pulsante «Controlla aggiornamenti» e casella per il controllo automatico. Il pulsante «?» dell'editor ora apre un menu: «Presentazione del programma», «Controlla aggiornamenti» e «Informazioni».
+- Nell'editor «Annulla» e «Ripeti» sono all'inizio della riga su uno sfondo a parte. Per impostazione predefinita gli strumenti sono ordinati così: sposta, frecce vicine, poi forme, poi il resto. L'ordine impostato da voi non cambia.
+- L'icona del globo è azzurra ovunque e si trova più facilmente.
+- Linux: corretta la prima installazione, che prima poteva fermarsi in silenzio a metà.

@@ -169,6 +169,19 @@ def _draw(name: str, p: QPainter, c: str):
         p.scale(0.58, 0.58)
         _draw("translate", p, c)
         p.restore()
+    elif name == "translate_pick":
+        # рамка-видоискатель с плюсом и буквами перевода: выделить другое место и перевести
+        p.setPen(_pen(c, 1.8))
+        for x, y, dx, dy in ((2, 2, 1, 1), (22, 2, -1, 1), (2, 22, 1, -1)):
+            p.drawPolyline(QPolygonF([QPointF(x, y + 4 * dy), QPointF(x, y), QPointF(x + 4 * dx, y)]))
+        p.save()
+        p.translate(4.2, 4.2)
+        p.scale(0.7, 0.7)
+        _draw("translate", p, c)
+        p.restore()
+        p.setPen(_pen(c, 2.2))
+        p.drawLine(QPointF(17, 21), QPointF(23, 21))
+        p.drawLine(QPointF(20, 18), QPointF(20, 24))
     elif name == "ocr":
         # рамка-видоискатель по углам и буква «Т» внутри: текст с картинки
         p.setPen(_pen(c, 2.0))
@@ -299,8 +312,11 @@ def _draw(name: str, p: QPainter, c: str):
 ICON_COLOR = "#2e3436"   # цвет линий значков; оформление меняет его (светлый на тёмной теме)
 
 
+GLOBE_COLOR = "#3a9be8"   # глобус выбора языка: один голубой во всех окнах и темах
+
+
 def icon(name: str, color: str = None) -> QIcon:
-    color = color or ICON_COLOR
+    color = color or (GLOBE_COLOR if name == "globe" else ICON_COLOR)
     pix, p = _canvas()
     _draw(name, p, color)
     p.end()

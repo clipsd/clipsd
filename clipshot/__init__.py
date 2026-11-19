@@ -10,7 +10,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """ClipSD: снимки экрана с редактором (стрелки, номера, сноски, размытие, обрезка)."""
 
-__version__ = "1.31.0"
+__version__ = "1.31.1"
 __author__ = "Sergey Dayneko (Сергей Дайнеко)"
 __license__ = "GPL-3.0-or-later"
 __copyright__ = "Copyright (C) 2026 Sergey Dayneko"

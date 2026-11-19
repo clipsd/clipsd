@@ -24,7 +24,7 @@ app = QApplication(sys.argv)
 
 from clipshot import app as appmod
 from clipshot.editor import MOVE, TOOLS as TOOLS_LIST, EditorWindow
-from clipshot.shapes import CALLOUT, DARROW, FARROW, NUMBER, RECT, TEXT
+from clipshot.shapes import ARROW, CALLOUT, DARROW, FARROW, NUMBER, RECT, TEXT
 
 failures = []
 
@@ -419,7 +419,7 @@ first = strip.order()
 check(first[0] == MOVE and first[-1] == "crop", "стандартный порядок инструментов")
 target_x = strip.buttons()[1].geometry().center().x() - 5     # между 1-й и 2-й кнопкой
 strip.move_tool(NUMBER, strip.index_at(target_x))
-check(strip.order()[:3] == [MOVE, NUMBER, CALLOUT], f"номер перенесён ко второй позиции: {strip.order()[:4]}")
+check(strip.order()[:3] == [MOVE, NUMBER, ARROW], f"номер перенесён ко второй позиции: {strip.order()[:4]}")
 check(Ctx.config["tool_order"] == strip.order(), "порядок записан в настройки")
 ed6 = EditorWindow(img, Ctx(), QPoint(0, 0))
 check(ed6.tool_strip.order() == strip.order(), "новое окно открывается с тем же порядком")

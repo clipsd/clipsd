@@ -95,5 +95,7 @@
   "settings.tray_menu": "Menüyü aç",
   "settings.tray_region": "Alan yakala",
   "settings.update_check": "Güncellemeleri otomatik olarak denetle",
-  "settings.update_check_tip": "ClipSD günde bir kez clipsd.github.io sayfasına yeni sürüm olup olmadığını sorar ve yüklemeyi önerir. Elle denetlemek için: simge menüsü, “Güncellemeleri denetle”."
+  "settings.update_check_tip": "ClipSD günde bir kez clipsd.github.io sayfasına yeni sürüm olup olmadığını sorar ve yüklemeyi önerir.",
+  "settings.sec_updates": "Güncellemeler",
+  "settings.version_line": "ClipSD sürümü {version}"
 }

@@ -1,0 +1,7 @@
+- Alan seçme penceresinde dili hemen değiştirebilir ve ayarları açabilirsiniz: panelin altında, boyutun solunda, dil adıyla bir küre ve bir dişli var.
+- Çeviri iki düğmeye ayrıldı: “Seçileni çevir” zaten duran çerçeveyi çevirir, “Seç ve çevir” başka bir yeri çizmenizi sağlar. Tüm ekranı çevirme, çeviri modu satırına “Tüm ekran” düğmesi olarak taşındı.
+- Seçim penceresindeki panel yaklaşık %15 daha kompakt ve çerçevenin üstüne değil yanına yerleşir: altına, üstüne, sağına veya soluna. Dışarıda yer yoksa çerçevenin içine girer.
+- Ayarlarda yeni bir “Güncellemeler” bölümü var: sürüm, “Güncellemeleri denetle” düğmesi ve otomatik denetim kutusu. Düzenleyicideki “?” düğmesi artık bir menü açar: “Program turu”, “Güncellemeleri denetle” ve “Hakkında”.
+- Düzenleyicide “Geri al” ve “Yinele” satırın başında, ayrı bir zeminde durur. Araçlar varsayılan olarak şöyle sıralanır: taşıma, yan yana oklar, sonra şekiller, sonra gerisi. Kendi belirlediğiniz sıra değişmez.
+- Küre simgesi her yerde açık mavi, bulması daha kolay.
+- Linux: ilk kurulum düzeltildi, önceden yarıda sessizce durabiliyordu.

@@ -67,7 +67,7 @@ class Ctx:
         pass
 
 
-TOP5 = ["record", "full", "ocr", "translate", "translate_all"]
+TOP5 = ["record", "full", "ocr", "translate", "translate_pick"]
 BOTTOM4 = ["save", "edit", "manual", "copy"]
 levels = {}
 

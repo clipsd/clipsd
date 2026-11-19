@@ -9,6 +9,7 @@
   "selector.btn_save": "Guardar",
   "selector.btn_translate": "Traducir lo seleccionado",
   "selector.btn_translate_all": "Traducir toda la pantalla",
+  "selector.btn_translate_pick": "Elegir y traducir",
   "selector.close_hint": "Cerrar (Esc)",
   "selector.hint_full": "Si no necesita toda la pantalla, seleccione el área con el ratón · Esc: cancelar",
   "selector.hint_icons": "Pase sobre un icono: verá su nombre",
@@ -29,7 +30,8 @@
   "selector.sub_edit_frame": "o clic dentro del marco",
   "selector.sub_retake_empty": "o trace en una zona vacía",
   "selector.sub_save_file": "a un archivo",
-  "selector.sub_translate": "o seleccione otro",
+  "selector.sub_translate": "este marco",
+  "selector.sub_translate_pick": "seleccione otro lugar",
   "selector.title_full": "Captura de pantalla completa",
   "selector.title_monitor": "Captura del monitor {n}",
   "selector.tr_blocked": "Primero termine la traducción: Esc",
@@ -44,5 +46,6 @@
   "selector.trc_more": "Más ▾",
   "selector.trc_original": "Original",
   "selector.trc_overlay": "Sobre el texto",
-  "selector.trc_translation": "Traducción"
+  "selector.trc_translation": "Traducción",
+  "selector.trc_all": "Toda la pantalla"
 }

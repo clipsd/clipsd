@@ -74,7 +74,7 @@
   "editor.frame_glow": "Linea sottile con alone luminoso",
   "editor.frame_plain": "Senza cornice colorata",
   "editor.frame_thick": "Spessa con angoli arrotondati",
-  "editor.help_tip": "Presentazione del programma: dove si trova ogni cosa (F1)",
+  "editor.help_tip": "Aiuto: presentazione (F1), aggiornamenti, informazioni",
   "editor.hint_crop": "Seleziona l'area da mantenere",
   "editor.hint_crop_pending": "Trascina angoli e lati · clic fuori dalla cornice: seleziona di nuovo",
   "editor.hint_crop_sub": "Enter: ritaglia · Esci: Esc",

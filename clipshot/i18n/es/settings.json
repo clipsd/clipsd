@@ -95,5 +95,7 @@
   "settings.tray_menu": "Abrir el menú",
   "settings.tray_region": "Capturar un área",
   "settings.update_check": "Buscar actualizaciones automáticamente",
-  "settings.update_check_tip": "Una vez al día, ClipSD consulta clipsd.github.io para saber si hay una versión nueva y ofrece instalarla. Comprobar manualmente: menú del icono, «Buscar actualizaciones»."
+  "settings.update_check_tip": "Una vez al día, ClipSD consulta clipsd.github.io para saber si hay una versión nueva y ofrece instalarla.",
+  "settings.sec_updates": "Actualizaciones",
+  "settings.version_line": "Versión de ClipSD {version}"
 }

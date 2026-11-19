@@ -74,7 +74,7 @@
   "editor.frame_glow": "带发光效果的细线",
   "editor.frame_plain": "无彩色边框",
   "editor.frame_thick": "粗圆角边框",
-  "editor.help_tip": "程序导览：各功能在哪里（F1）",
+  "editor.help_tip": "帮助：程序导览（F1）、更新、关于",
   "editor.hint_crop": "选择要保留的区域",
   "editor.hint_crop_pending": "拖动边角和边框 · 点击框外：重新选择",
   "editor.hint_crop_sub": "Enter：裁剪 · 退出：Esc",

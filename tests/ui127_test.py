@@ -79,7 +79,7 @@ BASELINE_MAIN = [
     ["QToolButton", "action", "", "Отменить (Ctrl+Z)"],
     ["QToolButton", "action", "", "Повторить (Ctrl+Y)"],
     ["QToolButton", "action", "", "Вставить картинку поверх снимка"],
-    ["QToolButton", "action", "", "Знакомство с программой: где что находится (F1)"],
+    ["QToolButton", "action", "", "Справка: знакомство (F1), обновления, о программе"],
     ["QToolButton", "action", "", "Настройки (Ctrl+,)"],
     ["QToolButton", "action", "", "Язык · Language"],   # 1.31: глобус выбора языка рядом с «?» и шестерёнкой
     ["QToolButton", "swatch", "", "#D60808"],
@@ -295,7 +295,11 @@ for host in (ed.panel, ed.bottom):
     for w in host.findChildren((QToolButton, QPushButton)):
         now.append([type(w).__name__, w.objectName(), w.text().strip(), w.toolTip().split("\n")[0]])
 # 1.29.1: «Подряд / Маркер» переехали из нижней панели в фиолетовую полосу режима текста
-check(now == [x for x in BASELINE_MAIN if x[2] not in ("Подряд", "Маркер")], f"кнопки панелей: {len(now)} шт., состав и порядок как в main")
+# 1.31.1: «Отменить» и «Повторить» переехали в начало верхнего ряда (быстрый доступ слева от инструментов)
+expected = [x for x in BASELINE_MAIN if x[2] not in ("Подряд", "Маркер")]
+quick = [x for x in expected if x[3].startswith(("Отменить", "Повторить"))]
+expected = quick + [x for x in expected if x not in quick]
+check(sorted(now) == sorted(expected) and now[:2] == quick, f"кнопки панелей: {len(now)} шт., состав как в main, отмена и повтор первыми")
 done(ed)
 
 # 5. Вид рамки: по умолчанию «Тонкая линия со свечением», три значения сохраняются и читаются, картинки разные

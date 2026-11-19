@@ -468,6 +468,19 @@ class SettingsDialog(QDialog):
         self.language.setAccessibleName(tr("settings.language"))
         grid.addWidget(self.language, 0, 1, 1, 2)
 
+        # Обновления (1.31.1): отдельный заметный блок: версия, «Проверить обновления», автопроверка
+        from . import build_info
+        grid = self._card(root, tr("settings.sec_updates"))
+        self.version_label = QLabel(tr("settings.version_line", version=build_info.version_label(__version__)))
+        self.version_label.setObjectName("versionLine")
+        grid.addWidget(self.version_label, 0, 0, 1, 2)
+        self.update_ctx = None   # приложение (ставит open_settings): без него кнопка ничего не запускает
+        self.check_updates = QPushButton(tr("updater.menu.check"))
+        self.check_updates.clicked.connect(self._check_updates_now)
+        grid.addWidget(self.check_updates, 0, 2, Qt.AlignmentFlag.AlignRight)
+        self.update_check = self._check(grid, 1, tr("settings.update_check"), bool(config.get("update_check", True)))
+        self.update_check.setToolTip(tr("settings.update_check_tip"))
+
         # Горячие клавиши
         grid = self._card(root, tr("settings.sec_hotkeys"))
         self.key_region = self._hotkey_row(grid, 0, tr("settings.hotkey_region"), config.get("hotkey_region", ""))
@@ -661,14 +674,11 @@ class SettingsDialog(QDialog):
         # Запуск
         grid = self._card(root, tr("settings.sec_start"))
         self.autostart = self._check(grid, 0, tr("settings.autostart"), autostart_enabled())
-        self.update_check = self._check(grid, 1, tr("settings.update_check"), bool(config.get("update_check", True)))
-        self.update_check.setToolTip(tr("settings.update_check_tip"))
         self.want_tour = False
         tour = QPushButton(tr("settings.tour_again"))
         tour.clicked.connect(self._request_tour)
-        grid.addWidget(tour, 2, 0, 1, 3, Qt.AlignmentFlag.AlignLeft)
+        grid.addWidget(tour, 1, 0, 1, 3, Qt.AlignmentFlag.AlignLeft)
 
-        from . import build_info
         footer = QLabel(f"ClipSD {build_info.version_label(__version__)} · © 2026 {__author__} · GNU GPL v3")
         footer.setObjectName("footer")
         footer.setWordWrap(True)
@@ -740,6 +750,13 @@ class SettingsDialog(QDialog):
         editor = HotkeyEditor(value)
         grid.addWidget(editor, row, 1, 1, 2)
         return editor
+
+    def _check_updates_now(self):
+        """«Проверить обновления»: тот же путь, что у пункта меню значка (из исходников: сообщение updater.disabled.dev)."""
+        if self.update_ctx is None:
+            return
+        from . import updater
+        updater.get_updater(self.update_ctx).check_now(manual=True)
 
     def _request_tour(self):
         self.want_tour = True

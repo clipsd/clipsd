@@ -1,0 +1,7 @@
+- En la ventana de selección de área ya puede cambiar el idioma y abrir la configuración al momento: abajo en la barra, a la izquierda del tamaño, hay un globo con el nombre del idioma y un engranaje.
+- La traducción se divide en dos botones: «Traducir lo seleccionado» traduce el marco que ya está puesto y «Elegir y traducir» le deja rodear otro lugar. Traducir toda la pantalla pasa a la fila del modo de traducción, con el botón «Toda la pantalla».
+- La barra de la ventana de selección es un 15 % más compacta y se coloca junto al marco en lugar de encima: debajo, arriba, a la derecha o a la izquierda. Solo pasa al interior del marco si fuera no hay sitio.
+- En la configuración hay una sección nueva, «Actualizaciones»: versión, botón «Buscar actualizaciones» y casilla de búsqueda automática. El botón «?» del editor ahora abre un menú: «Recorrido por el programa», «Buscar actualizaciones» y «Acerca de».
+- En el editor, «Deshacer» y «Rehacer» están al principio de la fila sobre un fondo propio. Por defecto las herramientas se ordenan así: mover, flechas juntas, luego formas y luego el resto. El orden que usted haya fijado no cambia.
+- El icono del globo es azul claro en todas partes y se encuentra mejor.
+- Linux: se ha corregido la primera instalación, que antes podía detenerse en silencio a mitad de camino.

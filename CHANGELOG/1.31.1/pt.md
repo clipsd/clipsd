@@ -1,0 +1,7 @@
+- Na janela de seleção de área já é possível mudar o idioma e abrir as configurações na hora: embaixo na barra, à esquerda do tamanho, há um globo com o nome do idioma e uma engrenagem.
+- A tradução foi dividida em dois botões: «Traduzir a seleção» traduz o quadro que já está posto e «Escolher e traduzir» deixa contornar outro lugar. Traduzir a tela inteira passou para a linha do modo de tradução, com o botão «Tela inteira».
+- A barra da janela de seleção ficou cerca de 15% mais compacta e fica ao lado do quadro, e não por cima: abaixo, acima, à direita ou à esquerda. Ela entra no quadro só se não houver espaço fora.
+- As configurações têm uma nova seção «Atualizações»: versão, botão «Verificar atualizações» e caixa de verificação automática. O botão «?» do editor agora abre um menu: «Tour pelo programa», «Verificar atualizações» e «Sobre».
+- No editor, «Desfazer» e «Refazer» ficam no começo da fileira, sobre um fundo próprio. Por padrão as ferramentas ficam assim: mover, setas juntas, depois formas, depois o resto. A ordem que você mesmo definiu não muda.
+- O ícone do globo é azul-claro em todo lugar e fica mais fácil de achar.
+- Linux: corrigida a primeira instalação, que antes podia parar em silêncio no meio do caminho.

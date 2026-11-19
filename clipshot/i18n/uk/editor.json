@@ -74,7 +74,7 @@
   "editor.frame_glow": "Тонка лінія зі свіченням",
   "editor.frame_plain": "Без кольорової рамки",
   "editor.frame_thick": "Товста закруглена",
-  "editor.help_tip": "Знайомство з програмою: де що розташовано (F1)",
+  "editor.help_tip": "Довідка: знайомство (F1), оновлення, про програму",
   "editor.hint_crop": "Виділіть область, яку залишити",
   "editor.hint_crop_pending": "Тягніть кути й сторони · клік поза рамкою: виділити заново",
   "editor.hint_crop_sub": "Enter: обрізати · Вихід: Esc",

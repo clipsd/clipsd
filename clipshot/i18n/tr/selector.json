@@ -9,6 +9,7 @@
   "selector.btn_save": "Kaydet",
   "selector.btn_translate": "Seçileni çevir",
   "selector.btn_translate_all": "Tüm ekranı çevir",
+  "selector.btn_translate_pick": "Seç ve çevir",
   "selector.close_hint": "Kapat (Esc)",
   "selector.hint_full": "Tüm ekran gerekmiyor mu? Alanı fareyle seçin · Esc: iptal",
   "selector.hint_icons": "Simgenin üzerine gelin: ad görünür",
@@ -28,7 +29,8 @@
   "selector.sub_edit_frame": "veya çerçeve içine tıklayın",
   "selector.sub_retake_empty": "veya boş alanda çizin",
   "selector.sub_save_file": "dosyaya",
-  "selector.sub_translate": "veya yenisini seçin",
+  "selector.sub_translate": "bu çerçeve",
+  "selector.sub_translate_pick": "başka bir yer seçin",
   "selector.title_full": "Tam ekran görüntüsü",
   "selector.title_monitor": "Monitör {n} görüntüsü",
   "selector.tr_blocked": "Önce çeviriyi bitirin: Esc",
@@ -43,5 +45,6 @@
   "selector.trc_more": "Daha ▾",
   "selector.trc_original": "Orijinal",
   "selector.trc_overlay": "Metnin üstünde",
-  "selector.trc_translation": "Çeviri"
+  "selector.trc_translation": "Çeviri",
+  "selector.trc_all": "Tüm ekran"
 }

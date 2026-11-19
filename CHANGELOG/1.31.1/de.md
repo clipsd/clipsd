@@ -1,0 +1,7 @@
+- Im Fenster zur Bereichsauswahl lassen sich Sprache und Einstellungen jetzt direkt ändern: unten in der Leiste, links neben der Größe, stehen ein Globus mit dem Sprachnamen und ein Zahnrad.
+- Die Übersetzung ist auf zwei Schaltflächen aufgeteilt: „Auswahl übersetzen“ übersetzt den bereits stehenden Rahmen, „Wählen und übersetzen“ lässt Sie eine andere Stelle umranden. Den ganzen Bildschirm übersetzen Sie jetzt in der Übersetzungsleiste mit „Ganzer Bildschirm“.
+- Die Leiste im Auswahlfenster ist etwa 15 % kompakter und steht neben dem Rahmen statt darüber: darunter, darüber, rechts oder links. Nur wenn außen kein Platz ist, rutscht sie in den Rahmen.
+- In den Einstellungen gibt es den neuen Abschnitt „Updates“: Version, Schaltfläche „Nach Updates suchen“ und ein Häkchen für die automatische Suche. Die Schaltfläche „?“ im Editor öffnet jetzt ein Menü: „Einführung“, „Nach Updates suchen“ und „Info“.
+- Im Editor stehen „Rückgängig“ und „Wiederholen“ am Anfang der Reihe auf eigenem Untergrund. Standardmäßig sind die Werkzeuge so geordnet: Verschieben, Pfeile nebeneinander, dann Formen, dann der Rest. Eine selbst festgelegte Reihenfolge bleibt unverändert.
+- Das Globus-Symbol ist überall hellblau und leichter zu finden.
+- Linux: Die Erstinstallation wurde repariert, sie konnte vorher mittendrin stillschweigend abbrechen.

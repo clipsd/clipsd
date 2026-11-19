@@ -74,7 +74,7 @@
   "editor.frame_glow": "Línea fina con resplandor",
   "editor.frame_plain": "Sin marco de color",
   "editor.frame_thick": "Gruesa con esquinas redondeadas",
-  "editor.help_tip": "Recorrido por el programa: dónde está cada cosa (F1)",
+  "editor.help_tip": "Ayuda: recorrido (F1), actualizaciones, acerca de",
   "editor.hint_crop": "Seleccione el área que quiere conservar",
   "editor.hint_crop_pending": "Arrastre las esquinas y los lados · clic fuera del marco: seleccionar de nuevo",
   "editor.hint_crop_sub": "Enter: recortar · Salir: Esc",

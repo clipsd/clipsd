@@ -9,6 +9,7 @@
   "selector.btn_save": "Сохранить",
   "selector.btn_translate": "Перевести выделенное",
   "selector.btn_translate_all": "Перевести весь экран",
+  "selector.btn_translate_pick": "Выделить и перевести",
   "selector.close_hint": "Закрыть (Esc)",
   "selector.hint_full": "Нужен не весь экран: выделите мышью нужную область · Esc: отмена",
   "selector.hint_icons": "Наведите на значок: появится название",
@@ -25,7 +26,8 @@
   "selector.sub_edit_frame": "или щелчок в рамке",
   "selector.sub_retake_empty": "или обведите на пустом",
   "selector.sub_save_file": "в файл",
-  "selector.sub_translate": "или обведите новый",
+  "selector.sub_translate": "эту рамку",
+  "selector.sub_translate_pick": "обведите другое место",
   "selector.title_full": "Снимок всего экрана",
   "selector.title_monitor": "Снимок монитора {n}",
   "selector.tr_blocked": "Сначала завершите перевод: Esc",
@@ -40,5 +42,6 @@
   "selector.trc_more": "Ещё ▾",
   "selector.trc_original": "Оригинал",
   "selector.trc_overlay": "Поверх текста",
-  "selector.trc_translation": "Перевод"
+  "selector.trc_translation": "Перевод",
+  "selector.trc_all": "Весь экран"
 }

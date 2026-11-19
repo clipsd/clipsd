@@ -1,0 +1,7 @@
+- W oknie zaznaczania obszaru można od razu zmienić język i otworzyć ustawienia: na dole panelu, po lewej od rozmiaru, jest globus z nazwą języka i zębatka.
+- Tłumaczenie podzielono na dwa przyciski: „Przetłumacz zaznaczenie” tłumaczy ramkę, która już stoi, a „Zaznacz i przetłumacz” pozwala obrysować inne miejsce. Tłumaczenie całego ekranu przeniesiono do wiersza trybu tłumaczenia, przycisk „Cały ekran”.
+- Panel w oknie zaznaczania jest około 15% bardziej zwarty i staje obok ramki, a nie na niej: pod, nad, z prawej lub z lewej. Do wnętrza ramki wchodzi tylko wtedy, gdy na zewnątrz nie ma miejsca.
+- W ustawieniach jest nowa sekcja „Aktualizacje”: wersja, przycisk „Sprawdź aktualizacje” i pole automatycznego sprawdzania. Przycisk „?” w edytorze otwiera teraz menu: „Przewodnik po programie”, „Sprawdź aktualizacje” i „O programie”.
+- W edytorze „Cofnij” i „Ponów” stoją na początku rzędu na osobnym tle. Domyślnie narzędzia są ułożone tak: przesuwanie, strzałki obok siebie, potem kształty, potem reszta. Kolejność ustawiona przez Ciebie się nie zmienia.
+- Ikona globusa jest wszędzie jasnoniebieska i łatwiej ją znaleźć.
+- Linux: naprawiono pierwszą instalację, która wcześniej mogła po cichu zatrzymać się w połowie.

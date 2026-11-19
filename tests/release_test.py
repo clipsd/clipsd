@@ -5,6 +5,7 @@ The copy is a fresh git repository (no remote), so a push would fail loudly; the
 CLIPSD_TEST_CMD replaces the full test run (this test is itself part of it)."""
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -30,6 +31,11 @@ def git(repo, *args):
 def make_repo(name):
     repo = TMP / name
     shutil.copytree(ROOT, repo, ignore=shutil.ignore_patterns(".git", "__pycache__", "*.pyc"))
+    # The scenarios below work as if 1.31.0 was the last release and 1.31.1 is the next one: the copy is pinned
+    # to that state, so the test keeps passing in the tree where 1.31.1 itself is being prepared.
+    shutil.rmtree(repo / "CHANGELOG" / "1.31.1", ignore_errors=True)
+    init = repo / "clipshot" / "__init__.py"
+    init.write_text(re.sub(r'^__version__ = ".*"', '__version__ = "1.31.0"', init.read_text(encoding="utf-8"), flags=re.M), encoding="utf-8")
     for cmd in (["init", "-q"], ["config", "user.name", "Test"], ["config", "user.email", "t@example.invalid"],
                 ["add", "-A"], ["commit", "-q", "-m", "base"]):
         git(repo, *cmd)

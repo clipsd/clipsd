@@ -95,5 +95,7 @@
   "settings.tray_menu": "Otwórz menu",
   "settings.tray_region": "Zrzut obszaru",
   "settings.update_check": "Automatycznie sprawdzaj aktualizacje",
-  "settings.update_check_tip": "Raz dziennie ClipSD pyta stronę clipsd.github.io, czy jest nowa wersja, i proponuje jej instalację. Sprawdzenie ręczne: menu ikony, „Sprawdź aktualizacje”."
+  "settings.update_check_tip": "Raz dziennie ClipSD pyta stronę clipsd.github.io, czy jest nowa wersja, i proponuje jej instalację.",
+  "settings.sec_updates": "Aktualizacje",
+  "settings.version_line": "Wersja ClipSD {version}"
 }

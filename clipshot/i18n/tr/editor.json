@@ -74,7 +74,7 @@
   "editor.frame_glow": "Parlayan ince çizgi",
   "editor.frame_plain": "Renkli çerçevesiz",
   "editor.frame_thick": "Kalın yuvarlatılmış",
-  "editor.help_tip": "Program turu: ne nerede (F1)",
+  "editor.help_tip": "Yardım: program turu (F1), güncellemeler, hakkında",
   "editor.hint_crop": "Kalmasını istediğiniz alanı seçin",
   "editor.hint_crop_pending": "Köşeleri ve kenarları sürükleyin · çerçeve dışına tıklama: yeniden seç",
   "editor.hint_crop_sub": "Enter: kırp · Çıkış: Esc",

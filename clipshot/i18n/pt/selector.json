@@ -9,6 +9,7 @@
   "selector.btn_save": "Salvar",
   "selector.btn_translate": "Traduzir a seleção",
   "selector.btn_translate_all": "Traduzir a tela inteira",
+  "selector.btn_translate_pick": "Escolher e traduzir",
   "selector.close_hint": "Fechar (Esc)",
   "selector.hint_full": "Não é a tela toda? Selecione a área com o mouse · Esc: cancelar",
   "selector.hint_icons": "Passe o mouse no ícone: veja o nome",
@@ -29,7 +30,8 @@
   "selector.sub_edit_frame": "ou clique na moldura",
   "selector.sub_retake_empty": "ou desenhe em área vazia",
   "selector.sub_save_file": "em um arquivo",
-  "selector.sub_translate": "ou contorne outro",
+  "selector.sub_translate": "este quadro",
+  "selector.sub_translate_pick": "contorne outro lugar",
   "selector.title_full": "Captura da tela inteira",
   "selector.title_monitor": "Captura do monitor {n}",
   "selector.tr_blocked": "Primeiro conclua a tradução: Esc",
@@ -44,5 +46,6 @@
   "selector.trc_more": "Mais ▾",
   "selector.trc_original": "Original",
   "selector.trc_overlay": "Sobre o texto",
-  "selector.trc_translation": "Tradução"
+  "selector.trc_translation": "Tradução",
+  "selector.trc_all": "Tela inteira"
 }

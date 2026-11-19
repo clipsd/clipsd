@@ -153,11 +153,11 @@ translate.start = spy_start
 # 1. Окно выделения: обе кнопки на панели, обе нажимаются
 sel = new_selector(kept=KEPT_B)
 keys = [k for k, *_ in sel._bar_buttons()]
-check("translate" in keys and "translate_all" in keys and keys.count("translate") == 1,
-      "в панели окна выделения есть «Перевести выделенное» и «Перевести весь экран»")
+check("translate" in keys and "translate_pick" in keys and "translate_all" not in keys and keys.count("translate") == 1,
+      "в панели окна выделения есть «Перевести выделенное» и «Выделить и перевести», кнопки «весь экран» в верхнем ряду нет (1.31.1)")
 labels = {k: t for k, t, *_ in sel._bar_buttons()}
-check(labels["translate"] == "Перевести выделенное" and labels["translate_all"] == "Перевести весь экран",
-      f"подписи кнопок: {labels['translate']!r}, {labels['translate_all']!r}")
+check(labels["translate"] == "Перевести выделенное" and labels["translate_pick"] == "Выделить и перевести",
+      f"подписи кнопок: {labels['translate']!r}, {labels['translate_pick']!r}")
 sel.repaint()
 spawned = []
 sel._tr_spawn_floating = lambda r: spawned.append((QRect(r), False))
@@ -171,8 +171,23 @@ sel.repaint()
 spawned = []
 sel._tr_spawn_floating = lambda r: spawned.append((QRect(r), False))
 sel._tr_spawn_full = lambda r: spawned.append((QRect(r), True))
-click_at(sel, button_rect(sel, "translate_all"))
-check(spawned == [(MON_B, True)], f"«Перевести весь экран»: весь правый монитор (где рамка), без выделения мышью: {spawned}")
+click_at(sel, button_rect(sel, "translate_pick"))
+check(spawned == [] and sel.translate_mode, f"«Выделить и перевести»: режим перевода, рамка не переводится: {spawned}")
+sel.close()
+
+# «Весь экран» живёт в строке управления режима перевода (trc:all)
+sel = new_selector(kept=KEPT_B)
+sel.repaint()
+spawned = []
+sel._tr_spawn_floating = lambda r: spawned.append((QRect(r), False))
+sel._tr_spawn_full = lambda r: spawned.append((QRect(r), True))
+sel.start_translate_pick()
+sel.repaint()
+rect_all = next((r for k, _t, r in sel.tr_ctl_rects if k == "trc:all"), None)
+check(rect_all is not None, "в строке управления режима перевода есть «Весь экран»")
+if rect_all is not None:
+    click_at(sel, rect_all)
+check(len(spawned) == 1 and spawned[0][1] and spawned[0][0] in (MON_A, MON_B), f"«Весь экран» из строки режима перевода: монитор под курсором, без выделения мышью: {spawned}")
 check(sel.tr_start is None and not sel.tr_cards, "выделение мышью не начиналось")
 sel.close()
 
@@ -218,6 +233,12 @@ sel._tr_spawn_full = lambda r: spawned.append((QRect(r), True))
 QTest.keyClick(sel, Qt.Key.Key_L, Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)
 check(spawned == [(MON_B, True)], f"Ctrl+Shift+L: весь экран: {spawned}")
 sel.close()
+sel = new_selector(kept=KEPT_B)
+spawned = []
+sel._tr_spawn_floating = lambda r: spawned.append((QRect(r), False))
+QTest.keyClick(sel, Qt.Key.Key_P, Qt.KeyboardModifier.ControlModifier)
+check(spawned == [] and sel.translate_mode, f"Ctrl+P: выделить другое место и перевести, рамка не переводится: {spawned}")
+sel.close()
 
 # перевод выключен в настройках: кнопок нет, клавиши не срабатывают
 cfg["translate_enabled"] = False
@@ -249,7 +270,7 @@ for width in (300, 600, 1200):
     else:
         corner = last and bar.right() - copy.right() <= 12
     mon = MON_B if width < 800 else MON_A
-    check("translate" in rects and "translate_all" in rects, f"рамка {width}: обе кнопки перевода на панели (размер {sel.bar_level['name']}, "
+    check("translate" in rects and "translate_pick" in rects, f"рамка {width}: обе кнопки перевода на панели (размер {sel.bar_level['name']}, "
                                                               f"значки: {not sel.bar_level['text']})")
     check(inside and not overlap, f"рамка {width}: кнопки внутри панели и не пересекаются {overlap[:1]}")
     check(corner, f"рамка {width}: «Скопировать и закрыть» в правом нижнем углу панели")
@@ -265,11 +286,11 @@ sel.show()
 settle(4)
 sel.repaint()
 check(not sel.bar_level["text"], "узкая панель (экран 480 точек): верхний ряд сокращён до значков")
-sel.hover_button = "translate_all"
+sel.hover_button = "translate_pick"
 sel.repaint()
 sel.hover_button = None
-hovered = next(f"{t} ({s})" for k, t, s, _r in sel._bar_layout()[0] if k == "translate_all")
-check(hovered == "Перевести весь экран (Ctrl+Shift+L)", f"полное название и клавиша для подсказки: {hovered}")
+hovered = next(f"{t} ({s})" for k, t, s, _r in sel._bar_layout()[0] if k == "translate_pick")
+check(hovered == "Выделить и перевести (Ctrl+P)", f"полное название и клавиша для подсказки: {hovered}")
 sel.close()
 
 # 4. Перевод всего экрана по-настоящему (распознавание Tesseract, подменённый движок)

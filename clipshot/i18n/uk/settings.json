@@ -95,5 +95,7 @@
   "settings.tray_menu": "Відкрити меню",
   "settings.tray_region": "Знімок області",
   "settings.update_check": "Перевіряти оновлення автоматично",
-  "settings.update_check_tip": "Раз на добу ClipSD запитує сторінку clipsd.github.io, чи є нова версія, і пропонує її встановити. Перевірити вручну: меню значка, «Перевірити оновлення»."
+  "settings.update_check_tip": "Раз на добу ClipSD запитує сторінку clipsd.github.io, чи є нова версія, і пропонує її встановити.",
+  "settings.sec_updates": "Оновлення",
+  "settings.version_line": "Версія ClipSD {version}"
 }

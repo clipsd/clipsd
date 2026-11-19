@@ -80,9 +80,9 @@ def selector(width, kept=None, full=False, cfg=None):
     return sel
 
 
-EXPECT_ORDER = ["record", "full", "ocr", "translate", "translate_all", "save", "edit", "manual", "copy"]
+EXPECT_ORDER = ["record", "full", "ocr", "translate", "translate_pick", "save", "edit", "manual", "copy"]
 EXPECT_TEXT = {"record": "Запись видео", "full": "Снимок всего экрана", "save": "Сохранить", "ocr": "Копировать текст",
-               "translate": "Перевести выделенное", "translate_all": "Перевести весь экран", "edit": "Редактировать",
+               "translate": "Перевести выделенное", "translate_pick": "Выделить и перевести", "edit": "Редактировать",
                "manual": "Выделить заново", "copy": "Скопировать и закрыть"}
 for width, level in ((1280, "wide"), (800, "mid"), (480, "narrow")):
     sel = selector(width, QRect(width // 2 - 150, 90, 300, 200))
@@ -153,7 +153,7 @@ sel.close()
 # вторые строки, цвета и клавиши
 sel = selector(1280, QRect(500, 90, 300, 200))
 check(sel.BAR_SUB == {"save": "в файл", "edit": "или щелчок в рамке", "manual": "или обведите на пустом",
-                      "copy": "в буфер обмена", "translate": "или обведите новый"}, "вторые мелкие строки")
+                      "copy": "в буфер обмена", "translate": "эту рамку", "translate_pick": "обведите другое место"}, "вторые мелкие строки")
 # что реально нарисовано: перехватываем drawText панели
 from clipshot import selector as selmod
 drawn = []
@@ -197,7 +197,7 @@ def close_to(c, hexcolor, tol=14):
 check(close_to(px(rects["copy"], 0.93, 0.5), "#1f9d55"), f"«Скопировать и закрыть» зелёная ({px(rects['copy'], 0.93, 0.5).name()})")
 check(close_to(px(rects["manual"], 0.93, 0.5), "#e6f0fd"), f"«Выделить заново» голубая ({px(rects['manual'], 0.93, 0.5).name()})")
 check(close_to(px(rects["edit"], 0.93, 0.5), "#ffffff"), f"«Редактировать» белая ({px(rects['edit'], 0.93, 0.5).name()})")
-check(all(close_to(px(rects[k], 0.5, 0.06), "#f5f6f8") for k in EXPECT_ORDER[:5]), "у плиток нейтральный фон")
+check(all(close_to(px(rects[k], 0.04, 0.5), "#f5f6f8") for k in EXPECT_ORDER[:5]), "у плиток нейтральный фон")
 
 
 def has_color(r, hexcolor, tol=45):
@@ -211,7 +211,7 @@ def has_color(r, hexcolor, tol=45):
 
 
 for key, col in (("record", "#d92d20"), ("full", "#2a6df4"), ("save", "#5a6270"), ("ocr", "#7c3aed"),
-                 ("translate", "#0d9488"), ("translate_all", "#0d9488")):
+                 ("translate", "#0d9488"), ("translate_pick", "#0d9488")):
     check(has_color(rects[key], col), f"плитка «{EXPECT_TEXT[key]}»: цветной значок {col}")
 # клавиша R и Delete снимают рамку
 QTest.keyClick(sel, Qt.Key.Key_R)
@@ -254,7 +254,7 @@ sel.close()
 # выключенные перевод и распознавание
 sel = selector(1280, QRect(500, 90, 300, 200), cfg={"translate_enabled": False})
 keys = [k for k, *_x in sel._bar_layout()[0]]
-check("translate" not in keys and "translate_all" not in keys and len(keys) == 7, f"перевод выключен: на панели {keys}")
+check("translate" not in keys and "translate_pick" not in keys and len(keys) == 7, f"перевод выключен: на панели {keys}")
 bar = sel._bar_layout()
 check(abs(bar[0][0][3].left() - bar[0][3][3].left()) <= 1 and abs(bar[0][2][3].right() - bar[0][6][3].right()) <= 1,
       "перевод выключен: верхний ряд из трёх плиток, края рядов совпадают")
@@ -334,7 +334,9 @@ check(len(spawned) == 1 and sel.translate_mode and not fin, "обведённы�
 rects = {k: r for k, _t, _s, r in sel._bar_layout()[0]}
 QTest.mouseClick(sel, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, rects["translate"].center())
 check(sel.translate_mode and not fin, "щелчок по плитке «Перевести выделенное» в режиме перевода: режим остаётся")
-QTest.mouseClick(sel, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, rects["translate_all"].center())
+sel.repaint()
+rect_all = next(r for k, _t, r in sel.tr_ctl_rects if k == "trc:all")   # 1.31.1: «Весь экран» в строке режима перевода
+QTest.mouseClick(sel, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, rect_all.center())
 check(len(full_runs) == 1 and len(fin) == 1, "«Перевести весь экран» в режиме перевода: запущен перевод монитора, окно выделения закрылось (как в 1.28)")
 check(full_runs[0][0][2] == QRect(0, 0, 1280, DESK_H).translated(sel.origin) or full_runs[0][0][2].size() == QRect(0, 0, 1280, DESK_H).size(),
       f"первым переводится монитор: {full_runs[0][0][2]}")
@@ -345,7 +347,7 @@ spawned.clear()
 sel = selector(1280, QRect(100, 100, 300, 120))
 fin = []
 sel.finished.connect(lambda pm, r: fin.append(r))
-sel._do("translate_all")
+sel.start_translate_all()
 sel.repaint()
 check(bool(fin) and len(full_runs) == 2, "«Перевести весь экран» при стоящей рамке: окно выделения закрылось, перевод монитора запущен")
 sel.close()
