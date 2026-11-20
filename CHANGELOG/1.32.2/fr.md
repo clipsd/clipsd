@@ -1,0 +1,3 @@
+- Traduction par morceaux. Les boutons de la fenêtre de traduction se placent à un endroit libre et ne couvrent ni le texte traduit ni les fenêtres voisines. Un nouveau morceau ne se pose pas sur une fenêtre déjà ouverte. S'il n'y a pas de place pour les boutons, la fenêtre garde une croix dans le coin, et les boutons apparaissent au survol de la souris.
+- Traduction de tout l'écran. Les lignes courtes, par exemple le titre d'un onglet et l'adresse, restent sur une seule ligne.
+- Bouton « Copier le texte ». Sur les captures de taille moyenne, le grand bouton reste visible plus longtemps : « Tout traduire » disparaît en premier.

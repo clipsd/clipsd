@@ -1,6 +1,6 @@
 - Rétablir dans l'éditeur. Ctrl+Y rétablit de nouveau une action annulée : sous Windows, le raccourci ne faisait rien. Ctrl+Shift+Z fonctionne aussi.
 - Noter ClipSD. La fenêtre après l'envoi ne reste plus sur « Envoi de l'évaluation… » quand l'évaluation est déjà arrivée. Si vous appuyez sur Alt+W pendant l'évaluation, l'avis saisi n'est pas perdu : il revient la prochaine fois que vous ouvrez la fenêtre d'évaluation.
 - Mise à jour urgente. Si la fenêtre « Mise à jour urgente de ClipSD » a été fermée par une capture (Alt+W), elle réapparaît une fois la capture terminée, et non le lendemain.
-- Couleur de l'objet sélectionné. La couleur et l'épaisseur de l'objet sélectionné ne changent que pour cet objet. Sous la palette, une info-bulle propose le bouton « Continuer avec cette couleur » si les nouveaux traits doivent garder la couleur précédente.
+- Couleur de l'objet sélectionné. La couleur et l'épaisseur de l'objet sélectionné ne changent que pour cet objet. Sous la palette, une info-bulle apparaît : le bouton « Continuer avec cette couleur » garde la nouvelle couleur pour les traits suivants.
 - Couleurs personnalisées. Les couleurs choisies avec « + » sont mémorisées sous forme d'échantillons avant le bouton « + ». Il y en a trois au maximum, un clic droit en supprime un.
 - Surligneur et crayon. Si vous commencez un trait tout contre le bord du précédent, un nouveau trait est tracé et le précédent ne bouge pas.

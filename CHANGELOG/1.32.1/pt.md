@@ -1,6 +1,6 @@
 - Refazer no editor. Ctrl+Y volta a refazer a ação desfeita: no Windows o atalho não fazia nada. Ctrl+Shift+Z também funciona.
 - Avaliar o ClipSD. A janela após o envio não fica mais em «Enviando a avaliação…» quando a avaliação já chegou. Se você pressionar Alt+W durante a avaliação, o comentário digitado não se perde: ele volta na próxima vez que você abrir a janela de avaliação.
 - Atualização urgente. Se a janela «Atualização urgente do ClipSD» foi fechada por uma captura (Alt+W), ela aparece de novo quando você terminar a captura, e não no dia seguinte.
-- Cor do objeto selecionado. A cor e a espessura do objeto selecionado mudam só nesse objeto. Abaixo da paleta aparece uma dica com o botão «Continuar com esta cor», caso os novos traços devam manter a cor anterior.
+- Cor do objeto selecionado. A cor e a espessura do objeto selecionado mudam só nesse objeto. Abaixo da paleta aparece uma dica: o botão «Continuar com esta cor» mantém a nova cor também para os próximos traços.
 - Cores próprias. As cores escolhidas com «+» ficam guardadas como amostras antes do botão «+». São até três amostras, e o clique direito remove uma.
 - Marca-texto e lápis. Se você começar um traço bem na borda do anterior, um novo traço é desenhado e o anterior não se move.

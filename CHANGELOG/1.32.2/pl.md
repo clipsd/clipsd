@@ -1,0 +1,3 @@
+- Tłumaczenie fragmentami. Przyciski okna tłumaczenia ustawiają się w wolnym miejscu i nie zasłaniają przetłumaczonego tekstu ani sąsiednich okien. Nowy fragment nie trafia na okno, które jest już otwarte. Jeśli brakuje miejsca na przyciski, w rogu okna zostaje krzyżyk, a przyciski pojawiają się po najechaniu na nie myszą.
+- Tłumaczenie całego ekranu. Krótkie wiersze, na przykład tytuł karty i adres, zostają w jednej linii.
+- Przycisk „Kopiuj tekst”. Na średnich zrzutach duży przycisk jest widoczny dłużej: jako pierwszy znika „Przetłumacz wszystko”.

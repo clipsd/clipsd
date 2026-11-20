@@ -1,0 +1,3 @@
+- Traduzione a pezzi. I pulsanti della finestra di traduzione si mettono in un punto libero e non coprono il testo tradotto né le finestre vicine. Un nuovo pezzo non finisce sopra una finestra già aperta. Se non c'è spazio per i pulsanti, nell'angolo della finestra resta una croce e i pulsanti compaiono passandoci sopra con il mouse.
+- Traduzione di tutto lo schermo. Le righe brevi, ad esempio il titolo di una scheda e l'indirizzo, restano su una sola riga.
+- Pulsante «Copia il testo». Sugli screenshot di dimensioni medie il pulsante grande resta visibile più a lungo: per primo scompare «Traduci tutto».

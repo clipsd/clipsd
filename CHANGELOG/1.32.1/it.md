@@ -1,6 +1,6 @@
 - Ripeti nell'editor. Ctrl+Y ripete di nuovo un'azione annullata: su Windows la scorciatoia non faceva nulla. Funziona anche Ctrl+Shift+Z.
 - Valutare ClipSD. La finestra dopo l'invio non resta più su «Invio della valutazione…» quando la valutazione è già arrivata. Se premete Alt+W durante la valutazione, la recensione scritta non va persa: ricompare la prossima volta che aprite la finestra di valutazione.
 - Aggiornamento urgente. Se la finestra «Aggiornamento urgente di ClipSD» è stata chiusa da uno screenshot (Alt+W), ricompare quando avete finito con lo screenshot, non il giorno dopo.
-- Colore dell'oggetto selezionato. Colore e spessore dell'oggetto selezionato cambiano solo per quell'oggetto. Sotto la tavolozza compare un suggerimento con il pulsante «Continua con questo colore», se i nuovi tratti devono mantenere il colore precedente.
+- Colore dell'oggetto selezionato. Colore e spessore dell'oggetto selezionato cambiano solo per quell'oggetto. Sotto la tavolozza compare un suggerimento: il pulsante «Continua con questo colore» mantiene il nuovo colore anche per i tratti successivi.
 - Colori personalizzati. I colori scelti con «+» vengono memorizzati come campioni prima del pulsante «+». I campioni sono al massimo tre, e il clic destro ne rimuove uno.
 - Evidenziatore e matita. Se iniziate un tratto proprio al bordo del precedente, viene disegnato un nuovo tratto e il precedente non si sposta.

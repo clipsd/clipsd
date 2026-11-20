@@ -1,0 +1,3 @@
+- Traducción por fragmentos. Los botones de la ventana de traducción se colocan en un lugar libre y no tapan el texto traducido ni las ventanas vecinas. Un fragmento nuevo no cae sobre una ventana ya abierta. Si no hay sitio para los botones, la ventana conserva una cruz en la esquina y los botones aparecen al pasar el ratón por encima.
+- Traducción de toda la pantalla. Las líneas cortas, por ejemplo el título de una pestaña y la dirección, se quedan en una sola línea.
+- Botón «Copiar texto». En las capturas de tamaño medio, el botón grande sigue visible más tiempo: primero desaparece «Traducir todo».

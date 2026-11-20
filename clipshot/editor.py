@@ -4210,7 +4210,7 @@ class EditorWindow(QMainWindow):
         self._set_more_label(label_was)
         self._need_row1 = [side + rest + self.tool_strip.width_for(c) + (more_full if label else TOOL_W)
                            for c, label in self._stages()]
-        # ряд 2: с большими кнопками «Копировать текст», «Перевести» и без них
+        # ряд 2: три вида: обе большие кнопки, только «Копировать текст», ни одной (1.32.2: «Перевести» уходит первой)
         row2 = self.panel_row2
         bigs = [w for w in (self.ocr_button, self.tr_block) if w is not None]
         shown = [w.isVisibleTo(self.panel) for w in bigs]
@@ -4219,6 +4219,10 @@ class EditorWindow(QMainWindow):
             w.setVisible(want)
         row2.invalidate()
         full = row2.sizeHint().width()
+        if getattr(self, "tr_block", None) is not None:
+            self.tr_block.setVisible(False)
+        row2.invalidate()
+        only_ocr = row2.sizeHint().width()
         for w in bigs:
             w.setVisible(False)
         row2.invalidate()
@@ -4226,7 +4230,7 @@ class EditorWindow(QMainWindow):
         for w, was in zip(bigs, shown):
             w.setVisible(was)
         row2.invalidate()
-        self._need_row2 = (side + full, side + compact)
+        self._need_row2 = (side + full, side + only_ocr, side + compact)
         # нижняя строка: подписи «Вписать», «Сохранить», «Скопировать» или значки
         bl = self.bottom.layout()
         was = getattr(self, "_bottom_compact", False)
@@ -4245,7 +4249,7 @@ class EditorWindow(QMainWindow):
         """Самое узкое содержимое окна: всё свёрнуто, второй ряд без больших кнопок, внизу значки."""
         if not hasattr(self, "_need_row1"):
             self._measure_rows()
-        return max(self._need_row1[-1], self._need_row2[1], self._need_bottom[1])
+        return max(self._need_row1[-1], self._need_row2[-1], self._need_bottom[1])
 
     @staticmethod
     def _pick(needs, width, current):
@@ -4275,20 +4279,21 @@ class EditorWindow(QMainWindow):
             self._set_more_label(label)
         big = self._pick(list(self._need_row2), width, getattr(self, "_row2_state", None))
         self._row2_state = big
-        self._set_row2_compact(big == 1)
+        self._set_row2_compact(big)
         low = self._pick(list(self._need_bottom), width, getattr(self, "_bottom_state", None))
         self._bottom_state = low
         if (low == 1) != getattr(self, "_bottom_compact", False):
             self._set_bottom_compact(low == 1)
 
-    def _set_row2_compact(self, on: bool):
-        """Узкое окно: во втором ряду нет больших кнопок «Копировать текст» и «Перевести» (они есть в группе
-        «Текст с картинки»)."""
-        self._row2_compact = on
+    def _set_row2_compact(self, level):
+        """Узкое окно, второй ряд: 0 обе большие кнопки, 1 только «Копировать текст» («Перевести» ушла первой),
+        2 ни одной (обе функции есть в группе «Текст с картинки», во «Все инструменты» и на клавише I)."""
+        level = int(level)
+        self._row2_compact = level
         if getattr(self, "ocr_button", None) is not None:
-            self.ocr_button.setVisible(not on and self.ctx.config.get("ocr_enabled", True))
+            self.ocr_button.setVisible(level < 2 and self.ctx.config.get("ocr_enabled", True))
         if getattr(self, "tr_block", None) is not None:
-            self.tr_block.setVisible(not on and self.ctx.config.get("translate_enabled", True))
+            self.tr_block.setVisible(level < 1 and self.ctx.config.get("translate_enabled", True))
 
     def _set_bottom_compact(self, on: bool):
         """Узкое окно: «Вписать», «Сохранить», «Скопировать» значками с подсказкой; «Скопировать и закрыть» с подписью."""
@@ -4910,11 +4915,11 @@ class EditorWindow(QMainWindow):
         if getattr(self, "tool_strip", None) is not None:
             self.tool_strip._sync_visibility()   # кнопки инструментов и группа «Текст с картинки» по настройкам
             self._sync_groups()
-        compact = getattr(self, "_row2_compact", False)
+        compact = getattr(self, "_row2_compact", 0)
         if getattr(self, "ocr_button", None) is not None:
-            self.ocr_button.setVisible(enabled and not compact)
+            self.ocr_button.setVisible(enabled and compact < 2)
         if getattr(self, "tr_block", None) is not None:
-            self.tr_block.setVisible(tr_on and not compact)
+            self.tr_block.setVisible(tr_on and compact < 1)
         if hasattr(self, "_need_row1"):
             self._measure_rows()   # без распознавания или перевода ряды уже: ступени считаются заново
         if not tr_on and self.canvas.tool == TRANSLATE:

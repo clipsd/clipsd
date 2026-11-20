@@ -9,8 +9,11 @@
 Переводы остаются, можно выделять следующий кусок. Esc или «Готово» закрывают режим.
 """
 
+import math
+import sys
+
 from PyQt6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QTimer
-from PyQt6.QtGui import QColor, QFont, QFontMetrics, QGuiApplication, QPainter, QPainterPath, QPen
+from PyQt6.QtGui import QColor, QCursor, QFont, QFontMetrics, QGuiApplication, QPainter, QPainterPath, QPen, QRegion
 from PyQt6 import sip
 from PyQt6.QtWidgets import QWidget
 
@@ -140,7 +143,8 @@ def fit_font(text: str, rect: QRectF, base_px: float):
 def unify_sizes(blocks):
     """Один размер букв на всё окошко: медиана размеров абзацев, но не ниже 12 px. Абзац, которому нужно
     меньше 0,7 медианы (мелкая сноска), остаётся со своим размером, чтобы не раздувать его рамку.
-    Абзацу, который стал крупнее своего подбора, рамка подрастает вниз по высоте текста."""
+    Абзацу, который стал крупнее своего подбора, рамка подрастает вниз по высоте текста. Рамка в одну строку
+    (вкладка, адрес, подпись) не растёт: если крупнее её строка перенеслась бы, она остаётся своего размера."""
     if not blocks:
         return
     sizes = sorted(b["px"] for b in blocks)
@@ -151,12 +155,14 @@ def unify_sizes(blocks):
         if b["px"] < 0.7 * median:
             continue
         if b["px"] != shared:
-            b["px"] = shared
+            own, b["px"] = b["px"], shared
             font.setPixelSize(shared)
             d = b["draw"]
             need = QFontMetrics(font).boundingRect(QRect(0, 0, max(20, int(d.width())), 100000),
                                                    Qt.TextFlag.TextWordWrap, b["text"]).height()
-            if need > d.height() + 2:
+            if need > d.height() + 2 and d.height() < 1.6 * QFontMetrics(font).lineSpacing():
+                b["px"] = own   # одна строка (вкладка, адрес): крупнее своей она ушла бы в столбик ниже рамки
+            elif need > d.height() + 2:
                 b["draw"] = QRectF(d.x(), d.y(), d.width(), need + 4)
 
 
@@ -219,6 +225,8 @@ class TranslateMixin:
     CHIP_SPACE = 50            # плашка и зазор: место над или под переведённой областью
     chip_below = False         # плашку ставить под областью (сверху нет места)
     chip_side = "above"        # окошко перевода: плашка снаружи области: above | below | right | left | none (плашки нет)
+    chip_dx = 0.0              # окошко перевода: плашка над или под областью сдвинута вправо (> 0) или у правого края экрана
+    #                            влево (< 0), плашка справа от области въезжает влево на своё поле (< 0)
     CHIP_SIDE_W = 600          # место под плашку сбоку от области (окошко с плашкой справа или слева)
 
     def _tr_view_default(self) -> str:
@@ -520,7 +528,8 @@ class TranslateMixin:
             k = ratio
             sub = crop.copy(QRect(round(local.x() * k), round(local.y() * k), max(1, round(local.width() * k)),
                                   max(1, round(local.height() * k))))
-            win = FloatingTranslation(sub, ratio, QRect(grect.topLeft() + local.topLeft(), local.size()), cfg, save)
+            win = FloatingTranslation(sub, ratio, QRect(grect.topLeft() + local.topLeft(), local.size()), cfg, save,
+                                      full=local.size() == rect.size())
             win._full_rect = grect if local.size() == rect.size() else None
             return win
         from . import hints
@@ -622,7 +631,8 @@ class TranslateMixin:
             self.update()
             return
         win = FloatingTranslation(crop, self._tr_scale(), QRect(self.mapToGlobal(rect.topLeft()), rect.size()),
-                                  self.tr_cfg, self.tr_save, chip=self.tr_floating_chip, backdrop=self._tr_backdrop())
+                                  self.tr_cfg, self.tr_save, chip=self.tr_floating_chip, backdrop=self._tr_backdrop(),
+                                  avoid=True)
         win.start()
         self.spawned = getattr(self, "spawned", []) + [win]
         self._tr_after_spawn(True, win=win)
@@ -1127,13 +1137,14 @@ class TranslateMixin:
         box = card.content
         w, h = max(card.header_need, 200.0), float(self.CHIP_H)
         x = box.left()
+        dx = self.chip_dx if self.tr_fill_card and self.chip_side != "left" else 0.0
         if self.tr_fill_card and self.chip_side in ("right", "left"):
-            x = box.right() + 8 if self.chip_side == "right" else box.left() - w - 8
+            x = box.right() + 8 + dx if self.chip_side == "right" else box.left() - w - 8
             y = box.top()
         elif self.chip_below:
-            y = box.bottom() + 6
+            x, y = x + dx, box.bottom() + 6
         elif self.tr_fill_card:
-            y = box.top() - h - 6
+            x, y = x + dx, box.top() - h - 6
         else:
             # Слой на снимке: над областью, под ней, сбоку, внутри сверху или снизу; берётся место, где плашка
             # меньше всего закрывает перевод (при равенстве выигрывает более ранний вариант: над областью)
@@ -1211,7 +1222,7 @@ class TranslateMixin:
             self._tr_notice(p, reg, text)
         if not (self.tr_chip or card.state == "error"):   # ошибке нужны её кнопки («Подключить Google…»), остальным нет
             card.chip, card.handle, card.buttons = QRectF(), QRectF(), {}
-            if getattr(self, "mini", False):
+            if getattr(self, "mini", False) or getattr(self, "crowded", False):
                 # окошко в окне выделения: только маленький крестик в углу внутри области (остальное в панели окна выделения)
                 close = QRectF(reg.right() - 24, reg.top() + 3, 21, 21)
                 card.buttons["close"] = close
@@ -1922,7 +1933,7 @@ class FloatingTranslation(TranslateMixin, QWidget):
     request_more = None   # приложение: начать выделение следующего куска для перевода
 
     def __init__(self, crop, ratio: float, global_rect: QRect, cfg: dict, save=None, view=None, owner=None, source=None,
-                 chip=True, backdrop=None):
+                 chip=True, backdrop=None, full=False, avoid=False):
         flags = Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
         if owner is None:
             flags |= Qt.WindowType.WindowStaysOnTopHint   # окно выделения: поверх всего
@@ -1954,15 +1965,26 @@ class FloatingTranslation(TranslateMixin, QWidget):
         self.mini = bool(owner is None and not chip)
         if self.mini:
             self.tr_chip = False
+        self._full_area = bool(full)   # перевод всего экрана: плашка по прежним правилам (за краем монитора)
+        if avoid and owner is None and not full:
+            global_rect = self._free_spot(QRect(global_rect))   # кусок зашёл на открытое окошко: сдвиг на минимум
         m, h = self.MARGIN, self.HEADER
         self._anchor = QPoint(global_rect.x(), global_rect.y())   # где был оригинал (левый верхний угол выделения)
         self._user_moved = False
         view = "overlay" if self.mini else (view if view in self.VIEWS else self._tr_view_default())
-        # «Поверх текста»: плашка снаружи области (под ней, если нет места над ней, потом справа и слева) и не поверх
-        # других окошек; внутрь области плашка не попадает
-        self.chip_side = "none" if (self.mini or view != "overlay") else self._pick_chip_side(QRect(global_rect), 300)
+        # «Поверх текста»: плашка снаружи области (под ней или над ней, потом справа и слева) и не поверх
+        # других окошек и их плашек; на переведённый текст плашка не попадает
+        self.crowded = False   # места для плашки нет: только крестик в углу, плашка при наведении мыши
+        self._peek = False     # плашка зажатого окошка показана, пока над ним мышь
+        self._peek_timer = None   # задержка перед тем, как убрать плашку зажатого окошка
+        if self.mini or view != "overlay":
+            self.chip_side, self.chip_dx = "none", 0.0
+        else:
+            self.chip_side, self.chip_dx, free = self._pick_chip(QRect(global_rect), 300)
+            if not free:
+                self.chip_side, self.chip_dx, self.crowded, self.tr_chip = "none", 0.0, True, False
         self.chip_below = self.chip_side == "below"
-        rx, ry = self._side_offsets(view, self.chip_side)
+        rx, ry = self._side_offsets(view, self.chip_side, self.chip_dx)
         region = QRect(rx, ry, global_rect.width(), global_rect.height())
         self.setGeometry(global_rect.x() - rx, global_rect.y() - ry,
                          rx + global_rect.width() + m + (self.CHIP_SIDE_W + 8 if self.chip_side == "right" else 0),
@@ -1976,11 +1998,14 @@ class FloatingTranslation(TranslateMixin, QWidget):
             if other is not self and not sip.isdeleted(other):
                 other._repick_chip()
 
-    def _side_offsets(self, view, side):
-        """Где область перевода внутри окошка: (слева, сверху) с полями под тень и местом под плашку над или слева."""
+    def _side_offsets(self, view, side, dx=0.0):
+        """Где область перевода внутри окошка: (слева, сверху) с полями под тень и местом под плашку над или слева
+        (и под плашку над или под областью, сдвинутую влево у правого края экрана)."""
         m = self.MARGIN
-        return (m + (self.CHIP_SIDE_W + 8 if view == "overlay" and side == "left" else 0),
-                self.HEADER + (self.CHIP_SPACE if view == "overlay" and side == "above" else 0))
+        left = self.CHIP_SIDE_W + 8 if view == "overlay" and side == "left" else 0
+        if view == "overlay" and side in ("above", "below") and dx < 0:
+            left = int(-dx + 0.999)
+        return (m + left, self.HEADER + (self.CHIP_SPACE if view == "overlay" and side == "above" else 0))
 
     def _area_global(self, card=None) -> QRect:
         """Где область этого куска на экране (в глобальных точках)."""
@@ -1989,9 +2014,173 @@ class FloatingTranslation(TranslateMixin, QWidget):
             return QRect(self.geometry().topLeft() + card.region.topLeft(), card.region.size())
         return QRect(self._anchor, card.region.size())
 
+    def _others(self, exclude=None):
+        """Другие открытые окошки перевода (без закрытых и без перевода всего экрана)."""
+        out = []
+        for win in list(_floating):
+            if win is exclude or win is self or sip.isdeleted(win) or getattr(win, "_done", False) or not win.tr_cards:
+                continue
+            if getattr(win, "_full_area", False) or win.tr_cards[0].full:
+                continue
+            out.append(win)
+        return out
+
+    def _free_spot(self, rect: QRect) -> QRect:
+        """Новое окошко не ложится на уже открытые: если обведённый кусок заходит на область другого окошка, окошко
+        сдвигается на наименьшее расстояние (вверх, вниз, влево или вправо) так, чтобы не задевать ни одно, в пределах
+        экрана. Не нашлось такого места: остаётся на месте текста."""
+        others = [QRect(w._area_global()) for w in self._others()]
+        if not any(o.intersects(rect) for o in others):
+            return rect
+        screen = QGuiApplication.screenAt(rect.center()) or QGuiApplication.primaryScreen()
+        bounds = screen.geometry() if screen is not None else QRect(0, 0, 1280, 800)
+        gap = 4
+        moves = set()
+        for o in others:
+            moves.add((0, o.top() - gap - (rect.top() + rect.height())))   # над ним
+            moves.add((0, o.top() + o.height() + gap - rect.top()))        # под ним
+            moves.add((o.left() - gap - (rect.left() + rect.width()), 0))  # слева
+            moves.add((o.left() + o.width() + gap - rect.left(), 0))       # справа
+        for dx, dy in sorted(moves, key=lambda d: (abs(d[0]) + abs(d[1]), d[1] < 0, d[0] < 0)):
+            r = rect.translated(dx, dy)
+            if bounds.contains(r) and not any(r.intersects(o) for o in others):
+                return r
+        return rect
+
+    def _origin_global(self, card=None) -> QPoint:
+        """Где левый верхний угол окошка на экране (до показа: по месту оригинала)."""
+        card = card or self.tr_cards[0]
+        return self._area_global(card).topLeft() - card.region.topLeft()
+
+    def _box_global(self, card=None) -> QRectF:
+        """Область перевода (выделение и строки, вышедшие за него) в глобальных точках."""
+        card = card or self.tr_cards[0]
+        o = self._origin_global(card)
+        box = QRectF(card.content) if not card.content.isEmpty() else QRectF(card.region)
+        return box.translated(o.x(), o.y())
+
+    def _texts_global(self, card=None):
+        """Строки перевода этого окошка в глобальных точках."""
+        card = card or self.tr_cards[0]
+        o = self._origin_global(card)
+        return [QRectF(b["draw"]).united(QRectF(b["rect"])).translated(o.x(), o.y()) for b in card.blocks if b.get("text")]
+
+    def _chip_spot(self, box: QRectF, side: str, dx: float, w: float) -> QRectF:
+        """Плашка шириной w у области box (глобальные точки), как её рисует _tr_chip_rect."""
+        h = float(self.CHIP_H)
+        if side == "below":
+            return QRectF(box.left() + dx, box.bottom() + 6, w, h)
+        if side == "above":
+            return QRectF(box.left() + dx, box.top() - h - 6, w, h)
+        if side == "right":
+            return QRectF(box.right() + 8 + dx, box.top(), w, h)
+        return QRectF(box.left() - w - 8, box.top(), w, h)
+
+    def _chip_global(self) -> QRectF:
+        """Где плашка этого окошка на экране; пустой прямоугольник: плашки нет."""
+        if self.mini or not self.tr_chip or self.chip_side == "none" or self._done or not self.tr_cards:
+            return QRectF()
+        card = self.tr_cards[0]
+        if self._tr_view(card) != "overlay":
+            return QRectF()
+        return self._chip_spot(self._box_global(card), self.chip_side, self.chip_dx, max(card.header_need or 300, 200.0))
+
+    CHIP_ORDER = ("below", "above", "right", "left")   # при равенстве: под областью, над ней, справа, слева
+    TOP_RESERVE = 32   # плашка над областью не выше этого от верха монитора: там верхняя панель GNOME, и менеджер окон
+    #                    сдвинул бы окошко вниз вместе с переводом (на нескольких мониторах Qt не знает о панели)
+
+    def _pick_chip(self, area: QRect, need: float, exclude=None):
+        """(сторона, сдвиг, свободно) плашки с кнопками. Плашка не заходит на переведённый текст этого окошка, на области
+        и плашки других окошек и не выходит за экран. Места у левого края нет: плашка над или под областью едет вправо,
+        но не дальше, чем на ширину области без 60 точек (плашка остаётся у своего окошка), у правого края экрана едет
+        влево до края, плашка справа въезжает на пустое поле своей рамки. Из подходящих берётся место, где меньше всего ещё не переведённого текста, затем без
+        сдвига, затем под областью, над ней, справа, слева. Подходящего нет (окошко зажато между соседними):
+        свободно = False, место у своей области, где меньше всего закрыто переведённого текста (для показа плашки,
+        пока над окошком мышь)."""
+        if self._full_area:
+            return self._pick_chip_side(area, need, exclude), 0.0, True
+        w = float(int(max(need, 200)))
+        screen = QGuiApplication.screenAt(area.center()) or QGuiApplication.primaryScreen()
+        bounds = QRectF(screen.availableGeometry() if screen is not None else QRect(0, 0, 1280, 800))
+        top_limit = max(bounds.top(), (screen.geometry().top() if screen is not None else 0) + self.TOP_RESERVE)
+
+        def fits(side, rect):
+            return bounds.contains(rect) and (side != "above" or rect.top() >= top_limit)
+        hard, texts = [], []
+        for win in self._others(exclude):
+            hard.append(QRectF(win._area_global()))
+            ch = win._chip_global()
+            if not ch.isEmpty():
+                hard.append(ch)
+            texts += win._texts_global() or [QRectF(win._area_global())]   # перевод ещё идёт: текст займёт всю рамку
+        own_area = QRectF(area)
+        box, own = own_area, []
+        if self.tr_cards:
+            box, own = self._box_global(), self._texts_global()
+        cands = []
+        edge = bounds.right() - self.MARGIN   # сдвинутая плашка с полем под тень не выходит за экран: окошко не прыгает
+        room = edge - w - box.left()   # насколько плашку над или под областью можно сдвинуть вправо (< 0: влево)
+        span = max(0.0, min(room, box.width() - 60))   # плашка не уходит от своей области
+        for side in ("below", "above"):
+            for dx in sorted({0.0, round(span / 3), round(span * 2 / 3), round(span)}):
+                cands.append((side, float(dx), self._chip_spot(box, side, dx, w)))
+            if room < 0 and box.left() + room >= bounds.left():   # у правого края экрана плашка едет влево
+                cands.append((side, float(math.floor(room)), self._chip_spot(box, side, math.floor(room), w)))
+        r = self._chip_spot(box, "right", 0.0, w)
+        cands.append(("right", 0.0, r))
+        if r.right() > bounds.right():
+            dx = edge - r.right()
+            if box.right() + 8 + dx >= box.left():
+                cands.append(("right", float(dx), self._chip_spot(box, "right", dx, w)))
+        cands.append(("left", 0.0, self._chip_spot(box, "left", 0.0, w)))
+
+        def hits(rect, rects):
+            return sum(rect.intersected(o).width() * rect.intersected(o).height() for o in rects if rect.intersects(o))
+        valid = [i for i, (side, _d, rect) in enumerate(cands)
+                 if fits(side, rect) and not hits(rect, hard) and not hits(rect, own)]
+        if valid:
+            ink = {i: self._ink(cands[i][2].toAlignedRect()) for i in valid}
+            low = min(ink.values())
+            pool = [i for i in valid if ink[i] <= low + 0.004]
+            best = min(pool, key=lambda i: (cands[i][2].intersects(own_area), abs(cands[i][1]),
+                                            self.CHIP_ORDER.index(cands[i][0])))
+            return cands[best][0], cands[best][1], True
+        best = min(range(len(cands)), key=lambda i: (not fits(cands[i][0], cands[i][2]), hits(cands[i][2], texts + own),
+                                                     hits(cands[i][2], hard), abs(cands[i][1]),
+                                                     self.CHIP_ORDER.index(cands[i][0])))
+        return cands[best][0], cands[best][1], False
+
+    def _chip_is_free(self) -> bool:
+        """Плашка стоит, на экране, не на тексте и не на рамках и плашках других окошек (тогда её не двигаем)."""
+        ch = self._chip_global()
+        if ch.isEmpty():
+            return False
+        screen = QGuiApplication.screenAt(ch.center().toPoint()) or QGuiApplication.primaryScreen()
+        if screen is None or not QRectF(screen.availableGeometry()).contains(ch):
+            return False
+        busy = list(self._texts_global())
+        for win in self._others():
+            busy.append(QRectF(win._area_global()))
+            busy += [r for r in (win._chip_global(),) if not r.isEmpty()]
+        return not any(ch.intersects(r) for r in busy)
+
+    def _apply_chip(self, side: str, shift: float, free: bool):
+        """Плашка на свободное место; места нет: плашки нет (окошко зажато соседними), в углу только крестик, а плашка
+        показывается, пока над окошком мышь."""
+        if not free and self.tr_cards and self.tr_cards[0].state == "error":
+            free = True   # у ошибки свои кнопки («Подключить Google…»): плашка нужна, пусть и на соседе
+        self.crowded = not free
+        self.tr_chip = free
+        if free:
+            self._set_chip_side(side, shift)
+        else:
+            self._set_chip_side("none", 0.0)
+        self.update()
+
     def _pick_chip_side(self, area: QRect, need: float, exclude=None) -> str:
-        """Сторона для плашки: под областью, если нет места, над ней, затем справа и слева. Плашка не заходит на область
-        и на области других окошек и не выходит за экран; если не подходит ни одна, берётся с наименьшим наложением."""
+        """Перевод всего экрана (прежние правила 1.29). Сторона для плашки: под областью, если нет места, над ней,
+        затем справа и слева. Плашка не заходит на область и на области других окошек и не выходит за экран; если
+        не подходит ни одна, берётся с наименьшим наложением."""
         w, h = int(max(need, 200)), self.CHIP_H
         screen = QGuiApplication.screenAt(area.center()) or QGuiApplication.primaryScreen()
         bounds = screen.availableGeometry() if screen is not None else QRect(0, 0, 1280, 800)
@@ -2022,7 +2211,10 @@ class FloatingTranslation(TranslateMixin, QWidget):
         return best
 
     def _ink(self, r: QRect) -> float:
-        """Доля «чернил» (точек, отличных от фона) на кадре экрана в прямоугольнике r (глобальные точки)."""
+        """Сколько текста на кадре экрана в прямоугольнике r (глобальные точки): доля резких переходов цвета между
+        соседними точками строк. У букв переходов много; ровная заливка (пустое поле страницы, рабочий стол) их не
+        даёт, край окна или полоса прокрутки дают совсем мало. Так плашка не ложится на ещё не переведённый абзац,
+        а уходит на пустое место, даже если там другой цвет."""
         bd = self.backdrop
         if not bd:
             return 0.0
@@ -2032,32 +2224,31 @@ class FloatingTranslation(TranslateMixin, QWidget):
         x0, y0 = int((r.left() - origin.x()) * ratio), int((r.top() - origin.y()) * ratio)
         x1, y1 = int((r.right() + 1 - origin.x()) * ratio), int((r.bottom() + 1 - origin.y()) * ratio)
         x0, y0, x1, y1 = max(0, x0), max(0, y0), min(img.width(), x1), min(img.height(), y1)
-        if x1 <= x0 or y1 <= y0:
+        if x1 - x0 < 2 or y1 <= y0:
             return 0.0
         step = max(1, int(ratio))
-        counts, samples = {}, []
-        for yy in range(y0, y1, step):
-            for xx in range(x0, x1, step):
-                c = img.pixelColor(xx, yy)
-                key = (c.red() >> 4, c.green() >> 4, c.blue() >> 4)
-                counts[key] = counts.get(key, 0) + 1
-                samples.append((c.red(), c.green(), c.blue(), key))
-        if not samples:
-            return 0.0
-        bg = max(counts, key=counts.get)
-        bgc = [v * 16 + 8 for v in bg]
-        ink = sum(1 for sr, sg, sb, _k in samples if abs(sr - bgc[0]) + abs(sg - bgc[1]) + abs(sb - bgc[2]) > 90)
-        return ink / len(samples)
+        edges = pairs = 0
+        for yy in range(y0, y1, max(2, int(ratio * 2))):
+            prev = img.pixel(x0, yy)
+            for xx in range(x0 + step, x1, step):
+                c = img.pixel(xx, yy)
+                if abs(((c >> 16) & 255) - ((prev >> 16) & 255)) + abs(((c >> 8) & 255) - ((prev >> 8) & 255)) \
+                        + abs((c & 255) - (prev & 255)) > 90:
+                    edges += 1
+                prev = c
+                pairs += 1
+        return edges / pairs if pairs else 0.0
 
-    def _set_chip_side(self, side: str):
-        """Плашка переезжает на другую сторону: область остаётся на месте оригинала, окошко меняет размер."""
+    def _set_chip_side(self, side: str, shift: float = 0.0):
+        """Плашка переезжает на другую сторону (или сдвигается вдоль неё): область остаётся на месте оригинала,
+        окошко меняет размер."""
         card = self.tr_cards[0]
-        if side == self.chip_side or self._tr_view(card) != "overlay":
-            self.chip_side, self.chip_below = side, side == "below"
+        if self._tr_view(card) != "overlay" or (side == self.chip_side and shift == self.chip_dx):
+            self.chip_side, self.chip_below, self.chip_dx = side, side == "below", shift
             return
-        nx, ny = self._side_offsets("overlay", side)
+        nx, ny = self._side_offsets("overlay", side, shift)
         dx, dy = nx - card.region.x(), ny - card.region.y()
-        self.chip_side, self.chip_below = side, side == "below"
+        self.chip_side, self.chip_below, self.chip_dx = side, side == "below", shift
         if dx or dy:
             card.region = card.region.translated(dx, dy)
             for b in card.blocks:
@@ -2075,9 +2266,9 @@ class FloatingTranslation(TranslateMixin, QWidget):
         card = self.tr_cards[0]
         if self._tr_view(card) != "overlay":
             return
-        side = self._pick_chip_side(self._area_global(card), card.header_need or 300)
-        if side != self.chip_side:
-            self._set_chip_side(side)
+        if self._peek or (not self.crowded and self._chip_is_free()):
+            return   # плашка стоит на свободном месте: не прыгает
+        self._apply_chip(*self._pick_chip(self._area_global(card), card.header_need or 300))
 
     def enable_chip(self):
         """Окно выделения закрыто (или режим перевода завершён): окошку возвращается плашка с кнопками, снаружи области."""
@@ -2087,7 +2278,7 @@ class FloatingTranslation(TranslateMixin, QWidget):
         self.tr_chip = True
         card = self.tr_cards[0]
         if self._tr_view(card) == "overlay":
-            self._set_chip_side(self._pick_chip_side(self._area_global(card), card.header_need or 300))
+            self._apply_chip(*self._pick_chip(self._area_global(card), card.header_need or 300))
         self.update()
 
     def frame_extents_margins(self):
@@ -2143,12 +2334,18 @@ class FloatingTranslation(TranslateMixin, QWidget):
             self.owner.adopt(self, card)
             self.close()
             return
-        if new == "overlay":
-            self.chip_side = "none" if self.mini else self._pick_chip_side(self._area_global(card), card.header_need or 300)
-        else:
-            self.chip_side = "none"
+        self.crowded = self._peek = False
+        self.chip_side, self.chip_dx = "none", 0.0
+        if new == "overlay" and not self.mini:
+            side, shift, free = self._pick_chip(self._area_global(card), card.header_need or 300)
+            free = free or card.state == "error"   # у ошибки свои кнопки: плашка нужна
+            if free:
+                self.chip_side, self.chip_dx = side, shift
+            self.crowded, self.tr_chip = not free, free
+        elif not self.mini:
+            self.tr_chip = True
         self.chip_below = self.chip_side == "below"
-        nx, ny = self._side_offsets(new, self.chip_side)
+        nx, ny = self._side_offsets(new, self.chip_side, self.chip_dx)
         dx, dy = nx - card.region.x(), ny - card.region.y()
         if dx or dy:   # область переезжает в окне: плашка рядом с ней появляется или исчезает
             card.region = card.region.translated(dx, dy)
@@ -2273,15 +2470,16 @@ class FloatingTranslation(TranslateMixin, QWidget):
         if overlay:   # плашка с кнопками может быть шире области
             side = self.chip_side
             if side in ("above", "below"):
-                w = max(w, int(card.region.x() + card.header_need) + m)
+                w = max(w, int(card.content.left() + self.chip_dx + max(card.header_need, 200)) + m)
             elif side == "right":
-                w = max(w, int(card.content.right() + 8 + max(card.header_need, 200)) + m)
+                w = max(w, int(card.content.right() + 8 + self.chip_dx + max(card.header_need, 200)) + m)
                 h = max(h, int(card.content.top() + self.CHIP_H) + m)
             elif side == "left":
                 h = max(h, int(card.content.top() + self.CHIP_H) + m)
             h += self.CHIP_SPACE if side == "below" else 0
         if (w, h) != (self.width(), self.height()):
             self.resize(w, h)
+        self._update_mask()
         screen = self.screen()
         area = screen.availableGeometry() if screen is not None else QRect(0, 0, 1280, 800)
         if not self._user_moved:
@@ -2302,6 +2500,45 @@ class FloatingTranslation(TranslateMixin, QWidget):
         y = min(max(g.top(), area.top()), max(area.top(), area.bottom() + 1 - g.height()))
         if (x, y) != (g.left(), g.top()):
             self.move(x, y)
+
+    def _input_region(self) -> QRegion:
+        """Видимые части окошка «Поверх текста»: рамка перевода, плашка и мостик между ними (с тенью). Пустая область:
+        окошко целиком (вид «Карточкой»)."""
+        if not self.tr_cards:
+            return QRegion()
+        card = self.tr_cards[0]
+        if self._tr_view(card) != "overlay":
+            return QRegion()
+        box = QRectF(card.content)
+        region = QRegion(box.adjusted(-6, -6, 6, 6).toAlignedRect())
+        if (self.tr_chip or card.state == "error") and self.chip_side != "none":
+            chip = self._tr_chip_rect(card)
+            region = region.united(QRegion(chip.adjusted(-10, -6, 10, 14).toAlignedRect()))
+            # мостик: полоса между областью и плашкой там, где они друг напротив друга (мышь идёт к плашке по окошку)
+            x1, x2 = max(chip.left(), box.left()), min(chip.right(), box.right())
+            y1, y2 = max(chip.top(), box.top()), min(chip.bottom(), box.bottom())
+            if x2 > x1:
+                top, bottom = (chip.bottom(), box.top()) if chip.bottom() <= box.top() else (box.bottom(), chip.top())
+                if bottom > top:
+                    region = region.united(QRegion(QRectF(x1, top, x2 - x1, bottom - top).toAlignedRect()))
+            elif y2 > y1:
+                left, right = (chip.right(), box.left()) if chip.right() <= box.left() else (box.right(), chip.left())
+                if right > left:
+                    region = region.united(QRegion(QRectF(left, y1, right - left, y2 - y1).toAlignedRect()))
+        return region
+
+    def _update_mask(self):
+        """Linux (X11 и XWayland): мышь и колесо проходят сквозь прозрачные части окошка (поле между областью и
+        сдвинутой плашкой, поля под тень) к странице под ним: окно ловит их только на рамке перевода, плашке и мостике
+        между ними. В Windows прозрачные точки слоистого окна и так пропускают мышь."""
+        if sys.platform == "win32":
+            return
+        region = self._input_region()
+        if region.isEmpty():
+            if not self.mask().isEmpty():
+                self.clearMask()
+        elif region != self.mask():
+            self.setMask(region)
 
     def _tr_done(self, card, results, error, help=None):
         if sip.isdeleted(self) or self._done:
@@ -2325,6 +2562,48 @@ class FloatingTranslation(TranslateMixin, QWidget):
         if self.tr_cards and self.tr_cards[0].scroll_max > 0:
             c = self.tr_cards[0]
             c.scroll = max(0.0, min(c.scroll_max, c.scroll - event.angleDelta().y() / 2.0))
+            self.update()
+
+    PEEK_GRACE_MS = 450   # мышь ушла с зажатого окошка: плашка ещё столько держится (по пути к ней, на край тени)
+
+    def enterEvent(self, event):
+        """Зажатое соседями окошко: пока над ним мышь, плашка с кнопками видна у своей области (на время может лечь на
+        соседа). Окошко на это время поднимается над соседями: мышь по пути к плашке остаётся на нём, кнопки доступны."""
+        super().enterEvent(event)
+        if self._peek_timer is not None:
+            self._peek_timer.stop()   # вернулась до конца задержки: плашка остаётся
+        if not self.crowded or self.mini or self._done or self._peek or not self.tr_cards \
+                or self._tr_view(self.tr_cards[0]) != "overlay":
+            return
+        card = self.tr_cards[0]
+        side, shift, free = self._pick_chip(self._area_global(card), card.header_need or 300)
+        if free:   # место освободилось (соседа закрыли или окошко унесли): плашка снова постоянная
+            self._apply_chip(side, shift, True)
+            return
+        self._peek, self.tr_chip = True, True
+        self._set_chip_side(side, shift)
+        self.raise_()
+        self.update()
+
+    def leaveEvent(self, event):
+        super().leaveEvent(event)
+        if self._peek and not self._done:
+            if self._peek_timer is None:
+                self._peek_timer = QTimer(self)
+                self._peek_timer.setSingleShot(True)
+                self._peek_timer.timeout.connect(self._end_peek)
+            self._peek_timer.start(self.PEEK_GRACE_MS)
+
+    def _end_peek(self):
+        """Конец показа плашки зажатого окошка: мышь так и не вернулась на окошко."""
+        if not self._peek or self._done or sip.isdeleted(self):
+            return
+        if self.geometry().contains(QCursor.pos()) and self.underMouse():
+            return
+        self._peek = False
+        if self.crowded:
+            self.tr_chip = False
+            self._set_chip_side("none", 0.0)
             self.update()
 
     def closeEvent(self, event):

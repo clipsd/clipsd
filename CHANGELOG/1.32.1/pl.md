@@ -1,6 +1,6 @@
 - Ponawianie w edytorze. Ctrl+Y znów ponawia cofniętą czynność: w Windows skrót nie działał. Działa też Ctrl+Shift+Z.
 - Ocena ClipSD. Okno po wysłaniu nie zatrzymuje się już na „Wysyłanie oceny…”, gdy ocena już dotarła. Jeśli podczas oceniania naciśniesz Alt+W, wpisana opinia nie przepadnie: wróci, gdy znów otworzysz okno oceny.
 - Pilna aktualizacja. Jeśli okno „Pilna aktualizacja ClipSD” zamknęło się z powodu zrzutu (Alt+W), pojawi się znowu, gdy skończysz ze zrzutem, a nie po dobie.
-- Kolor zaznaczonego obiektu. Kolor i grubość zaznaczonego obiektu zmieniają się tylko w nim. Pod paletą pojawia się podpowiedź z przyciskiem „Rysuj dalej tym kolorem”, jeśli nowe linie mają mieć dawny kolor.
+- Kolor zaznaczonego obiektu. Kolor i grubość zaznaczonego obiektu zmieniają się tylko w nim. Pod paletą pojawia się podpowiedź: przycisk „Rysuj dalej tym kolorem” zachowuje nowy kolor także dla kolejnych linii.
 - Własne kolory. Kolory wybrane przez „+” zapamiętują się jako próbki przed przyciskiem „+”. Próbek jest do trzech, a prawy przycisk myszy usuwa próbkę.
 - Zakreślacz i ołówek. Jeśli zaczniesz linię tuż przy brzegu poprzedniej, rysuje się nowa linia, a poprzednia się nie przesuwa.

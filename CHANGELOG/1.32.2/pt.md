@@ -1,0 +1,3 @@
+- Tradução por trechos. Os botões da janela de tradução vão para um lugar livre e não cobrem o texto traduzido nem as janelas vizinhas. Um trecho novo não cai sobre uma janela já aberta. Se não houver espaço para os botões, a janela fica com uma cruz no canto e os botões aparecem ao passar o mouse por cima.
+- Tradução da tela inteira. As linhas curtas, por exemplo o título de uma aba e o endereço, ficam em uma só linha.
+- Botão «Copiar texto». Em capturas de tamanho médio, o botão grande fica visível por mais tempo: primeiro some «Traduzir tudo».

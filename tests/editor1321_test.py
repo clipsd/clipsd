@@ -10,8 +10,9 @@
    привязано дважды, нажатые сочетания не срабатывают неоднозначно; запасной путь для русской раскладки
    (_key_slots) знает оба сочетания повтора.
 2. «Копировать текст» (распознавание текста) доступна при любой ширине окна: большая фиолетовая кнопка во втором
-   ряду, а в узком окне (снимок уже примерно 1100 px) кнопка группы «Текст с картинки» в верхнем ряду, пункт
-   «Копировать текст» в «⋯ Все инструменты» и клавиша I.
+   ряду, а в узком окне кнопка группы «Текст с картинки» в верхнем ряду, пункт «Копировать текст» в «⋯ Все
+   инструменты» и клавиша I. Ступени второго ряда (1.32.2): обе большие кнопки, только «Копировать текст»
+   («Перевести» уходит первой), ни одной; большие кнопки не наезжают друг на друга и не выходят за окно.
 
 Запуск: QT_QPA_PLATFORM=offscreen python3 tests/editor1321_test.py
 """
@@ -144,12 +145,23 @@ def test_shortcuts():
 def test_copy_text_everywhere():
     title = tool_title(OCR)
     check(title == "Копировать текст", f"название инструмента: {title!r}")
-    hidden = []
-    for width in (300, 500, 700, 900, 1000, 1100, 1300, 1600):
+    hidden, no_tr = [], []
+    for width in (300, 500, 600, 700, 800, 900, 1000, 1100, 1300, 1600):
         ed = make(width)
         big = ed.ocr_button.isVisible()
+        tr_vis = ed.tr_block.isVisible()
         if not big:
             hidden.append(width)
+        if not tr_vis:
+            no_tr.append(width)
+        check(big or not tr_vis, f"снимок {width} px: «Перевести» не видна без «Копировать текст» (она уходит первой)")
+        shown = [w for w in (ed.ocr_button, ed.tr_block) if w.isVisible()]
+        rects = [w.geometry() for w in shown]
+        inside = all(w.mapTo(ed, w.rect().bottomRight()).x() <= ed.width() for w in shown)
+        apart = all(not a.intersects(b) for i, a in enumerate(rects) for b in rects[i + 1:])
+        check(inside and apart, f"снимок {width} px: большие кнопки внутри окна и не наезжают друг на друга")
+        check(not big or ed.ocr_button.width() >= ed.ocr_button.minimumSizeHint().width(),
+              f"снимок {width} px: подпись «Копировать текст» не обрезана")
         group = ed.tool_strip.visible_widget(OCR)
         in_row = group is not None and group.isVisible()
         ed.build_all_tools_menu()
@@ -162,7 +174,9 @@ def test_copy_text_everywhere():
         ed._all_tools_menu.deleteLater()
         ed.close()
         settle(2)
-    print(f"     большая кнопка скрыта у снимков шириной: {hidden}")
+    print(f"     «Копировать текст» скрыта у снимков шириной: {hidden}; «Перевести» скрыта у: {no_tr}")
+    check(900 not in hidden and 800 not in hidden, "«Копировать текст» видна у снимков от 800 px")
+    check(set(hidden) < set(no_tr), "«Копировать текст» остаётся при более узком окне, чем «Перевести»")
 
 
 for fn in (test_shortcuts, test_copy_text_everywhere):

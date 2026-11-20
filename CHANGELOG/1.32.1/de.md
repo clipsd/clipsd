@@ -1,6 +1,6 @@
 - Wiederholen im Editor. Strg+Y wiederholt eine rückgängig gemachte Aktion wieder: Unter Windows reagierte die Tastenkombination nicht. Strg+Umschalt+Z funktioniert ebenfalls.
 - ClipSD bewerten. Das Fenster nach dem Senden bleibt nicht mehr bei „Bewertung wird gesendet…“ stehen, wenn die Bewertung schon angekommen ist. Wenn Sie beim Bewerten Alt+W drücken, geht die eingegebene Rezension nicht verloren: Sie erscheint wieder, wenn Sie das Bewertungsfenster das nächste Mal öffnen.
 - Dringendes Update. Wurde das Fenster „Dringendes ClipSD-Update“ durch einen Screenshot (Alt+W) geschlossen, erscheint es wieder, sobald Sie mit dem Screenshot fertig sind, und nicht erst einen Tag später.
-- Farbe des markierten Objekts. Farbe und Dicke des markierten Objekts ändern sich nur bei diesem Objekt. Unter der Palette erscheint ein Hinweis mit der Schaltfläche „Mit dieser Farbe weiterzeichnen“, falls neue Striche die frühere Farbe behalten sollen.
+- Farbe des markierten Objekts. Farbe und Dicke des markierten Objekts ändern sich nur bei diesem Objekt. Unter der Palette erscheint ein Hinweis: Die Schaltfläche „Mit dieser Farbe weiterzeichnen“ übernimmt die neue Farbe auch für die nächsten Striche.
 - Eigene Farben. Mit „+“ gewählte Farben werden als Farbfelder vor der Schaltfläche „+“ gemerkt. Es sind bis zu drei Farbfelder, ein Rechtsklick entfernt eines.
 - Textmarker und Stift. Beginnen Sie einen Strich direkt am Rand des vorherigen, wird ein neuer Strich gezeichnet, und der vorherige bleibt an seinem Platz.

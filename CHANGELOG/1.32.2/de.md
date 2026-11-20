@@ -1,0 +1,3 @@
+- Übersetzen in Stücken. Die Schaltflächen des Übersetzungsfensters rücken an eine freie Stelle und verdecken weder den übersetzten Text noch benachbarte Fenster. Ein neues Stück landet nicht auf einem bereits geöffneten Fenster. Ist kein Platz für die Schaltflächen, bleibt in der Ecke des Fensters ein Kreuz, und die Schaltflächen erscheinen, sobald Sie mit der Maus darauf zeigen.
+- Ganzen Bildschirm übersetzen. Kurze Zeilen, etwa der Tab-Titel und die Adresse, bleiben einzeilig.
+- Schaltfläche „Text kopieren“. Bei mittelgroßen Screenshots bleibt die große Schaltfläche länger sichtbar: Zuerst verschwindet „Alles übersetzen“.

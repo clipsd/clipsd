@@ -543,9 +543,11 @@ if ocrmod.engine_name() == "tesseract":
         bad = [j for j, a in enumerate(areas) if ch.intersects(a)]
         check(not bad and scr.contains(ch) and not w.tr_cards[0].chip.isNull(),
               f"обычный перевод, окошко {i}: плашка {ch} не на областях {bad}, на экране {scr.contains(ch)}, сторона {w.chip_side}")
-    # одно окошко у самого верхнего края: плашка под областью
+    # одно окошко у самого верхнего края: плашка под областью или справа, не над ней. Три плотных окошка ещё открыты,
+    # и их плашки стоят справа: свободного места рядом может не быть, тогда окошко зажато (плашки нет, крестик, 1.32.2)
     solo = translate_ui.FloatingTranslation(crops[0], 1.0, QRect(36, 0, 420, 48), dict(appmod.DEFAULTS), None)
-    check(solo.chip_side in ("below", "right"), f"окошко у верхнего края: плашка {solo.chip_side}, не над областью")
+    check(solo.chip_side in ("below", "right") or (solo.crowded and solo.chip_side == "none"),
+          f"окошко у верхнего края: плашка {solo.chip_side} (зажато: {solo.crowded}), не над областью")
     solo.close()
     for w in wins:
         w.close()

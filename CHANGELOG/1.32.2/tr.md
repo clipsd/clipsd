@@ -1,0 +1,3 @@
+- Parça parça çeviri. Çeviri penceresinin düğmeleri boş bir yere yerleşir ve çevrilmiş metni ya da komşu pencereleri kapatmaz. Yeni parça, zaten açık olan bir pencerenin üstüne gelmez. Düğmeler için yer yoksa pencerenin köşesinde bir çarpı kalır, düğmeler fareyle üzerine gelindiğinde görünür.
+- Tüm ekranı çevirme. Sekme başlığı ve adres gibi kısa satırlar tek satırda kalır.
+- “Metni kopyala” düğmesi. Orta boyutlu ekran görüntülerinde büyük düğme daha uzun süre görünür kalır: önce “Tümünü çevir” kaybolur.

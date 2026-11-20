@@ -11,7 +11,7 @@
 # Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """ClipSD: снимки экрана с редактором (стрелки, номера, сноски, размытие, обрезка)."""
 
-__version__ = "1.32.1"
+__version__ = "1.32.2"
 __author__ = "Sergey Dayneko (Сергей Дайнеко)"
 __license__ = "GPL-3.0-or-later"
 __copyright__ = "Copyright (C) 2026 Sergey Dayneko"

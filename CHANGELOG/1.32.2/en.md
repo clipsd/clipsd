@@ -1,0 +1,3 @@
+- Translating in pieces. The buttons of the translation window go to a free spot and do not cover the translated text or neighboring windows. A new piece does not land on a window that is already open. If there is no room for the buttons, the window keeps a cross in the corner, and the buttons appear when you hover the mouse over it.
+- Translating the whole screen. Short lines, such as a tab title and an address, stay on one line.
+- The “Copy text” button. On medium-sized screenshots the big button stays visible longer: “Translate all” goes first.

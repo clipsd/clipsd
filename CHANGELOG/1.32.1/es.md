@@ -1,6 +1,6 @@
 - Rehacer en el editor. Ctrl+Y vuelve a rehacer la acción deshecha: en Windows el atajo no hacía nada. También funciona Ctrl+Shift+Z.
 - Valorar ClipSD. La ventana tras el envío ya no se queda en «Enviando la valoración…» cuando la valoración ya ha llegado. Si pulsa Alt+W mientras valora, la opinión que escribió no se pierde: vuelve la próxima vez que abra la ventana de valoración.
 - Actualización urgente. Si la ventana «Actualización urgente de ClipSD» se cerró por una captura (Alt+W), vuelve a aparecer cuando termine con la captura, no al día siguiente.
-- Color del objeto seleccionado. El color y el grosor del objeto seleccionado cambian solo en ese objeto. Bajo la paleta aparece una sugerencia con el botón «Seguir con este color», por si los nuevos trazos deben mantener el color anterior.
+- Color del objeto seleccionado. El color y el grosor del objeto seleccionado cambian solo en ese objeto. Bajo la paleta aparece una sugerencia: el botón «Seguir con este color» mantiene el color nuevo también para los siguientes trazos.
 - Colores propios. Los colores elegidos con «+» se guardan como muestras antes del botón «+». Hay hasta tres muestras, y el clic derecho quita una.
 - Resaltador y lápiz. Si empieza un trazo justo en el borde del anterior, se dibuja un trazo nuevo y el anterior no se mueve.

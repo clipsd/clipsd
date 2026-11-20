@@ -1,6 +1,6 @@
 - Redo in the editor. Ctrl+Y redoes an undone action again: on Windows the shortcut did nothing. Ctrl+Shift+Z works too.
 - Rate ClipSD. The window after sending no longer stays on “Sending your rating…” once the rating has arrived. If you press Alt+W while rating, the review you typed is not lost: it comes back the next time you open the rating window.
 - Urgent update. If the “Urgent ClipSD update” window was closed by a screenshot (Alt+W), it appears again once you are done with the screenshot, not a day later.
-- Color of the selected object. Color and thickness of the selected object change for that object only. A hint under the palette offers the “Keep drawing in this color” button if new marks should keep the previous color.
+- Color of the selected object. Color and thickness of the selected object change for that object only. A hint appears under the palette: the “Keep drawing in this color” button keeps the new color for the next marks too.
 - Custom colors. Colors picked with “+” are remembered as swatches before the “+” button. Up to three swatches are kept, and a right click removes one.
 - Marker and pencil. If you start a stroke right at the edge of the previous one, a new stroke is drawn and the previous one does not move.
