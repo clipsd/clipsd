@@ -9,7 +9,7 @@
   "tour.capture_text": "{hotkey} em qualquer programa: a tela congela, selecione uma área com o mouse e ela se abre aqui. Um clique simples sem seleção captura o monitor inteiro, Esc cancela.\n\nVocê pode trocar {hotkey} por qualquer atalho que preferir nas configurações; o botão abaixo as abre na hora.\n\nNa próxima vez que você pressionar {hotkey}, a área anterior fica destacada: Enter ou um clique dentro captura o mesmo lugar.\n\nO ícone do ClipSD na bandeja, perto do relógio: o clique direito abre um menu onde você pode repetir este tour.",
   "tour.capture_title": "Como fazer uma captura",
   "tour.change_hotkey": "Mudar o atalho nas configurações",
-  "tour.color_text": "A cor das novas marcações. “+” abre o seletor de cores.\n\nSe houver um objeto selecionado na captura, o botão muda só a cor desse objeto; a cor padrão das novas marcações continua a mesma.",
+  "tour.color_text": "A cor das novas marcações. “+” abre o seletor de cores, e a cor escolhida fica na paleta (até três cores próprias, clique direito para remover).\n\nSe houver um objeto selecionado na captura, só a cor dele muda; o botão “Continuar com esta cor” no aviso a mantém para as próximas marcações.",
   "tour.color_title": "Cor",
   "tour.done_text": "“Copiar” (Enter ou Ctrl+C) coloca a captura marcada na área de transferência e mantém a janela aberta. “Copiar e fechar” (Ctrl+Enter) faz o mesmo e fecha a janela. Depois cole a captura em um aplicativo de mensagens ou em um documento. “Salvar” (Ctrl+S) salva a captura em PNG ou JPEG.",
   "tour.done_title": "Pronto: copiar ou salvar",

@@ -9,7 +9,7 @@
   "tour.capture_text": "{hotkey} in any program: the screen freezes, select an area with the mouse, and it opens here. A simple click without selecting captures the whole monitor, Esc cancels.\n\nYou can change {hotkey} to any shortcut you like in settings; the button below opens them right away.\n\nNext time you press {hotkey}, the previous area is highlighted: Enter or a click inside captures the same spot.\n\nThe ClipSD icon in the tray near the clock: right-click opens a menu where you can repeat this tour.",
   "tour.capture_title": "How to take a screenshot",
   "tour.change_hotkey": "Change the shortcut in settings",
-  "tour.color_text": "The color for new marks. “+” opens the color picker.\n\nIf an object on the screenshot is selected, the button changes the color of that object only; the default color for new marks stays the same.",
+  "tour.color_text": "The color for new marks. “+” opens the color picker, and the chosen color stays in the palette (up to three custom colors, right-click to remove).\n\nIf an object on the screenshot is selected, only its color changes; the “Keep drawing in this color” button in the hint keeps it for the next marks.",
   "tour.color_title": "Color",
   "tour.done_text": "“Copy” (Enter or Ctrl+C) puts the annotated screenshot on the clipboard and keeps the window open. “Copy and close” (Ctrl+Enter) does the same and closes the window. Then paste the screenshot into a messaging app or document. “Save” (Ctrl+S) saves the screenshot as a PNG or JPEG file.",
   "tour.done_title": "Done: copy or save",

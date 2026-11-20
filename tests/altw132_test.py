@@ -145,13 +145,34 @@ def test_rating_window():
     alt_w()
     check(selector_open() and drag_makes_shot(), "Alt+W при окне оценки: выделение мышью делает снимок 200x160")
 
-    # окно из меню «Оценить ClipSD»: закрывается как крестиком, правила показа не трогаются
+    # окно из меню «Оценить ClipSD»: закрывается как крестиком, правила показа не трогаются;
+    # 1.32.1: звёзды и набранный отзыв не теряются, а возвращаются при следующем открытии окна
     c.config.update(rating_next_ts=0)
     c.show_rating()
     check(wait(lambda: feedback.is_open(c._rating)) and not c._rating.auto, "окно оценки из меню открыто")
+    review = "Удобно, но хочется\nвыбор формата файла"
+    c._rating.dialog.set_stars(4)
+    c._rating.dialog.text_edit.setPlainText(review)
     alt_w()
     check(selector_open() and not feedback.is_open(c._rating), "Alt+W: окно из меню закрыто, выделение открыто")
     check(c.config.get("rating_next_ts") == 0 and c._rating.outcome == "closed", "окно из меню: правила показа не тронуты")
+    check(c.rating_draft == {"stars": 4, "text": review}, "набранный отзыв и звёзды сохранены черновиком (в памяти)")
+    check("rating_draft" not in json.dumps(c.config) and review not in json.dumps(c.config),
+          "черновик не попадает в настройки на диске")
+    check(esc_closes_selector(), "Esc закрывает окно выделения")
+    c.show_rating()
+    d = c._rating.dialog
+    check(wait(lambda: feedback.is_open(c._rating)) and d.text_edit.toPlainText() == review and d.stars == 4
+          and d.send_btn.isEnabled(), "следующее открытие: черновик на месте, «Отправить» доступна")
+    check(c.rating_draft is None, "черновик возвращён один раз")
+    d.close()
+    settle()
+    c.show_rating()
+    d = c._rating.dialog
+    check(wait(lambda: feedback.is_open(c._rating)) and d.text_edit.toPlainText() == "" and d.stars == 0,
+          "окно закрыли крестиком: в следующий раз чистое")
+    alt_w()
+    check(selector_open() and c.rating_draft is None, "пустое окно и Alt+W: черновика нет")
     check(esc_closes_selector(), "Esc закрывает окно выделения")
 
     # без открытых окон Alt+W как раньше: без задержки на закрытие окон
@@ -169,8 +190,16 @@ def manifest(critical=False):
                     notes={"ru": "Исправления."}, critical=critical)
 
 
-def make_updater():
-    u = up.Updater(c, kind="linux", installed="1.0.0", clock=lambda: NOW)   # настоящие окна (UpdaterUI)
+class Clock:
+    def __init__(self):
+        self.now = NOW
+
+    def __call__(self):
+        return self.now
+
+
+def make_updater(clock=None):
+    u = up.Updater(c, kind="linux", installed="1.0.0", clock=clock or (lambda: NOW))   # настоящие окна (UpdaterUI)
     c._updater = u
     return u
 
@@ -218,28 +247,75 @@ def test_update_offer():
     check(st.get("version") == "2.0.1" and st.get("since") == up.uc.format_utc(NOW) and st.get("shots") == 0,
           "как «Позже»: отсчёт отложенного окна сохранён и начат заново (3 дня или 20 снимков)")
     check("2.0.1" not in (up.cfg(c.config, "update_skipped") or []) and not u.busy, "версия не пропущена, загрузки нет")
+    check(not getattr(u, "_critical_recall", False), "обычное обновление: срочного повтора нет, ждёт отложенное окно")
     check(esc_closes_selector(), "Esc закрывает окно выделения")
 
     seen = run_modal(start, alt_w)
     check(not seen.get("stuck") and selector_open() and drag_makes_shot(),
           "Alt+W при предложении обновления: выделение мышью делает снимок")
 
-    # срочное исправление: «Позже» (пропустить нельзя), напомнит через сутки; выделение не блокирует
+    # срочное исправление: Alt+W закрывает его (пропустить нельзя), выделение не блокирует; 1.32.1: окно приходит
+    # снова после снимка в спокойную минуту, а не через сутки
     c.config.pop("update_prompt", None)
-    u2 = make_updater()
+    clock = Clock()
+    u2 = make_updater(clock)
+    u2._pending_critical = lambda now, fresh=True: manifest(critical=True)   # проверенная сохранённая копия
 
     def start_critical():
         u2.busy = True
-        u2._present(manifest(critical=True), "notify", True, NOW)
+        u2._present(manifest(critical=True), "notify", True, clock.now)
         return "returned"
 
     seen = run_modal(start_critical, inside)
     check(state.get("modal") == "OfferDialog" and not seen.get("stuck"), "срочное обновление: Alt+W закрыл окно")
-    check(selector_open() and esc_closes_selector(), "срочное обновление: выделение работает, Esc закрывает")
-    check(u2._critical_offered_at == NOW and not u2._critical_due(NOW + timedelta(hours=1))
-          and u2._critical_due(NOW + timedelta(days=1)), "срочное покажется снова через сутки")
+    check(u2._critical_recall and u2._recall_timer.isActive()
+          and u2._recall_timer.interval() == update_prompt.RECALL_POLL_MS, "срочное: ждёт спокойной минуты после снимка")
+    check(selector_open(), "срочное обновление: выделение открыто")
+    check(not update_prompt.recall_poll(u2) and u2._recall_quiet_since is None, "идёт выделение: срочного окна нет")
+    check(esc_closes_selector(), "срочное обновление: Esc закрывает выделение")
     check(not update_prompt.state(c.config) and "2.0.1" not in (up.cfg(c.config, "update_skipped") or []),
           "срочное не пропущено и не попало в отложенные")
+    check(not update_prompt.recall_poll(u2), "спокойно с этой секунды")
+    clock.now += timedelta(seconds=30)
+    check(not update_prompt.recall_poll(u2), "спокойно 30 с: ещё ждём")
+    c._note_activity()             # короткий снимок между проверками таймера
+    clock.now += timedelta(seconds=31)
+    check(not update_prompt.recall_poll(u2), "был снимок: минута считается заново")
+    c.editors.append("editor")
+    clock.now += timedelta(seconds=61)
+    check(not update_prompt.recall_poll(u2), "открыт редактор: срочного окна нет")
+    c.editors.remove("editor")
+    check(not update_prompt.recall_poll(u2), "редактор закрыт: спокойно с этой секунды")
+    clock.now += timedelta(seconds=61)
+    again = {}
+
+    def answer_later():
+        again["modal"] = active_modal()
+        w = QApplication.activeModalWidget()
+        again["critical"] = getattr(w, "critical", None)
+        w.later_button.click()
+
+    seen = run_modal(lambda: update_prompt.recall_poll(u2), answer_later)
+    check(seen.get("result") is True and again.get("modal") == "OfferDialog" and again.get("critical") is True,
+          "спокойная минута после снимка: срочное окно снова, а не через сутки")
+    check(not u2._critical_recall and not u2._recall_timer.isActive() and u2._critical_offered_at == clock.now,
+          "срочное показано: повтор снят")
+    check(not u2._critical_due(clock.now + timedelta(hours=1)) and u2._critical_due(clock.now + timedelta(days=1)),
+          "ответ «Позже» кнопкой: дальше как раньше, раз в сутки")
+
+    # П4 проверки 1.32.1: Alt+W закрыл срочное окно, потом человек сам открыл проверку и ответил «Позже»:
+    # отложенный повтор снят, окно второй раз не приходит
+    update_prompt.recall_critical(u2)
+    check(u2._critical_recall, "после Alt+W повтор срочного окна взведён")
+
+    def manual_later():
+        u2.busy = True
+        u2._present(manifest(critical=True), "notify", True, clock.now)
+
+    seen = run_modal(manual_later, answer_later)
+    check(again.get("critical") is True and not u2._critical_recall, "срочное окно показано вручную, ответ «Позже»: повтор снят")
+    clock.now += timedelta(seconds=200)
+    check(not update_prompt.recall_poll(u2) and not update_prompt.recall_poll(u2), "спокойная минута: второго срочного окна нет")
 
 
 def test_other_update_windows():

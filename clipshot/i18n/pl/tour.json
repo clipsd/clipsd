@@ -9,7 +9,7 @@
   "tour.capture_text": "{hotkey} w dowolnym programie: ekran zastyga, zaznacz obszar myszą, a zrzut otworzy się tutaj. Zwykłe kliknięcie bez zaznaczania robi zrzut całego monitora, Esc anuluje.\n\nSkrót {hotkey} możesz w ustawieniach zamienić na dowolny wygodny, przycisk poniżej od razu je otwiera.\n\nPrzy następnym {hotkey} podświetla się poprzedni obszar: Enter lub kliknięcie wewnątrz robi zrzut tego samego miejsca.\n\nIkona ClipSD w zasobniku obok zegara: prawy przycisk otwiera menu, w którym można powtórzyć ten przewodnik.",
   "tour.capture_title": "Jak zrobić zrzut",
   "tour.change_hotkey": "Zmień skrót w ustawieniach",
-  "tour.color_text": "Kolor nowych oznaczeń. „+” otwiera wybór dowolnego koloru.\n\nJeśli na zrzucie zaznaczony jest obiekt, przycisk zmienia kolor tylko jego, domyślny kolor nowych oznaczeń pozostaje bez zmian.",
+  "tour.color_text": "Kolor nowych oznaczeń. „+” otwiera wybór dowolnego koloru, a wybrany kolor zostaje w palecie (do trzech własnych kolorów, prawym przyciskiem można go usunąć).\n\nJeśli na zrzucie zaznaczony jest obiekt, zmienia się tylko jego kolor; przycisk „Rysuj dalej tym kolorem” w podpowiedzi zachowuje go dla kolejnych oznaczeń.",
   "tour.color_title": "Kolor",
   "tour.done_text": "„Kopiuj” (Enter lub Ctrl+C) umieszcza zrzut z oznaczeniami w schowku, okno pozostaje otwarte. „Kopiuj i zamknij” (Ctrl+Enter) robi to samo i zamyka okno. Potem wklej zrzut do komunikatora lub dokumentu. „Zapisz” (Ctrl+S) zapisuje plik PNG lub JPEG.",
   "tour.done_title": "Gotowe: kopiuj lub zapisz",

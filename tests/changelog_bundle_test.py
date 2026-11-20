@@ -69,21 +69,22 @@ try:
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 
-# --- заметки выпуска 1.32.0 ------------------------------------------------------------------------------------
-folder = ROOT / "CHANGELOG" / "1.32.0"
-missing = [lang for lang in LANGS if not (folder / f"{lang}.md").is_file()]
-check(not missing, f"CHANGELOG/1.32.0: 12 языков {missing or ''}")
-counts, dashes = set(), []
-for lang in LANGS:
-    path = folder / f"{lang}.md"
-    if not path.is_file():
-        continue
-    text = path.read_text(encoding="utf-8")
-    counts.add(sum(1 for line in text.splitlines() if line.startswith("- ")))
-    if "—" in text:
-        dashes.append(lang)
-check(len(counts) == 1, f"CHANGELOG/1.32.0: одинаковое число пунктов на всех языках {sorted(counts)}")
-check(not dashes, f"CHANGELOG/1.32.0: без длинных тире {dashes or ''}")
+# --- заметки выпусков 1.32.0 и 1.32.1 -------------------------------------------------------------------------
+for version in ("1.32.0", "1.32.1"):
+    folder = ROOT / "CHANGELOG" / version
+    missing = [lang for lang in LANGS if not (folder / f"{lang}.md").is_file()]
+    check(not missing, f"CHANGELOG/{version}: 12 языков {missing or ''}")
+    counts, dashes = set(), []
+    for lang in LANGS:
+        path = folder / f"{lang}.md"
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        counts.add(sum(1 for line in text.splitlines() if line.startswith("- ")))
+        if "—" in text:
+            dashes.append(lang)
+    check(len(counts) == 1, f"CHANGELOG/{version}: одинаковое число пунктов на всех языках {sorted(counts)}")
+    check(not dashes, f"CHANGELOG/{version}: без длинных тире {dashes or ''}")
 
 print(f"ИТОГ: провалено {len(failed)}")
 sys.exit(1 if failed else 0)

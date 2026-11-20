@@ -650,16 +650,21 @@ def build_thanks_dialog(stars: int, review: str = "", delivery=None, parent=None
     dlg.status = dlg.text(tr(status_key(delivery)), "thanksStatus")
     dlg.delivery = delivery
 
+    # Отправка идёт в фоновом потоке и может закончиться в любой момент, в том числе пока окно строится.
+    # Состояние читается один раз за обновление, таймер запущен до первого чтения: «sending» значит, что таймер
+    # уже идёт и покажет итог. 1.32.1: раньше текст и решение запустить таймер читали состояние по отдельности,
+    # отправка, закончившаяся между ними, оставляла «Отправляем оценку…» навсегда (нестабильный rating_test в CI).
     def refresh():
-        dlg.status.setText(tr(status_key(delivery)))
-        if delivery is None or getattr(delivery, "state", "sent") != "sending":
+        state = None if delivery is None else getattr(delivery, "state", "sent")
+        dlg.status.setText(tr(status_key(delivery if state is None else state)))
+        if state != "sending":
             dlg.status_timer.stop()
     dlg.refresh_status = refresh
     dlg.status_timer = QTimer(dlg)
     dlg.status_timer.setInterval(250)
     dlg.status_timer.timeout.connect(refresh)
-    if getattr(delivery, "state", None) == "sending":
-        dlg.status_timer.start()
+    dlg.status_timer.start()
+    refresh()
 
     _add_catalogs(dlg)
     dlg.problem_button = None
@@ -703,9 +708,27 @@ class RatingFlow:
             rating_shown(config)            # показ засчитан до открытия: сбой окна не зациклит показы
             self._save()
         self.dialog = build_rating_dialog(config, self._done, sender=self.sender, directory=self.directory)
+        self._restore_draft(self.dialog)
         self.dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
         self.dialog.open_centered()
         return self.dialog
+
+    # Черновик (1.32.1): окно, закрытое через Alt+W, не теряет набранное. Хранится только в памяти программы
+    # (ctx.rating_draft), на диск не пишется; возвращается при следующем открытии окна оценки и тут же забывается.
+    def _keep_draft(self, dlg) -> None:
+        text = dlg.text_edit.toPlainText()
+        if dlg.stars or text.strip():
+            self.ctx.rating_draft = {"stars": int(dlg.stars or 0), "text": text}
+
+    def _restore_draft(self, dlg) -> None:
+        draft = getattr(self.ctx, "rating_draft", None)
+        if not isinstance(draft, dict):
+            return
+        self.ctx.rating_draft = None
+        if draft.get("text"):
+            dlg.text_edit.setPlainText(str(draft["text"]))
+        if 1 <= int(draft.get("stars") or 0) <= 5:
+            dlg.set_stars(int(draft["stars"]))
 
     def _save(self):
         save = getattr(self.ctx, "save_config", None)
@@ -732,12 +755,13 @@ class RatingFlow:
     def close_for_capture(self) -> bool:
         """Alt+W при открытом окне оценки (1.32, Б1 проверки): окно модальное, под ним окно выделения не получило бы
         ни мыши, ни клавиш. Окно закрывается: показанное по правилам как «Позже» (снова через 30 дней), открытое
-        из меню как крестиком (правила не трогаются). Окно после отправки не модальное и остаётся.
-        True, если окно оценки было открыто."""
+        из меню как крестиком (правила не трогаются). Звёзды и набранный отзыв остаются черновиком до следующего
+        открытия окна (1.32.1). Окно после отправки не модальное и остаётся. True, если окно оценки было открыто."""
         dlg = self.dialog
         try:
             if dlg is None or not dlg.isVisible():
                 return False
+            self._keep_draft(dlg)
             if self.auto:
                 dlg._finish("later")
             else:

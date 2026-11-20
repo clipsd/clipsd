@@ -11,6 +11,8 @@
 и ничего не мешает выйти (Clipshot.quit_blocker). «Позже» откладывает ещё на DELAY и SHOTS. «Пропустить эту версию»
 гасит и окно, и колокольчик для этой версии (updater.skip_version, notifications не показывает пропущенные).
 Срочное исправление безопасности и ручная «Проверить обновления» показывают окно сразу, как раньше.
+Срочное окно, закрытое через Alt+W (Clipshot.clear_way_for_capture), приходит снова после снимка в спокойную
+минуту (recall_critical, 1.32.1), а не через сутки: человек не отвечал «Позже», а делал снимок.
 
 Счётчики в config["update_prompt"] = {"version", "since" (UTC ISO), "shots"}. Updater зовёт hold() из _on_checked,
 after_offer() после окна и start() при запуске; app зовёт note_shot() на каждый снимок."""
@@ -21,6 +23,7 @@ DELAY = timedelta(days=3)        # окно не раньше чем через 
 SHOTS = 20                       # или после 20 снимков, что раньше
 QUIET = timedelta(seconds=60)    # «спокойная минута»: столько подряд нет выделения, редактора и окон
 POLL_MS = 30_000                 # как часто смотреть, не пора ли (пока есть отложенное предложение)
+RECALL_POLL_MS = 5_000           # срочное окно, закрытое через Alt+W: как часто смотреть, спокойно ли
 KEY = "update_prompt"
 
 
@@ -184,6 +187,48 @@ def start(updater) -> None:
         updater._prompt_timer = timer
     if not timer.isActive():
         timer.start()
+
+
+def recall_critical(updater) -> None:
+    """Срочное окно закрыто через Alt+W: показать его снова после снимка, в спокойную минуту (recall_poll).
+    Без этого действовало бы «напомнить раз в сутки» (CRITICAL_REMIND), как после кнопки «Позже»."""
+    updater._critical_recall = True
+    updater._recall_quiet_since = None
+    timer = getattr(updater, "_recall_timer", None)
+    if timer is None:
+        from PyQt6.QtCore import QTimer
+        timer = QTimer(updater)
+        timer.setInterval(RECALL_POLL_MS)
+        timer.timeout.connect(lambda: recall_poll(updater))
+        updater._recall_timer = timer
+    if not timer.isActive():
+        timer.start()
+
+
+def recall_poll(updater) -> bool:
+    """Таймер recall_critical: спокойно минуту подряд (нет выделения, редактора, модальных окон), значит снова
+    срочное окно из проверенной сохранённой копии (Updater._offer_saved_critical). True, если окно показано."""
+    timer = getattr(updater, "_recall_timer", None)
+    if not getattr(updater, "_critical_recall", False):
+        if timer is not None:
+            timer.stop()
+        return False
+    now = updater.clock()
+    if updater.busy or busy_reason(updater.ctx):
+        updater._recall_quiet_since = None
+        return False
+    quiet = getattr(updater, "_recall_quiet_since", None)
+    if quiet is None or quiet > now:
+        updater._recall_quiet_since = now
+        return False
+    if now - quiet < QUIET:
+        return False
+    updater._critical_recall = False
+    updater._recall_quiet_since = None
+    if timer is not None:
+        timer.stop()
+    updater._critical_offered_at = None   # окно закрыли снимком, а не ответом: «раз в сутки» тут не действует
+    return updater._offer_saved_critical(now)
 
 
 def _stop(updater) -> None:

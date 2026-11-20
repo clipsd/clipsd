@@ -9,7 +9,7 @@
   "tour.capture_text": "{hotkey} in qualsiasi programma: lo schermo si blocca, seleziona un'area con il mouse e si aprirà qui. Un semplice clic senza selezione cattura l'intero monitor, Esc annulla.\n\nPuoi sostituire {hotkey} con qualsiasi scorciatoia ti sia comoda nelle impostazioni; il pulsante qui sotto le apre subito.\n\nLa prossima volta che premi {hotkey}, l'area precedente viene evidenziata: Enter o un clic all'interno cattura lo stesso punto.\n\nL'icona di ClipSD nell'area di notifica vicino all'orologio: il clic destro apre un menu da cui puoi ripetere questa presentazione.",
   "tour.capture_title": "Come fare uno screenshot",
   "tour.change_hotkey": "Cambia la scorciatoia nelle impostazioni",
-  "tour.color_text": "Il colore delle nuove annotazioni. «+» apre il selettore dei colori.\n\nSe sullo screenshot è selezionato un oggetto, il pulsante cambia il colore solo di quell'oggetto; il colore predefinito per le nuove annotazioni rimane invariato.",
+  "tour.color_text": "Il colore delle nuove annotazioni. «+» apre il selettore dei colori, e il colore scelto resta nella tavolozza (fino a tre colori personali, clic destro per rimuoverlo).\n\nSe sullo screenshot è selezionato un oggetto, cambia solo il suo colore; il pulsante «Continua con questo colore» nel suggerimento lo mantiene per le annotazioni successive.",
   "tour.color_title": "Colore",
   "tour.done_text": "«Copia» (Enter o Ctrl+C) mette lo screenshot con le annotazioni negli appunti e lascia la finestra aperta. «Copia e chiudi» (Ctrl+Enter) fa lo stesso e chiude la finestra. Poi incolla lo screenshot in un'app di messaggistica o in un documento. «Salva» (Ctrl+S) salva lo screenshot in formato PNG o JPEG.",
   "tour.done_title": "Fatto: copia o salva",

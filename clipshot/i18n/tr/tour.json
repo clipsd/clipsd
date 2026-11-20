@@ -9,7 +9,7 @@
   "tour.capture_text": "Herhangi bir programda {hotkey}: ekran donar, fareyle bir alan seçin, burada açılır. Seçim yapmadan basit bir tıklama tüm monitörü yakalar, Esc iptal eder.\n\n{hotkey} kısayolunu ayarlardan istediğiniz başka bir kısayolla değiştirebilirsiniz; aşağıdaki düğme ayarları hemen açar.\n\nBir sonraki {hotkey} kullanımında önceki alan vurgulanır: Enter veya içine tıklama aynı yeri yakalar.\n\nClipSD simgesi saatin yanındaki sistem tepsisindedir: sağ tıklayarak menüyü açabilir ve bu turu tekrarlayabilirsiniz.",
   "tour.capture_title": "Ekran görüntüsü nasıl alınır",
   "tour.change_hotkey": "Kısayolu ayarlardan değiştir",
-  "tour.color_text": "Yeni işaretlerin rengi. “+” renk seçiciyi açar.\n\nEkran görüntüsünde bir nesne seçiliyse düğme yalnızca o nesnenin rengini değiştirir; yeni işaretler için varsayılan renk aynı kalır.",
+  "tour.color_text": "Yeni işaretlerin rengi. “+” renk seçiciyi açar ve seçilen renk palette kalır (en fazla üç özel renk, sağ tıkla kaldırılır).\n\nEkran görüntüsünde bir nesne seçiliyse yalnızca onun rengi değişir; ipucundaki “Bu renkle devam et” düğmesi rengi sonraki işaretler için korur.",
   "tour.color_title": "Renk",
   "tour.done_text": "“Kopyala” (Enter veya Ctrl+C) işaretli ekran görüntüsünü panoya koyar, pencere açık kalır. “Kopyala ve kapat” (Ctrl+Enter) aynısını yapar ve pencereyi kapatır. Ardından ekran görüntüsünü bir mesajlaşma uygulamasına veya belgeye yapıştırın. “Kaydet” (Ctrl+S) ekran görüntüsünü PNG veya JPEG dosyası olarak kaydeder.",
   "tour.done_title": "Bitti: kopyala veya kaydet",

@@ -71,6 +71,32 @@ def tmpdir():
     return Path(tempfile.mkdtemp(prefix="clipsd-rate-q-", dir=os.environ.get("TMPDIR")))
 
 
+NET_S = 30   # ожидание ответа локального приёмника: wait() возвращается сразу, как только он ответил
+
+
+def thanks_settled(t, key="feedback.thanks_text"):
+    """Окно после отправки, когда фоновая отправка уже закончилась (delivery.done): итог показан или таймер окна
+    идёт и покажет его. Порядок «закончилась, потом окно» тут не важен: это и есть проверка без гонки."""
+    return t.status.text() == tr(key) or t.status_timer.isActive()
+
+
+class ScriptedDelivery:
+    """Отправка, которая заканчивается ровно после k-го чтения состояния: окно строится, пока она идёт.
+    Так гонка «отправка закончилась, пока строилось окно» проверяется без потоков и без зависимости от скорости."""
+
+    def __init__(self, k, final="sent"):
+        self.k, self.final, self.reads = k, final, 0
+        self.done = threading.Event()
+
+    @property
+    def state(self):
+        self.reads += 1
+        if self.reads > self.k:
+            self.done.set()
+            return self.final
+        return "sending"
+
+
 # ---------------------------------------------------------------- локальный приёмник
 
 class Receiver:
@@ -274,7 +300,7 @@ def test_send_and_queue():
     d2 = tmpdir()
     rx.codes = [201]
     dl = feedback.submit({}, 5, "", 2000, sender=rx.sender, directory=d2)
-    check(dl.done.wait(10) and dl.state == "sent", "фоновая отправка: отправлено")
+    check(dl.done.wait(NET_S) and dl.state == "sent", "фоновая отправка: отправлено")
     check(feedback.status_key(feedback.Delivery()) == "feedback.thanks_sending", "пока идёт отправка: «Отправляем…»")
 
 
@@ -302,7 +328,7 @@ def test_rating_dialog():
     dlg.send_btn.click()
     check(outcomes == ["sent"] and cfg.get("rating_disabled") and not cfg.get("rating_sent"),
           "«Отправить»: итог sent, окно больше не предлагается, «отправлено» ждёт ответа приёмника")
-    check(wait(lambda: dlg.delivery.done.is_set()) and dlg.delivery.state == "sent", "отправлено (201)")
+    check(dlg.delivery.done.wait(NET_S) and dlg.delivery.state == "sent", "отправлено (201)")
     check(feedback.has_rated(cfg, d) and feedback.delivered(d), "после 2xx оценка считается отправленной")
     body = json.loads(rx.requests[-1]["body"])
     check(body["stars"] == 4 and len(body["review"]) == 1000 and body["fill_ms"] >= 1000, "звёзды, отзыв и время окна")
@@ -340,6 +366,23 @@ def test_thanks_dialog():
     check(t.status.text() == tr("feedback.thanks_sending"), "пока отправляется: «Отправляем оценку…»")
     dl.finish("sent")
     check(wait(lambda: t.status.text() == tr("feedback.thanks_text")), "после 2xx: «Оценка отправлена»")
+    check(not t.status_timer.isActive(), "итог показан: таймер окна остановлен")
+
+    # отправка заканчивается, пока окно строится (после 0, 1, 2... чтений состояния): окно не застревает
+    # на «Отправляем оценку…» (1.32.1: нестабильный rating_test в облачной сборке Linux)
+    for final, key in (("sent", "feedback.thanks_text"), ("queued", "feedback.thanks_queued"),
+                       ("rejected", "feedback.thanks_rejected")):
+        for k in range(5):
+            sd = ScriptedDelivery(k, final)
+            w = feedback.build_thanks_dialog(5, "", sd)
+            ok = thanks_settled(w, key)
+            for _ in range(k + 1):        # шаги таймера окна, без ожидания времени
+                if not w.status_timer.isActive():
+                    break
+                w.refresh_status()
+            check(ok and w.status.text() == tr(key) and not w.status_timer.isActive(),
+                  f"отправка закончилась после {k}-го чтения ({final}): окно показывает итог")
+            w.close()
     urls = [b.url for b in t.link_buttons]
     check(urls == ["https://github.com/clipsd/clipsd"], f"каталоги: только включённые ({urls})")
     check(t.problem_button is None, "5 звёзд: без «Сообщить о проблеме»")
@@ -428,6 +471,8 @@ def test_flow():
     flow.dialog.text_edit.setPlainText("Медленно открывается")
     flow.dialog.send_btn.click()
     check(wait(lambda: flow.thanks is not None and flow.thanks.isVisible()), "после «Отправить»: окно с итогом")
+    check(flow.thanks.delivery.done.wait(NET_S) and flow.thanks.delivery.state == "sent", "приёмник ответил 201")
+    check(thanks_settled(flow.thanks), "окно не застряло на «Отправляем оценку…»")
     check(wait(lambda: flow.thanks.status.text() == tr("feedback.thanks_text")), "итог: «Оценка отправлена»")
     check(flow.thanks.problem_button is not None and "Медленно открывается" in urllib.parse.unquote(flow.thanks.issue_url),
           "2 звезды: задача на GitHub с текстом отзыва")
@@ -532,7 +577,7 @@ def test_already_rated():
     flow.dialog.set_stars(4)
     flow.dialog.send_btn.click()
     check(wait(lambda: flow.thanks is not None and flow.thanks.isVisible()), "оценка отправлена")
-    check(wait(lambda: flow.thanks.delivery.done.is_set()), "приёмник ответил")
+    check(flow.thanks.delivery.done.wait(NET_S), "приёмник ответил")
     flow.thanks.close()
     settle(2)
     check(ctx.config.get("rating_stars") == 4 and len(ctx.config.get("rating_day", "")) == 10,
@@ -592,10 +637,10 @@ def test_rejected_and_retry():
     # повтор из меню: новая оценка уходит и доходит
     flow.dialog.set_stars(5)
     flow.dialog.send_btn.click()
-    check(wait(lambda: flow.thanks is not None and flow.thanks.delivery.done.is_set())
+    check(wait(lambda: flow.thanks is not None and flow.thanks.delivery.done.is_set(), NET_S)
           and flow.thanks.delivery.state == "sent", "повтор из меню: приёмник принял (201)")
-    check(wait(lambda: flow.thanks.status.text() == tr("feedback.thanks_text")) and feedback.has_rated(ctx.config, d),
-          "повтор из меню: «Оценка отправлена»")
+    check(thanks_settled(flow.thanks) and feedback.has_rated(ctx.config, d), "повтор из меню: оценка учтена, окно не застряло")
+    check(wait(lambda: flow.thanks.status.text() == tr("feedback.thanks_text")), "повтор из меню: «Оценка отправлена»")
     flow.thanks.close()
     settle(2)
     again = feedback.RatingFlow(ctx, directory=d)

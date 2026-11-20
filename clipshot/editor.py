@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (QAbstractButton, QAbstractSpinBox, QKeySequenceEdit
                              QWidget)
 
 from . import hidpi, icons
-from .dialogs import ClipDialog
+from .dialogs import PALETTES as CARD_PALETTES, ClipDialog
 from .frame_extents import track_frame_extents
 from .i18n import dynamic, tr
 from .menus import style_menu
@@ -59,6 +59,8 @@ TOOLS = [   # порядок по умолчанию (1.31.1): перемеще�
 
 PALETTE = ["#d60808", "#ff8c00", "#ffd800", "#2db400", "#1e78ff", "#8b3dff", "#000000", "#808080", "#ffffff"]
 DRAW_TOOLS = {ARROW, DARROW, FARROW, FLINE, FSHAPE, LINE, RECT, ELLIPSE, MARKER, PENCIL, NUMBER, BLUR}
+STROKE_TOOLS = {MARKER, PENCIL}   # линии ведут вплотную друг к другу: только что проведённая не перехватывает нажатие
+OWN_COLORS_MAX = 3                # своих цветов из «+» в палитре, новый вытесняет самый старый
 HANDLE = 9   # размер ручки правки, px
 
 
@@ -89,6 +91,8 @@ class Canvas(QWidget):
     crop_confirmed = pyqtSignal()                    # рамка обрезки применена (кнопка, Enter или двойной щелчок)
     crop_state_changed = pyqtSignal()                # рамка обрезки появилась, подтверждена или отменена
     zoom_requested = pyqtSignal(float, object)       # Ctrl+колесо: во сколько раз изменить масштаб, глобальная точка
+    pressed = pyqtSignal()                           # нажатие мыши по снимку (подсказка про цвет объекта уходит)
+    size_wheeled = pyqtSignal(int)                   # колесо над выделенным объектом поменяло его толщину
     ZOOM_MIN, ZOOM_MAX = 0.1, 8.0
 
     def __init__(self, image: QImage, tool, color, size):
@@ -113,6 +117,11 @@ class Canvas(QWidget):
 
         self.current = None        # фигура, которая рисуется сейчас
         self.selected = None       # выделенная фигура: её можно двигать, тянуть за ручки, менять цвет/толщину
+        # Только что нарисованная фигура (выделена сразу после рисования, пока выделение не сменили). Маркер и
+        # карандаш: нажатие на неё начинает новую линию, перенос только за ручку или после щелчка по ней.
+        self.fresh = None
+        self._grab_on_click = None   # маркер начат поверх только что нарисованной линии: щелчок без сдвига выделит её
+        self._pen_saved = None     # правка готового текста: цвет, размер и цвет текста до неё (вернуть после)
         self.drag_from = None
         self.move_pending = False
         self.handle_index = None   # какую ручку выделенной фигуры тянут
@@ -207,6 +216,8 @@ class Canvas(QWidget):
             self.changed.emit()
 
     def select(self, shape):
+        if shape is not self.fresh:
+            self.fresh = None      # выделили другое или сняли выделение: только что нарисованного больше нет
         if shape is not self.selected:
             self.selected = shape
             self.selection_changed.emit(shape)
@@ -228,22 +239,52 @@ class Canvas(QWidget):
         self.update()
 
     def editing_object(self) -> bool:
-        """Выделен объект: кнопки цвета и толщины меняют только его, общие настройки не трогаются."""
+        """Выделен объект: кнопки цвета и толщины меняют только его; цвет и толщина следующих линий остаются
+        прежними, пока человек не нажмёт «Рисовать дальше…» в подсказке (EditorWindow._object_restyled)."""
         return self.selected is not None and self.selected in self.shapes and self.tool != ERASER
 
-    def set_color(self, color):
+    def pen_values(self):
+        """Цвет, толщина и цвет текста следующих линий. Во время правки готового текста поле берёт его цвет,
+        а настоящие значения лежат в _pen_saved."""
+        if self._pen_saved is not None:
+            return self._pen_saved
+        return self.color, self.pen_size, self.text_color
+
+    _KEEP = object()
+
+    def adopt_pen(self, color=None, size=None, text_color=_KEEP):
+        """«Рисовать дальше…»: цвет, толщина или цвет текста становятся значениями следующих линий."""
+        cur = list(self.pen_values())
+        if color is not None:
+            cur[0] = QColor(color)
+        if size is not None:
+            cur[1] = size
+        if text_color is not Canvas._KEEP:
+            cur[2] = QColor(text_color) if text_color is not None else None
+        if self._pen_saved is not None:
+            self._pen_saved = tuple(cur)   # поле правки текста оставляет свой цвет, после правки вернутся эти
+        else:
+            self.color, self.pen_size, self.text_color = cur
+
+    def set_color(self, color) -> bool:
+        """Вернёт True, если поменялся цвет следующих линий (его запоминают настройки). Выделен объект или
+        правится готовый текст: меняется только он, вернёт False."""
         if self.editing_object():
             if self.selected.color != QColor(color):
                 self.push_undo()
                 self.selected.color = QColor(color)
                 self.update()
-            return
+            return False
         self.color = QColor(color)
         if self.text_edit is not None:
             self._style_text_edit()
+            if self._pen_saved is not None:
+                return False       # правка готового текста: цвет только у него, после правки вернётся прежний
+        return True
 
-    def set_text_color(self, color):
-        """color — QColor или None (авто). Выделен номер/сноска — меняется только он, иначе общий выбор."""
+    def set_text_color(self, color) -> bool:
+        """color — QColor или None (авто). Выделен объект — меняется только он (номер, сноска); иначе общий
+        выбор. Вернёт True, если поменялся общий выбор."""
         new = QColor(color) if color is not None else None
         if self.editing_object():
             shape = self.selected
@@ -251,27 +292,33 @@ class Canvas(QWidget):
                 self.push_undo()
                 shape.text_color = new
                 self.update()
-            return
+            return False
         self.text_color = new
         if self.text_edit is not None:
             self._style_text_edit()
             self.update()
+            if self._pen_saved is not None:
+                return False
+        return True
 
-    def set_size(self, size):
+    def set_size(self, size) -> bool:
         if self.tool == ERASER:          # при ластике кнопки толщины задают размер кисти
             self.eraser_size = size
             self.update()
-            return
+            return False
         if self.editing_object():
             if self.selected.size != size:
                 self.push_undo()
                 self.selected.size = size
                 self.update()
-            return
+            return False
         self.pen_size = size
         if self.text_edit is not None:
             self.text_edit.setFont(self._edit_font(size))
             self._fit_text_edit()
+            if self._pen_saved is not None:
+                return False       # правка готового текста: размер только у него
+        return True
 
     def delete_selected(self):
         if self.selected in self.shapes:
@@ -724,6 +771,7 @@ class Canvas(QWidget):
             self.setCursor(Qt.CursorShape.CrossCursor)
 
     def mousePressEvent(self, event):
+        self.pressed.emit()
         if event.button() == Qt.MouseButton.RightButton:
             self._press_right(event)
             return
@@ -757,8 +805,10 @@ class Canvas(QWidget):
             self.handle_index = handle
             self.move_pending = True
             return
-        if self.tool != MOVE and self.selected is not None and self.selected.hit(pos):
-            # Только что нарисованный (выделенный) объект можно двигать любым инструментом.
+        if self.tool != MOVE and self.selected is not None and self.selected.hit(pos) and not (
+                self.selected is self.fresh and self.tool in STROKE_TOOLS):
+            # Выделенный объект можно двигать любым инструментом. Только что проведённый маркер или карандаш нет:
+            # следующую линию часто начинают вплотную к прошлой (её переносят за ручку или после щелчка по ней).
             self.drag_from = pos
             self.move_pending = True
             self._arm_click_edit(self.selected, event)
@@ -817,7 +867,9 @@ class Canvas(QWidget):
             self.crop_start = pos
             self.crop_rect = None
         elif self.tool in DRAW_TOOLS:
+            fresh = self.fresh if self.fresh is not None and self.fresh.hit(pos) else None
             self.select(None)
+            self._grab_on_click = fresh   # щелчок без сдвига по только что проведённой линии выделит её для переноса
             filled = ctrl and self.tool in (RECT, ELLIPSE, FSHAPE)
             self.current = Shape(self.tool, self.color, self.pen_size, pos, filled)
             if self.tool == NUMBER:
@@ -974,16 +1026,21 @@ class Canvas(QWidget):
             self.update_cursor(self._ep(event))
             self.update()
             return
+        grab, self._grab_on_click = self._grab_on_click, None
         if self.current is not None:
             shape, self.current = self.current, None
             if shape.kind == CALLOUT:
                 self._start_callout(shape)
+            elif shape.is_empty() and grab is not None and grab in self.shapes:
+                self.select(grab)    # щелчок по только что проведённой линии: теперь её можно тянуть
+                self.update_cursor(self._ep(event))
             elif not shape.is_empty():
                 if shape.kind in SMOOTHED_KINDS:
                     shape.points = simplify(shape.points, max(6.0, shape.pen_width * 1.2))   # дрожание руки до ~6 px
                 self.push_undo()
                 self.shapes.append(shape)
                 self.select(shape)   # сразу можно поправить толщину, цвет, тянуть за ручки
+                self.fresh = shape   # новый цвет для неё станет и цветом следующих линий
         elif self._text_drag:
             self._text_drag = False
             self._hl_points = []
@@ -1027,6 +1084,7 @@ class Canvas(QWidget):
                 self.push_undo()
                 shape.size = size
                 self.selection_changed.emit(shape)
+                self.size_wheeled.emit(size)
                 self.update()
             event.accept()
         else:
@@ -1054,6 +1112,9 @@ class Canvas(QWidget):
         self.push_undo()
         self.shapes.remove(shape)
         self.select(None)
+        # Поле правки берёт цвет и размер текста; цвет следующих линий после правки возвращается прежний.
+        self._pen_saved = (QColor(self.color), self.pen_size,
+                           QColor(self.text_color) if self.text_color is not None else None)
         self.color, self.pen_size = QColor(shape.color), shape.size
         self.text_color = QColor(shape.text_color) if shape.text_color is not None else None
         self.text_anchor = shape.points[0]
@@ -1143,11 +1204,16 @@ class Canvas(QWidget):
                 shape.points[-1] = shape.points[-1] + QPointF(dx, dy)
         else:
             shape = None
+        if self._pen_saved is not None:
+            self.color, self.pen_size, self.text_color = self._pen_saved
+            self._pen_saved = None
         if shape is not None:
             if original is None:
                 self.push_undo()
             self.shapes.append(shape)
             self.select(shape)
+            if original is None:
+                self.fresh = shape   # новый текст или сноска: как только что нарисованная линия
         self.setFocus()
         self.update()
 
@@ -2383,6 +2449,115 @@ class SwatchButton(QToolButton):
         super().leaveEvent(event)
 
 
+class PenHint(QFrame):
+    """Подсказка у палитры (1.32.1, решение владельца 20.11.2026). Цвет или толщина поменялись только у выделенного
+    объекта, новые линии рисуются как раньше; кнопка «Рисовать дальше…» делает новое значение текущим. Не окно:
+    карточка поверх снимка, рисовать не мешает, уходит сама через несколько секунд или при следующем действии;
+    повторная смена обновляет ту же карточку. Цвета карточки из общей палитры окон (dialogs.PALETTES)."""
+    SHOW_MS = 6000       # сколько держится без наведения мыши
+    LINGER_MS = 2500     # после того как мышь ушла с карточки
+    adopt = pyqtSignal()
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.setObjectName("penHint")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
+        self.target = None       # чей цвет поменяли: фигура или "text" (правка готового текста)
+        self.pending = {}        # что можно сделать текущим: color, size, text_color
+        self.kind = "color"
+        row = QHBoxLayout(self)
+        row.setContentsMargins(12, 9, 10, 9)
+        row.setSpacing(14)
+        texts = QVBoxLayout()
+        texts.setSpacing(2)
+        self.title = QLabel()
+        self.title.setObjectName("penHintTitle")
+        sub_row = QHBoxLayout()
+        sub_row.setSpacing(6)
+        self.sample = QLabel()   # прежний цвет: им рисуются новые линии
+        self.sample.setFixedSize(12, 12)
+        self.sub = QLabel()
+        self.sub.setObjectName("penHintSub")
+        sub_row.addWidget(self.sample, 0, Qt.AlignmentFlag.AlignVCenter)
+        sub_row.addWidget(self.sub, 1)
+        texts.addWidget(self.title)
+        texts.addLayout(sub_row)
+        row.addLayout(texts, 1)
+        self.button = QPushButton()
+        self.button.setObjectName("penHintButton")
+        self.button.setFocusPolicy(Qt.FocusPolicy.NoFocus)   # как кнопки палитры: фокус остаётся у снимка и поля текста
+        self.button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.button.clicked.connect(self.adopt)
+        row.addWidget(self.button, 0, Qt.AlignmentFlag.AlignVCenter)
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(18)
+        shadow.setOffset(0, 4)
+        shadow.setColor(QColor(0, 0, 0, 60))
+        self.setGraphicsEffect(shadow)
+        self.timer = QTimer(self)
+        self.timer.setSingleShot(True)
+        self.timer.timeout.connect(self.dismiss)
+        self.dark = False
+        self.apply_theme(False)
+        self.hide()
+
+    def apply_theme(self, dark: bool):
+        self.dark = bool(dark)
+        c = CARD_PALETTES[self.dark]
+        self.setStyleSheet(f"""
+QFrame#penHint {{ background: {c['card']}; border: 1px solid {c['edge']}; border-radius: 8px; }}
+QLabel#penHintTitle {{ color: {c['text']}; font-size: 13px; font-weight: bold; background: transparent; }}
+QLabel#penHintSub {{ color: {c['muted']}; font-size: 12px; background: transparent; }}
+QPushButton#penHintButton {{ color: {c['text']}; background: {c['card']}; border: 1px solid {c['line']};
+    border-radius: 6px; padding: 5px 12px; font-size: 13px; min-height: 18px; }}
+QPushButton#penHintButton:hover {{ background: {c['soft']}; }}
+QPushButton#penHintButton:pressed {{ background: {c['edge']}; }}
+""")
+
+    TEXTS = {"color": ("editor.pen_hint_color_title", "editor.pen_hint_color_sub", "editor.pen_hint_color_button"),
+             "size": ("editor.pen_hint_size_title", "editor.pen_hint_size_sub", "editor.pen_hint_size_button"),
+             "both": ("editor.pen_hint_both_title", "editor.pen_hint_both_sub", "editor.pen_hint_both_button")}
+
+    def show_kind(self, kind: str, pen_color):
+        """kind: color, size или both; pen_color: прежний цвет (образец рядом с пояснением) или None."""
+        self.kind = kind
+        title, sub, button = (tr(k) for k in self.TEXTS[kind])
+        self.title.setText(title)
+        self.sub.setText(sub)
+        self.button.setText(button)
+        self.button.setAccessibleName(button)
+        self.setAccessibleName(f"{title}. {sub}")
+        if pen_color is not None:
+            edge = "#6b7178" if self.dark else "#8a8f98"
+            self.sample.setStyleSheet(f"background: {QColor(pen_color).name()}; border: 1px solid {edge}; border-radius: 3px;")
+            self.sample.setToolTip(QColor(pen_color).name().upper())
+        self.sample.setVisible(pen_color is not None)
+        self.adjustSize()
+        self.show()
+        self.raise_()
+        self.timer.start(self.SHOW_MS)
+
+    def dismiss(self):
+        self.timer.stop()
+        self.hide()
+        self.pending = {}
+        self.target = None
+
+    def mousePressEvent(self, event):
+        """Щелчок по самой карточке мимо кнопки закрывает её, как щелчок по снимку (раньше пропадал впустую)."""
+        self.dismiss()
+        event.accept()
+
+    def enterEvent(self, event):
+        self.timer.stop()        # пока мышь на карточке, она не уходит
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        if self.isVisible():
+            self.timer.start(self.LINGER_MS)
+        super().leaveEvent(event)
+
+
 class BellButton(QToolButton):
     """Колокольчик уведомлений (1.32): красная точка в углу, когда есть непрочитанное."""
 
@@ -2558,6 +2733,9 @@ class EditorWindow(QMainWindow):
         self.canvas.changed.connect(self._canvas_changed)
         self.canvas.context_requested.connect(self.show_context_menu)
         self.canvas.zoom_requested.connect(self.zoom_by)
+        self.canvas.pressed.connect(self._dismiss_pen_hint)        # следующее действие на снимке убирает подсказку
+        self.canvas.size_wheeled.connect(lambda size: self._object_restyled(size=size))
+        self._pen_hint = None
         self.canvas.crop_state_changed.connect(self._update_info)
         self.canvas.crop_confirmed.connect(self.exit_crop_mode)   # обрезали любым способом: режим завершён
         self.canvas.text_selected.connect(self._text_selected)
@@ -2830,15 +3008,29 @@ class EditorWindow(QMainWindow):
             self.color_group.addButton(swatch)
             self.color_buttons[color] = swatch
             row2.addWidget(swatch)
+        # 1.32.1: свои цвета из «+» стоят образцами перед «+» (до трёх), щелчок сразу выбирает цвет
+        self.own_buttons = {}
+        self._own_row = row2
         self.custom_color = SwatchButton(None)
         self.custom_color.ring, self.custom_color.dark = QColor(pal["t"]), pal["dark"]
         self.custom_color.setText("+")
         self.custom_color.setToolTip(tr("editor.other_color"))
+        self.custom_color.setAccessibleName(tr("editor.other_color"))
         self.custom_color.clicked.connect(self.pick_custom_color)
         self.color_group.addButton(self.custom_color)
         row2.addWidget(self.custom_color)
-        if current not in self.color_buttons:
-            self._show_custom(current)
+        own = self._own_colors()
+        if not self.ctx.config.get("custom_colors_seen"):
+            # один раз: свой цвет 1.32.0 (был текущим) встаёт в палитру. Убранный потом образец насовсем не возвращается,
+            # даже если им ещё рисуют (цвет пера при этом остаётся прежним)
+            if current not in self.color_buttons and current not in own:
+                own = (own + [current])[-OWN_COLORS_MAX:]
+                self.ctx.config["custom_colors"] = own
+            self.ctx.config["custom_colors_seen"] = True
+            self.ctx.save_config()
+        for name in own:
+            self._add_own_button(name)
+        self._check_swatch(current)
         row2.addSpacing(6)
         row2.addWidget(_separator())
         row2.addSpacing(6)
@@ -3250,10 +3442,17 @@ class EditorWindow(QMainWindow):
     def _build_shortcuts(self):
         # Сочетание (QKeyCombination.toCombined) → действие: запасной путь для русской раскладки, см. eventFilter.
         self._key_slots = {}
+        # Сочетание, на котором уже есть QShortcut. Второй QShortcut на тех же клавишах Qt считает неоднозначным
+        # и не выполняет ни один (1.32.0: в Windows StandardKey.Redo тоже Ctrl+Y, и Ctrl+Y не работал).
+        bound = set()
 
         def bind(keys, slot):
             for key in keys:
-                QShortcut(QKeySequence(key), self, activated=slot)
+                seq = QKeySequence(key)
+                name = seq.toString(QKeySequence.SequenceFormat.PortableText)
+                if name and name not in bound:
+                    bound.add(name)
+                    QShortcut(seq, self, activated=slot)
                 sequences = (QKeySequence.keyBindings(key) if isinstance(key, QKeySequence.StandardKey)
                              else [QKeySequence(key)])
                 for seq in sequences:
@@ -3265,7 +3464,7 @@ class EditorWindow(QMainWindow):
         for level in range(1, 6):
             bind([str(level)], lambda lv=level: self.select_size(lv))
         bind([QKeySequence.StandardKey.Undo], self.canvas.undo)
-        bind(["Ctrl+Y", QKeySequence.StandardKey.Redo], self.canvas.redo)
+        bind(["Ctrl+Y", "Ctrl+Shift+Z"], self.canvas.redo)   # повтор одинаково в Windows и Linux, без StandardKey
         bind([QKeySequence.StandardKey.Save], self.save_and_close)
         bind([QKeySequence.StandardKey.Copy], self.copy_shortcut)
         bind([QKeySequence.StandardKey.SelectAll], self.select_all_shortcut)
@@ -3388,25 +3587,191 @@ class EditorWindow(QMainWindow):
             self.ctx.save_config()   # выбор сразу запоминается для следующего снимка
 
     def select_color(self, color):
+        """Ничего не выделено: цвет следующих линий (запоминается). Выделен объект: перекрашивается только он,
+        у палитры подсказка с кнопкой «Рисовать дальше этим цветом» (решение владельца 20.11.2026)."""
         color = QColor(color).name().lower()
-        editing = self.canvas.editing_object()
-        self.canvas.set_color(color)
-        if not editing:
-            self.ctx.config["color"] = color   # общий выбор запоминается; правка объекта — нет
+        if self.canvas.set_color(color):
+            self.ctx.config["color"] = color
             self.ctx.save_config()
+            self._dismiss_pen_hint()
+        else:
+            self._object_restyled(color=color)
         self._sync_controls()
 
-    def _show_custom(self, color):
-        self.custom_color.setChecked(True)
-        self.custom_color.setText("")
-        self.custom_color.set_color(color)
+    # --- свои цвета из «+» --------------------------------------------------
+
+    def _own_colors(self) -> list:
+        """Свои цвета из настроек: не больше OWN_COLORS_MAX, без повторов и без цветов основной палитры."""
+        out = []
+        raw = self.ctx.config.get("custom_colors")
+        for c in (raw if isinstance(raw, list) else []):   # не список (число, true, строка, словарь): пустой список
+            if isinstance(c, str) and QColor(c).isValid():
+                name = QColor(c).name().lower()
+                if name not in PALETTE and name not in out:
+                    out.append(name)
+        return out[-OWN_COLORS_MAX:]
+
+    def _add_own_button(self, name):
+        pal = palette(self.ctx.config)
+        swatch = SwatchButton(name)
+        swatch.ring, swatch.dark = QColor(pal["t"]), pal["dark"]
+        swatch.setToolTip(tr("editor.own_color_tip", color=name.upper()))
+        swatch.setAccessibleName(name.upper())
+        swatch.clicked.connect(lambda _c, col=name: self.select_color(col))
+        swatch.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        swatch.customContextMenuRequested.connect(lambda pos, col=name, b=swatch: self._own_color_menu(col, b, pos))
+        self.color_group.addButton(swatch)
+        self._own_row.insertWidget(self._own_row.indexOf(self.custom_color), swatch)
+        self.own_buttons[name] = swatch
+        return swatch
+
+    def _remove_own_button(self, name):
+        swatch = self.own_buttons.pop(name, None)
+        if swatch is not None:
+            self.color_group.removeButton(swatch)
+            self._own_row.removeWidget(swatch)
+            swatch.hide()
+            swatch.deleteLater()
+
+    def remember_own_color(self, color):
+        """Цвет из окна «Другой цвет…» встаёт в палитру образцом; новый вытесняет самый старый."""
+        name = QColor(color).name().lower()
+        own = self._own_colors()
+        if name in PALETTE or name in own:
+            return
+        own.append(name)
+        while len(own) > OWN_COLORS_MAX:
+            self._remove_own_button(own.pop(0))
+        self.ctx.config["custom_colors"] = list(own)
+        self.ctx.save_config()
+        self._add_own_button(name)
+        self._refit_width()
+
+    def forget_own_color(self, color):
+        name = QColor(color).name().lower()
+        self.ctx.config["custom_colors"] = [c for c in self._own_colors() if c != name]
+        self.ctx.save_config()
+        self._remove_own_button(name)
+        self._sync_controls()
+        self._refit_width()
+
+    def _own_color_menu(self, name, swatch, pos):
+        menu = QMenu(self)
+        style_menu(menu, self.ctx.config)
+        menu.addAction(tr("editor.remove_own_color")).triggered.connect(lambda: self.forget_own_color(name))
+        menu.exec(swatch.mapToGlobal(pos))
+
+    def _check_swatch(self, name):
+        """Отметить в палитре образец этого цвета; если такого нет, ни один не отмечен."""
+        button = self.color_buttons.get(name) or self.own_buttons.get(name)
+        if button is not None:
+            button.setChecked(True)
+            return
+        self.color_group.setExclusive(False)
+        for b in self.color_group.buttons():
+            b.setChecked(False)
+        self.color_group.setExclusive(True)
 
     def pick_custom_color(self):
         color = QColorDialog.getColor(QColor(self._shown_values()[0]), self, tr("editor.color"))
         if color.isValid():
+            self.remember_own_color(color.name())
             self.select_color(color.name())
         else:
             self._sync_controls()
+
+    # --- подсказка «изменён только этот объект» -----------------------------
+
+    def _object_restyled(self, color=None, size=None, text_color=Canvas._KEEP):
+        """Цвет, толщина или цвет текста поменялись только у выделенного объекта (или у правящегося текста):
+        показать или обновить подсказку у палитры. Если значение совпало с текущим для новых линий, предлагать
+        нечего."""
+        c = self.canvas
+        target = c.selected if c.editing_object() else ("text" if c.text_edit is not None else None)
+        if target is None:
+            return
+        hint = self._pen_hint
+        if hint is None:
+            hint = self._pen_hint = PenHint(self)
+            hint.apply_theme(palette(self.ctx.config)["dark"])
+            hint.adopt.connect(self._adopt_pending)
+        if hint.target is not target or not hint.isVisible():
+            hint.pending = {}
+            hint.target = target
+        pen_color, pen_size, pen_text = c.pen_values()
+        if color is not None:
+            if QColor(color) != QColor(pen_color):
+                hint.pending["color"] = QColor(color).name().lower()
+            else:
+                hint.pending.pop("color", None)
+        if size is not None:
+            if size != pen_size:
+                hint.pending["size"] = size
+            else:
+                hint.pending.pop("size", None)
+        if text_color is not Canvas._KEEP:
+            new = QColor(text_color).name().lower() if text_color is not None else None
+            old = QColor(pen_text).name().lower() if pen_text is not None else None
+            if new != old:
+                hint.pending["text_color"] = new
+            else:
+                hint.pending.pop("text_color", None)
+        if not hint.pending:
+            hint.dismiss()
+            return
+        keys = set(hint.pending)
+        kind = "size" if keys == {"size"} else ("both" if "size" in keys else "color")
+        hint.show_kind(kind, pen_color if "color" in keys else None)
+        self._place_pen_hint()
+
+    def _place_pen_hint(self):
+        """Под палитрой у левого края снимка; если там выделенный объект, справа, иначе внизу: подсказка не
+        закрывает то, с чем работают."""
+        hint = getattr(self, "_pen_hint", None)
+        if hint is None or not hint.isVisible():
+            return
+        view = self.scroll.viewport()
+        area = QRect(view.mapTo(self, QPoint(0, 0)), view.size())
+        first = self.color_buttons[PALETTE[0]]
+        x = max(area.left() + 8, first.mapTo(self, QPoint(0, 0)).x())
+        spots = [QPoint(x, area.top() + 8), QPoint(area.right() - hint.width() - 8, area.top() + 8),
+                 QPoint(x, area.bottom() - hint.height() - 8)]
+        busy = QRect()
+        sel = self.canvas.selected if self.canvas.editing_object() else None
+        if sel is not None:
+            z = self.canvas.zoom
+            r = sel.bounding_rect()
+            busy = QRect(self.canvas.mapTo(self, QPoint(int(r.left() * z), int(r.top() * z))),
+                          QSize(int(r.width() * z) + 1, int(r.height() * z) + 1)).adjusted(-6, -6, 6, 6)
+        spot = next((p for p in spots if not QRect(p, hint.size()).intersects(busy)), spots[0])
+        hint.move(spot)
+        hint.raise_()
+
+    def _adopt_pending(self):
+        """«Рисовать дальше…»: новое значение объекта становится текущим для следующих линий и запоминается."""
+        hint = self._pen_hint
+        pending = dict(hint.pending) if hint is not None else {}
+        if hint is not None:
+            hint.dismiss()
+        if not pending:
+            return
+        kw = {k: pending[k] for k in ("color", "size") if k in pending}
+        if "text_color" in pending:
+            kw["text_color"] = pending["text_color"]
+        self.canvas.adopt_pen(**kw)
+        cfg = self.ctx.config
+        if "color" in pending:
+            cfg["color"] = pending["color"]
+        if "size" in pending:
+            cfg["size"] = pending["size"]
+        if "text_color" in pending:
+            cfg["text_color"] = pending["text_color"] or ""
+        self.ctx.save_config()
+        self._sync_controls()
+
+    def _dismiss_pen_hint(self):
+        if self._pen_hint is not None and self._pen_hint.isVisible():
+            self._pen_hint.dismiss()
 
     def _build_text_color_button(self) -> QToolButton:
         """Кнопка «Цвет текста» (цифра в номере, текст в сноске): клик — палитра."""
@@ -3477,11 +3842,12 @@ class EditorWindow(QMainWindow):
         self.text_color_button.setIcon(QIcon(pix))
 
     def select_text_color(self, color):
-        editing = self.canvas.editing_object()
-        self.canvas.set_text_color(QColor(color) if color is not None else None)
-        if not editing:
+        if self.canvas.set_text_color(QColor(color) if color is not None else None):
             self.ctx.config["text_color"] = QColor(color).name() if color is not None else ""
             self.ctx.save_config()
+            self._dismiss_pen_hint()
+        else:
+            self._object_restyled(text_color=color)
         self._sync_controls()
 
     def pick_text_color(self):
@@ -3490,14 +3856,16 @@ class EditorWindow(QMainWindow):
             self.select_text_color(color.name())
 
     def select_size(self, size):
-        editing = self.canvas.editing_object()
-        self.canvas.set_size(size)
+        changed = self.canvas.set_size(size)
         if self.canvas.tool == ERASER:
             self.ctx.config["eraser_size"] = size
             self.ctx.save_config()
-        elif not editing:
+        elif changed:
             self.ctx.config["size"] = size
             self.ctx.save_config()
+            self._dismiss_pen_hint()
+        else:
+            self._object_restyled(size=size)
         self._sync_controls()
 
     def _shown_values(self):
@@ -3512,17 +3880,16 @@ class EditorWindow(QMainWindow):
 
     def _sync_controls(self):
         color, size, text_color, shape = self._shown_values()
-        name = QColor(color).name().lower()
-        if name in self.color_buttons:
-            self.color_buttons[name].setChecked(True)
-        else:
-            self._show_custom(name)
+        self._check_swatch(QColor(color).name().lower())
         self.size_group.button(size).setChecked(True)
         self._update_text_color_button()
         self._update_info()
 
-    def _selection_changed(self, _shape):
+    def _selection_changed(self, shape):
         """Выделили объект — кнопки показывают его свойства и меняют только его; сняли — общий выбор."""
+        hint = self._pen_hint
+        if hint is not None and hint.isVisible() and hint.target is not shape:
+            hint.dismiss()       # выделили другое или сняли выделение: подсказка была про прежний объект
         self._sync_controls()
 
     def paste_image(self):
@@ -4387,6 +4754,11 @@ class EditorWindow(QMainWindow):
             act.setCheckable(True)
             act.setChecked(shape.color.name().lower() == color)
             act.triggered.connect(lambda _c, col=color: self.select_color(col))
+        for color in self.own_buttons:   # 1.32.1: свои цвета из «+»
+            act = colors.addAction(_color_icon(color), color.upper())
+            act.setCheckable(True)
+            act.setChecked(shape.color.name().lower() == color)
+            act.triggered.connect(lambda _c, col=color: self.select_color(col))
         colors.addSeparator()
         colors.addAction(tr("editor.ctx_other")).triggered.connect(self.pick_custom_color)
         if shape.kind != IMAGE:
@@ -4502,9 +4874,11 @@ class EditorWindow(QMainWindow):
         self.setStyleSheet(make_style(cfg))
         self.frame_px = theme(cfg)["ui_frame"]
         pal = palette(cfg)
-        for sw in list(self.color_buttons.values()) + [self.custom_color]:
+        for sw in list(self.color_buttons.values()) + list(self.own_buttons.values()) + [self.custom_color]:
             sw.ring, sw.dark = QColor(pal["t"]), pal["dark"]
             sw.update()
+        if self._pen_hint is not None:
+            self._pen_hint.apply_theme(pal["dark"])
         self.bell_button.ring = QColor(pal["panel"])
         self.ocr_button.setIcon(icons.icon("ocr", soft_colors("ocr", pal["dark"])[1]))
         self.tr_all_button.setIcon(icons.icon("translate_all", soft_colors("tr", pal["dark"])[1]))
@@ -4695,6 +5069,7 @@ class EditorWindow(QMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._adapt_rows()   # 1.32: группы, большие кнопки второго ряда и подписи внизу по ширине окна
+        self._place_pen_hint()
         if getattr(self, "_zoom_fit_mode", False):
             QTimer.singleShot(0, self.zoom_fit)
 

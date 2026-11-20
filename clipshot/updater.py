@@ -1389,6 +1389,8 @@ class Updater(QObject):
         mark_notified(self.config, now)
         if critical:
             self._critical_offered_at = now
+            self._critical_recall = False   # окно показано сейчас, любой ответ человека закрывает вопрос (П4 проверки 1.32.1);
+                                            # Alt+W во время окна взведёт повтор заново (clear_way_for_capture)
         self._save()
         if action == "manual_install":
             self.busy = False

@@ -46,6 +46,7 @@ DEFAULTS = {
     "color": "#d60808",
     "size": 2,
     "text_color": "",               # цвет текста в номере и сноске; пусто — авто
+    "custom_colors": [],            # 1.32.1: свои цвета из «+» в палитре редактора (до трёх, новый вытесняет старый)
     "show_zoom": True,
     "show_size": True,
     "last_region": None,
@@ -269,6 +270,7 @@ class Clipshot(QObject):
         self.quit_reason = ""  # почему программа выходит: "", "update", "signal"
         self._signal_pipe = None
         self._rating = None    # окно оценки (feedback.RatingFlow), пока открыто
+        self.rating_draft = None   # 1.32.1: звёзды и отзыв окна оценки, закрытого через Alt+W (только в памяти)
         self._rating_timer = None
         self._rating_quiet_timer = None   # ждёт спокойной минуты, пока правила позволяют окно оценки
         self._rating_quiet_since = None   # с какого момента (time.monotonic) спокойно; None: не спокойно
@@ -369,6 +371,7 @@ class Clipshot(QObject):
         updater = getattr(self, "_updater", None)
         if updater is not None:
             updater._prompt_quiet_since = None
+            updater._recall_quiet_since = None   # срочное окно после Alt+W (update_prompt.recall_critical)
 
     def rating_blocker(self) -> str:
         """Почему окну оценки сейчас не время ("" = спокойно): окно выделения, редактор, модальное окно
@@ -686,12 +689,14 @@ class Clipshot(QObject):
     def clear_way_for_capture(self) -> int:
         """1.32 (Б1 проверки): Alt+W работает всегда. Окно оценки и окна обновления модальные: под ними окно
         выделения не получает ни мыши, ни клавиш, а на X11 ещё и держит клавиатуру (застывший экран без выхода).
-        Перед выделением они закрываются, как кнопкой «Позже»: оценка по правилам снова через 30 дней; предложение
-        обновления «Позже» (updater._present: ещё 3 дня или 20 снимков, срочное напомнит через сутки); прочие окна
-        обновления (что нового, сбой, сведения) работы не держат, как и при выходе для обновления (quit_blocker).
-        Возвращает, сколько мс подождать до снимка: 0, если ничего не закрывалось."""
+        Перед выделением они закрываются, как кнопкой «Позже»: оценка по правилам снова через 30 дней (набранный
+        отзыв остаётся черновиком до следующего открытия окна); предложение обновления «Позже» (updater._present:
+        ещё 3 дня или 20 снимков); срочное придёт снова после снимка в спокойную минуту (update_prompt.recall_critical,
+        1.32.1); прочие окна обновления (что нового, сбой, сведения) работы не держат, как и при выходе для
+        обновления (quit_blocker). Возвращает, сколько мс подождать до снимка: 0, если ничего не закрывалось."""
         from PyQt6.QtWidgets import QDialog
         closed = self._rating is not None and self._rating.close_for_capture()
+        critical = False
         for _ in range(8):   # окно в окне (сбой обновления -> отчёт): по одному, начиная с верхнего
             windows = [w for w in QApplication.topLevelWidgets()
                        if w.isVisible() and w.isModal() and w.property("clipsd_closable")]
@@ -699,11 +704,16 @@ class Clipshot(QObject):
                 break
             top = QApplication.activeModalWidget()
             w = top if top in windows else windows[0]
+            critical = critical or (getattr(w, "critical", False) is True and type(w).__name__ == "OfferDialog")
             if isinstance(w, QDialog):
                 w.reject()   # exec() окна вернёт выбор по умолчанию: «Позже» (OfferDialog), «Закрыть» (FailedDialog)
             else:
                 w.close()
             closed = True
+        updater = getattr(self, "_updater", None)
+        if critical and updater is not None:
+            from . import update_prompt
+            update_prompt.recall_critical(updater)
         return self.CLEAR_WAY_MS if closed else 0
 
     def _modal_in_the_way(self):

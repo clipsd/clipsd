@@ -1,0 +1,6 @@
+- Düzenleyicide yineleme. Ctrl+Y, geri alınan işlemi yeniden yineliyor: Windows'ta bu kısayol çalışmıyordu. Ctrl+Shift+Z de çalışır.
+- ClipSD'yi değerlendirme. Gönderimden sonraki pencere, değerlendirme ulaştığında artık “Değerlendirme gönderiliyor…” yazısında kalmıyor. Değerlendirme sırasında Alt+W'ye basarsanız yazdığınız yorum kaybolmaz: değerlendirme penceresini bir sonraki açışınızda geri gelir.
+- Acil güncelleme. “Acil ClipSD güncellemesi” penceresi bir ekran görüntüsü (Alt+W) nedeniyle kapandıysa, ekran görüntüsünü bitirdiğinizde yeniden görünür, bir gün sonra değil.
+- Seçili nesnenin rengi. Seçili nesnenin rengi ve kalınlığı yalnızca o nesnede değişir. Yeni çizgiler önceki renkte kalsın istenirse, paletin altında “Bu renkle devam et” düğmesiyle bir ipucu belirir.
+- Kendi renkleriniz. “+” ile seçilen renkler, “+” düğmesinin önünde örnekler olarak hatırlanır. En fazla üç örnek tutulur, sağ tık bir örneği kaldırır.
+- Vurgulayıcı ve kalem. Bir çizgiye önceki çizginin kenarına bitişik başlarsanız yeni bir çizgi çizilir, önceki çizgi yerinden oynamaz.
