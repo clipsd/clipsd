@@ -133,3 +133,8 @@ For developers
   Builds: packaging/linux/build_linux.sh and packaging/windows-exe/build.ps1 (exact package versions with hashes
   in packaging/requirements-build-*.txt), cloud builds in .github/workflows. Release: tools/release.sh.
   Tests: each tests/*_test.py in its own process, QT_QPA_PLATFORM=offscreen.
+
+## Code signing policy
+
+Free code signing provided by SignPath.io, certificate by SignPath Foundation.
+Roles, what is signed, privacy: https://clipsd.github.io/en/code-signing.html#policy

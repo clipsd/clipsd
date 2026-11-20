@@ -135,3 +135,9 @@ Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко). Лицензи�
   Сборки: packaging/linux/build_linux.sh и packaging/windows-exe/build.ps1 (точные версии пакетов с хешами
   в packaging/requirements-build-*.txt), облачные сборки в .github/workflows. Выпуск: tools/release.sh.
   Тесты: каждый tests/*_test.py отдельным процессом, QT_QPA_PLATFORM=offscreen.
+
+## Политика подписи кода (Code signing policy)
+
+Free code signing provided by SignPath.io, certificate by SignPath Foundation.
+Бесплатную подпись кода предоставляет SignPath.io, сертификат выдан SignPath Foundation.
+Роли, что подписывается, конфиденциальность: https://clipsd.github.io/ru/code-signing.html#policy
