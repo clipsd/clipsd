@@ -119,6 +119,78 @@ def socket_path() -> str:
     return os.path.join(private_dir(), socket_name())
 
 
+class InstanceLock:
+    """One running copy per user (and per kind: the package and the sources each have their own), held for the whole
+    life of the process (Г6 of the race review of 1.32.2). The check "does a copy answer on the channel" and opening
+    the own channel were apart in time: two starts within ~0.2 s both started, the second removed the channel of the
+    first, and the settings of the two overwrote each other.
+    Linux: flock on <channel>.lock next to the socket (the folder of the socket is private to the user).
+    Windows: a named mutex Local\\SergeyDayneko.ClipSD.Instance.<channel name>.
+    The system releases both when the process ends, os._exit and a crash included. A system where the lock cannot be
+    made at all counts as acquired (the program works as before, without this protection)."""
+
+    def __init__(self, name: str = ""):
+        self.name = name or socket_path()
+        self._fd = None
+        self._handle = None
+
+    def acquire(self) -> bool:
+        """Take the lock without waiting. False: another copy holds it (it runs, or is starting up)."""
+        if self._fd is not None or self._handle is not None:
+            return True
+        if os.name == "nt":
+            return self._acquire_windows()
+        try:
+            import fcntl
+        except ImportError:
+            return True
+        path = self.name + ".lock"
+        for _ in range(5):
+            try:
+                fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0), 0o600)
+            except OSError:
+                return True
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                os.close(fd)
+                return False
+            except OSError:   # a file system without locks: as before 1.32.3
+                os.close(fd)
+                return True
+            try:   # the file may have been replaced meanwhile: the lock counts only on the file that is there now
+                same = os.path.samestat(os.fstat(fd), os.stat(path))
+            except OSError:
+                same = False
+            if same:
+                self._fd = fd
+                return True
+            os.close(fd)
+        return True
+
+    def _acquire_windows(self) -> bool:
+        try:
+            import ctypes
+            from ctypes import wintypes
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+            kernel32.CreateMutexW.restype = wintypes.HANDLE
+            kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+            kernel32.WaitForSingleObject.restype = wintypes.DWORD
+            kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+            handle = kernel32.CreateMutexW(None, False, "Local\\SergeyDayneko.ClipSD.Instance." + self.name)
+            if not handle:
+                return True
+            state = kernel32.WaitForSingleObject(handle, 0)
+            if state in (0, 0x80):   # WAIT_OBJECT_0, WAIT_ABANDONED (the holder ended without releasing it)
+                self._handle = handle
+                return True
+            kernel32.CloseHandle(handle)
+            return False
+        except (AttributeError, OSError):
+            return True
+
+
 def command_from_args(args) -> str:
     if args == ["--region"]:
         return "region"

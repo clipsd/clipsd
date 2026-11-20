@@ -1,0 +1,11 @@
+- Program nie zamyka się już sam, gdy zamkniesz edytor zaraz po „Kopiuj tekst” albo zaraz po otwarciu zamkniesz pierwszy zrzut po instalacji.
+- Aktualizacje. Esc lub krzyżyk w oknie pobierania tylko chowają okno, pobieranie trwa dalej; wcześniej program się zamykał. „Spróbuj ponownie” w oknie błędu nie zaczyna już drugiego pobierania, gdy jedno trwa.
+- Aktualizacje. Zrzut skopiowany tuż przed ponownym uruchomieniem dla aktualizacji nie znika już ze schowka: po „Kopiuj i zamknij” albo skopiowaniu w trakcie pobierania program czeka do 2 minut, żebyś zdążył go wkleić, i dopiero potem uruchamia się ponownie.
+- Aktualizacje. Okno błędu i „Co nowego” nie pojawiają się już nad oknem zaznaczania ani edytorem: pojawiają się minutę po tym, jak skończysz. Jeśli program wcześniej się zamknie, okno błędu pojawi się przy następnym uruchomieniu.
+- Aktualizacje. „Sprawdź aktualizacje” odpowiada oknem także wtedy, gdy program akurat sam sprawdza aktualizacje. Jeśli okno błędu aktualizacji jest otwarte, przycisk wysuwa je na wierzch.
+- Linux. Alt+W w trakcie instalowania aktualizacji nie psuje już aktualizacji.
+- Dwa uruchomienia niemal jednocześnie, na przykład podwójne kliknięcie ikony, nie dają już dwóch kopii programu z dwiema ikonami.
+- Kliknięcie ikony zawsze otwiera zaznaczanie: okno oceny ani propozycja aktualizacji nie pojawiają się już zamiast niego.
+- Jeśli skrót klawiszowy do zrzutu jest zajęty przez inny program, komunikat o tym już nie ginie (Windows i Linux poza GNOME): wcześniej skrót po prostu po cichu nie działał.
+- Dwa zrzuty zapisane w tej samej sekundzie nie nadpisują się już nawzajem: drugi plik dostaje w nazwie _2.
+- Tłumaczenie fragmentami. Licznik pozostałych znaków nie rozjeżdża się już, gdy tłumaczy się kilka fragmentów naraz. Komunikat o błędzie na małym fragmencie widać w całości. Jeśli zmienisz język dokładnie pod koniec tłumaczenia, komunikat, że nie znaleziono tekstu, nie jest już pokazywany jako błąd.

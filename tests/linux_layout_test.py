@@ -10,6 +10,7 @@ shell script. The test also compares key paths of the REAL home before and after
 Run from the project root:   python3 tests/linux_layout_test.py
 Exit code 0: all checks passed.
 """
+import tmpclean  # noqa: F401  (временные папки этого теста убираются при его выходе)
 import json
 import os
 import pwd

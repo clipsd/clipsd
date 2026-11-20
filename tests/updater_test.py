@@ -10,6 +10,7 @@ Keys are generated in a temporary folder. Real config, services and dconf are no
 Run: QT_QPA_PLATFORM=offscreen python3 tests/updater_test.py [project] [output folder]
 """
 
+import tmpclean  # noqa: F401  (временные папки этого теста убираются при его выходе)
 import hashlib
 import http.server
 import io

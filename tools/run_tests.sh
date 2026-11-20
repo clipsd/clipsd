@@ -12,6 +12,7 @@ for t in tests/${1:-*}_test.py; do
         XDG_RUNTIME_DIR=$tmp/run QT_QPA_PLATFORM=${QT_QPA_PLATFORM:-offscreen} CLIPSD_LANG=${CLIPSD_LANG:-ru} \
         timeout 600 "$PY" "$t" 2>&1)
   rc=$?
+  rm -rf "$tmp"   # своя временная папка теста (1.32.3: раньше оставалась после каждого прогона)
   if [ $rc -eq 0 ]; then echo "OK   $t"; else echo "FAIL $t (rc=$rc)"; echo "$out" | tail -15 | sed 's/^/     /'; fail=1; fi
 done
 exit $fail

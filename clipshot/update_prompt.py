@@ -89,6 +89,9 @@ def busy_reason(ctx) -> str:
     несохранённые пометки, открытое модальное окно (Clipshot.quit_blocker)."""
     if getattr(ctx, "selector", None) is not None or getattr(ctx, "insert_target", None) is not None:
         return "selector"
+    pending = getattr(ctx, "capture_pending", None)
+    if pending is not None and pending():
+        return "selector"   # снимок запрошен, окно выделения откроется через доли секунды (Г10 проверки гонок)
     if getattr(ctx, "editors", None):
         return "editor"
     blocker = getattr(ctx, "quit_blocker", None)

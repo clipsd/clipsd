@@ -13,6 +13,7 @@ example in that language and keeps the marks on it; a cropped example and an ord
 
 Run: QT_QPA_PLATFORM=offscreen python3 tests/demo_lang_test.py [folder for snapshots]
 """
+import tmpclean  # noqa: F401  (временные папки этого теста убираются при его выходе)
 import os
 import re
 import sys

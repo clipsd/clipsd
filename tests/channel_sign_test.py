@@ -8,6 +8,7 @@ No network, no Qt. Keys and documents live in a temporary folder; the signer's "
 Run: python3 tests/channel_sign_test.py [project]
 """
 
+import tmpclean  # noqa: F401  (временные папки этого теста убираются при его выходе)
 import hashlib
 import json
 import os

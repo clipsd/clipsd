@@ -1,0 +1,11 @@
+- Le programme ne se ferme plus tout seul si vous fermez l'éditeur juste après « Copier le texte », ou si vous fermez la toute première capture juste après son ouverture.
+- Mises à jour. Échap ou la croix de la fenêtre de téléchargement masquent seulement la fenêtre, le téléchargement continue ; avant, le programme se fermait. « Réessayer » dans la fenêtre d'échec ne lance plus un second téléchargement pendant un téléchargement.
+- Mises à jour. Une capture copiée juste avant le redémarrage pour une mise à jour ne disparaît plus du presse-papiers : après « Copier et fermer » ou une copie faite pendant le téléchargement, le programme attend jusqu'à 2 minutes pour que vous puissiez la coller, et ne redémarre qu'ensuite.
+- Mises à jour. La fenêtre d'échec et « Nouveautés » ne s'affichent plus par-dessus la fenêtre de sélection ou l'éditeur : elles apparaissent une minute après que vous avez terminé. Si le programme se ferme avant, la fenêtre d'échec apparaît au démarrage suivant.
+- Mises à jour. « Rechercher des mises à jour » répond par une fenêtre même quand le programme est justement en train de vérifier les mises à jour de lui-même. Si la fenêtre d'échec de la mise à jour est ouverte, le bouton la ramène au premier plan.
+- Linux. Alt+W pendant l'installation d'une mise à jour ne fait plus échouer la mise à jour.
+- Deux lancements presque simultanés, par exemple un double-clic sur l'icône, ne donnent plus deux copies du programme avec deux icônes.
+- Un clic sur l'icône ouvre toujours la sélection : la fenêtre d'évaluation ou une proposition de mise à jour ne s'affiche plus à sa place.
+- Si le raccourci de capture est déjà pris par un autre programme, le message qui le signale ne se perd plus (Windows et Linux hors GNOME) : avant, le raccourci ne fonctionnait pas, sans rien dire.
+- Deux captures enregistrées dans la même seconde ne s'écrasent plus : le second fichier reçoit _2 dans son nom.
+- Traduction par morceaux. Le compteur des caractères restants ne se dérègle plus quand plusieurs morceaux sont traduits en même temps. Un message d'erreur sur un petit morceau s'affiche en entier. Si vous changez de langue juste à la fin d'une traduction, le message indiquant qu'aucun texte n'a été trouvé ne s'affiche plus comme une erreur.

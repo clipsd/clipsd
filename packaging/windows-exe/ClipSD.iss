@@ -18,7 +18,7 @@
 
 #define AppName "ClipSD"
 #ifndef AppVersion
-  #define AppVersion "1.32.2"
+  #define AppVersion "1.32.3"
 #endif
 #define LauncherExe "ClipSD.exe"
 #define ProgramExe "ClipSD-app.exe"

@@ -1,0 +1,11 @@
+- The program no longer closes by itself if you close the editor right after “Copy text”, or close the very first screenshot right after it opens.
+- Updates. Esc or the cross in the download window only hide the window, the download continues; before, the program closed. “Try again” in the failure window during a download no longer starts a second download.
+- Updates. A screenshot copied just before the restart for an update no longer disappears from the clipboard: after “Copy and close” or a copy made during the download, the program waits up to 2 minutes so that you can paste it, and only then restarts.
+- Updates. The failure window and “What's new” no longer appear over the selection window or the editor: they show up a minute after you finish. If the program closes before then, the failure window appears at the next start.
+- Updates. “Check for updates” answers with a window even when the program happens to be checking for updates by itself. If the update failure window is open, the button brings it to the front.
+- Linux. Alt+W while an update is being installed no longer breaks the update.
+- Two starts at almost the same time, for example a double click on the icon, no longer give two copies of the program with two icons.
+- A click on the icon always opens the selection: the rating window or an update offer no longer appears instead.
+- If the screenshot key combination is taken by another program, the message about it no longer gets lost (Windows and Linux outside GNOME): before, the combination silently did not work.
+- Two screenshots saved in the same second no longer overwrite each other: the second file gets _2 in its name.
+- Translating in pieces. The count of remaining characters no longer goes wrong when several pieces are translated at once. An error message on a small piece is shown in full. If you switch the language right at the end of a translation, the message that no text was found is no longer shown as an error.

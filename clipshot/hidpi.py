@@ -14,6 +14,7 @@
 """
 
 import base64
+import os
 import struct
 import sys
 import zlib
@@ -138,6 +139,34 @@ def png_bytes(image: QImage) -> bytes:
 
 
 # --- выдача: файл и буфер обмена --------------------------------------------
+
+def reserve_path(folder: str, stem: str, ext: str) -> str:
+    """Свободное имя файла в папке, занятое сразу (пустой файл, O_CREAT | O_EXCL): stem.ext, stem_2.ext, stem_3.ext...
+    Второе сохранение в ту же секунду, в этой программе или в другой её копии, получает следующее имя, а не пишет
+    поверх первого (Г9 проверки гонок 1.32.2: два редактора, Ctrl+S подряд, первый снимок молча терялся).
+    OSError: папки нет или в неё нельзя писать."""
+    n = 1
+    while True:
+        path = os.path.join(folder, f"{stem}.{ext}" if n == 1 else f"{stem}_{n}.{ext}")
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+        except FileExistsError:
+            n += 1
+            if n > 100_000:
+                raise
+            continue
+        os.close(fd)
+        return path
+
+
+def discard_reserved(path: str) -> None:
+    """Сохранение не удалось: убрать пустой файл, занятый reserve_path (файл с содержимым не трогается)."""
+    try:
+        if path and os.path.getsize(path) == 0:
+            os.remove(path)
+    except OSError:
+        pass
+
 
 def save_image(image: QImage, path: str, config=None) -> bool:
     """Сохранить снимок в файл по настройке «Размер снимка». PNG — с плотностью pHYs, JPG — с плотностью JFIF."""

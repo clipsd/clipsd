@@ -1212,14 +1212,7 @@ class TranslateMixin:
             if card.full:
                 self._tr_busy_label(p, QPointF(c.x(), c.y() + radius + 12), self.tr_full_wait)
         elif card.state == "error":
-            text = card.message
-            if card.email_help():
-                text += "\n\n" + tr("translate_ui.no_registration")
-            elif card.key_help():
-                text += "\n\n" + tr("translate_ui.setup_note")
-            elif card.help is not None and card.help.command:
-                text += "\n" + card.help.command
-            self._tr_notice(p, reg, text)
+            self._tr_notice(p, reg, self._tr_error_text(card))
         if not (self.tr_chip or card.state == "error"):   # ошибке нужны её кнопки («Подключить Google…»), остальным нет
             card.chip, card.handle, card.buttons = QRectF(), QRectF(), {}
             if getattr(self, "mini", False) or getattr(self, "crowded", False):
@@ -1400,14 +1393,33 @@ class TranslateMixin:
         p.drawText(QRectF(box.left(), box.top() + 27, box.width(), 18), Qt.AlignmentFlag.AlignCenter, sub)
         p.restore()
 
+    def _tr_error_text(self, card) -> str:
+        """Текст карточки ошибки перевода: сообщение и подсказка, что делать."""
+        text = card.message
+        if card.email_help():
+            text += "\n\n" + tr("translate_ui.no_registration")
+        elif card.key_help():
+            text += "\n\n" + tr("translate_ui.setup_note")
+        elif card.help is not None and card.help.command:
+            text += "\n" + card.help.command
+        return text
+
+    def _tr_notice_box(self, reg: QRectF, text: str, window_width: int = None):
+        """Место карточки сообщения (_tr_notice) в координатах окна и высота строк текста. Не меньше 220x56 точек: на
+        маленьком куске она больше самого куска. window_width: прижать к правому краю окна такой ширины."""
+        font = self._chip_font(13, bold=False)
+        width = int(max(220, min(reg.width() - 16, 560)))
+        br = QFontMetrics(font).boundingRect(QRect(0, 0, width - 64, 2000), Qt.TextFlag.TextWordWrap, text)
+        box = QRectF(reg.left() + 8, reg.top() + 8, width, max(br.height() + 24, 56))
+        if window_width is not None:
+            box.moveLeft(max(4.0, min(box.left(), window_width - box.width() - 4)))
+        return box, br.height()
+
     def _tr_notice(self, p: QPainter, reg: QRectF, text: str):
         """Предупреждение в стиле окон ClipSD: светлая карточка, оранжевый значок «!», тёмный текст."""
         font = self._chip_font(13, bold=False)
-        fm = QFontMetrics(font)
-        width = int(max(220, min(reg.width() - 16, 560)))
-        br = fm.boundingRect(QRect(0, 0, width - 64, 2000), Qt.TextFlag.TextWordWrap, text)
-        box = QRectF(reg.left() + 8, reg.top() + 8, width, max(br.height() + 24, 56))
-        box.moveLeft(max(4.0, min(box.left(), self.width() - box.width() - 4)))
+        box, text_h = self._tr_notice_box(reg, text, self.width())
+        width = int(box.width())
         p.save()
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         p.setPen(QPen(QColor("#f5c45b"), 1))
@@ -1422,7 +1434,7 @@ class TranslateMixin:
         p.drawText(circle, Qt.AlignmentFlag.AlignCenter, "!")
         p.setPen(QColor("#3b2f12"))
         p.setFont(font)
-        p.drawText(QRectF(box.left() + 52, box.top() + 12, width - 64, br.height() + 4),
+        p.drawText(QRectF(box.left() + 52, box.top() + 12, width - 64, text_h + 4),
                    int(Qt.TextFlag.TextWordWrap) | int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop), text)
         p.restore()
 
@@ -2477,6 +2489,12 @@ class FloatingTranslation(TranslateMixin, QWidget):
             elif side == "left":
                 h = max(h, int(card.content.top() + self.CHIP_H) + m)
             h += self.CHIP_SPACE if side == "below" else 0
+            if card.state == "error":
+                # карточка сообщения об ошибке не меньше 220x56 и на маленьком куске выходит за него: окно (и маска,
+                # _input_region) должны вмещать её целиком (П5 проверки 1.32.2: текст обрезался справа и снизу)
+                note, _ = self._tr_notice_box(QRectF(card.region), self._tr_error_text(card))
+                w = max(w, int(note.right()) + 4)
+                h = max(h, int(note.bottom()) + 4)
         if (w, h) != (self.width(), self.height()):
             self.resize(w, h)
         self._update_mask()
@@ -2511,6 +2529,9 @@ class FloatingTranslation(TranslateMixin, QWidget):
             return QRegion()
         box = QRectF(card.content)
         region = QRegion(box.adjusted(-6, -6, 6, 6).toAlignedRect())
+        if card.state == "error":   # карточка сообщения шире и выше маленького куска (П5 проверки 1.32.2)
+            note, _ = self._tr_notice_box(QRectF(card.region), self._tr_error_text(card), self.width())
+            region = region.united(QRegion(note.adjusted(-2, -2, 2, 4).toAlignedRect()))
         if (self.tr_chip or card.state == "error") and self.chip_side != "none":
             chip = self._tr_chip_rect(card)
             region = region.united(QRegion(chip.adjusted(-10, -6, 10, 14).toAlignedRect()))

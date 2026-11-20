@@ -11,6 +11,7 @@ Skipped (exit 0) where there is no user manager (CI runners, containers).
 
 Run: python3 tests/systemd_run_test.py
 """
+import tmpclean  # noqa: F401  (временные папки этого теста убираются при его выходе)
 import json
 import os
 import shutil

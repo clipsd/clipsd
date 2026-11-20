@@ -475,14 +475,49 @@ def _month() -> str:
     return _today()[:7]
 
 
+_usage_lock = threading.Lock()
+
+
+class _UsageUpdate:
+    """Чтение, прибавление и запись счётчика расхода целиком под замком (Г11 проверки гонок 1.32.2): окошки «перевода
+    кусками» переводятся в нескольких потоках сразу, и без замка прибавки терялись, а чтение во время перезаписи видело
+    пустой файл и начинало день с нуля. Внутри программы threading.Lock, между процессами flock на файл рядом
+    (Linux; в Windows вторую копию не пускает замок одной копии, ipc.InstanceLock). Запись: временный файл и
+    os.replace, читающий всегда видит целый файл."""
+
+    def __enter__(self):
+        _usage_lock.acquire()
+        self.path = usage_path()
+        self.fd = None
+        try:
+            import fcntl
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.fd = os.open(str(self.path) + ".lock", os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0), 0o600)
+            fcntl.flock(self.fd, fcntl.LOCK_EX)
+        except (ImportError, OSError):
+            if self.fd is not None:
+                os.close(self.fd)
+                self.fd = None
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            if self.fd is not None:
+                os.close(self.fd)   # закрытие снимает flock
+        finally:
+            _usage_lock.release()
+        return False
+
+
 def add_google_chars(n: int):
-    data = _load_usage()
-    g = data.get("google", {})
-    if g.get("month") != _month():
-        g = {"month": _month(), "chars": 0}
-    g["chars"] = int(g.get("chars", 0)) + int(n)
-    data["google"] = g
-    _save_usage(data)
+    with _UsageUpdate() as u:
+        data = _load_usage(u.path)
+        g = data.get("google", {})
+        if g.get("month") != _month():
+            g = {"month": _month(), "chars": 0}
+        g["chars"] = int(g.get("chars", 0)) + int(n)
+        data["google"] = g
+        _save_usage(data, u.path)
 
 
 def google_usage():
@@ -491,12 +526,18 @@ def google_usage():
     return (int(g.get("chars", 0)) if g.get("month") == _month() else 0), GOOGLE_LIMIT
 
 
-def _save_usage(data: dict):
+def _save_usage(data: dict, path: Path = None):
+    path = path or usage_path()
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
     try:
-        usage_path().parent.mkdir(parents=True, exist_ok=True)
-        usage_path().write_text(json.dumps(data), encoding="utf-8")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(json.dumps(data), encoding="utf-8")
+        os.replace(tmp, path)   # целиком: читающий никогда не видит обрезанный файл
     except OSError:
-        pass
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
 
 
 def _today() -> str:
@@ -504,21 +545,23 @@ def _today() -> str:
     return datetime.date.today().isoformat()
 
 
-def _load_usage() -> dict:
+def _load_usage(path: Path = None) -> dict:
     try:
-        return json.loads(usage_path().read_text(encoding="utf-8"))
+        data = json.loads((path or usage_path()).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
+    return data if isinstance(data, dict) else {}
 
 
 def add_mymemory_chars(n: int):
-    data = _load_usage()
-    mm = data.get("mymemory", {})
-    if mm.get("date") != _today():
-        mm = {"date": _today(), "chars": 0}
-    mm["chars"] = int(mm.get("chars", 0)) + int(n)
-    data["mymemory"] = mm
-    _save_usage(data)
+    with _UsageUpdate() as u:
+        data = _load_usage(u.path)
+        mm = data.get("mymemory", {})
+        if mm.get("date") != _today():
+            mm = {"date": _today(), "chars": 0}
+        mm["chars"] = int(mm.get("chars", 0)) + int(n)
+        data["mymemory"] = mm
+        _save_usage(data, u.path)
 
 
 def mymemory_usage(email: str = ""):
@@ -767,6 +810,14 @@ def already_text(target: str) -> str:
     return tr("translate.already_lang", lang=lang_name(target))
 
 
+def message_text(key: str, args: dict = None) -> str:
+    """Текст сообщения о результате по коду (TranslateJob.message) на языке интерфейса в момент вызова."""
+    args = args or {}
+    if key == "@already":
+        return already_text(args.get("target", "ru"))
+    return tr(key, **args)
+
+
 def is_already(msg: str) -> bool:
     """Сообщение «текст уже на языке перевода» (любой язык; окна сравнивают по нему)."""
     return bool(msg) and (msg == tr(_MESSAGES["ALREADY"]) or msg == already_text(_skip_target))
@@ -951,8 +1002,17 @@ class TranslateJob(QThread):
         self.quota = ""   # 1.32: кончился лимит сервиса: код сообщения для колокольчика редактора (notifications)
         self.check_limit = check_limit
         self.cancelled = False
+        self.message = None   # (ключ, параметры) сообщения о результате: текст берётся в главном потоке при показе
         self._reply = None
         self._event = threading.Event()
+
+    def _say(self, key: str, **args):
+        """Итог без перевода: «Отменено», «Текст не найден», «уже на языке перевода», лимит. В поток идёт код, а текст
+        на языке интерфейса берётся в главном потоке, когда окно его показывает (start.finished). Раньше поток клал
+        готовую фразу на языке момента, а окно сравнивало её с фразой на текущем языке: после смены языка ровно в
+        конце перевода «Текст не найден» показывался карточкой ошибки, «Отмена» ошибкой (Г13 проверки гонок)."""
+        self.message = (key, args)
+        self.done.emit([], message_text(key, args))
 
     def answer(self, partial: bool):
         self._reply = bool(partial)
@@ -968,10 +1028,10 @@ class TranslateJob(QThread):
             words = ocr.recognize_words(self.image, ocr_langs_for_translation(), self.cfg.get("ocr_quality", "accurate"))
             blocks = blocks_from_words(words)
             if self.cancelled:
-                self.done.emit([], tr(_MESSAGES["CANCELLED"]))
+                self._say(_MESSAGES["CANCELLED"])
                 return
             if not blocks:
-                self.done.emit([], tr(_MESSAGES["NO_TEXT"]))
+                self._say(_MESSAGES["NO_TEXT"])
                 return
             if self.full:
                 # весь экран: блоки, уже написанные на языке перевода, не отправляются (и в расход не идут)
@@ -981,7 +1041,7 @@ class TranslateJob(QThread):
                 kept = [b for b in blocks if not already_in_target(b[1], target)]
                 self.skipped = len(blocks) - len(kept)
                 if not kept:
-                    self.done.emit([], already_text(target))
+                    self._say("@already", target=target)
                     return
                 blocks = kept
             self.total = len(blocks)
@@ -992,27 +1052,27 @@ class TranslateJob(QThread):
                 email = self.cfg.get("translate_email", "")
                 self.quota = "translate_quota"
                 if email.strip():
-                    self.done.emit([], tr("translate.err_mm_quota_tomorrow"))
+                    self._say("translate.err_mm_quota_tomorrow")
                 else:
                     self.help = EmailNeeded()
-                    self.done.emit([], tr("translate.err_free_over"))
+                    self._say("translate.err_free_over")
                 return
             if left is not None:
                 self._reply = None
                 self.ask.emit(need, left)
                 self._event.wait(self.ASK_WAIT)
                 if self.cancelled or not self._reply:
-                    self.done.emit([], tr(_MESSAGES["CANCELLED"]))   # «Отмена»: в сеть не ушло ни одного знака
+                    self._say(_MESSAGES["CANCELLED"])   # «Отмена»: в сеть не ушло ни одного знака
                     return
                 blocks = fit_blocks(blocks, left)
                 if not blocks:   # ни один абзац не влезает: в сервис не уходит ничего
-                    self.done.emit([], tr(_MESSAGES["EXHAUSTED_SMALL"]))
+                    self._say(_MESSAGES["EXHAUSTED_SMALL"])
                     return
             engines = engines_from_config(self.cfg)
             results = []
             for rect, text, line_h in blocks:
                 if self.cancelled:
-                    self.done.emit([], tr(_MESSAGES["CANCELLED"]))
+                    self._say(_MESSAGES["CANCELLED"])
                     return
                 out, src, tgt, used = translate_text(text, self.cfg, engines)
                 results.append({"rect": rect, "orig": text, "text": out, "src": src, "tgt": tgt,
@@ -1022,7 +1082,8 @@ class TranslateJob(QThread):
             self.help = exc.help
             msg = str(exc)
             if self.full and (getattr(exc, "key", "") == "ocr.err_timeout" or "слишком долго" in msg):
-                msg = tr(_MESSAGES["TOO_BIG_FULL"])
+                self._say(_MESSAGES["TOO_BIG_FULL"])
+                return
             self.done.emit([], msg)
         except TranslateError as exc:
             self.help = exc.help
@@ -1064,6 +1125,8 @@ def start(image: QImage, cfg: dict, on_done, confirm=None, full=False):
     _jobs.append(job)
 
     def finished(results, error):
+        if error and job.message is not None:
+            error = message_text(*job.message)   # на языке интерфейса сейчас, а не в момент работы потока (Г13)
         res = ResultList(results)
         res.skipped = job.skipped
         res.total = job.total

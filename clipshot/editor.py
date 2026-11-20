@@ -2243,7 +2243,14 @@ def ask_save_path(parent, cfg):
     folder = os.path.expanduser(cfg.get("save_dir") or "~")
     os.makedirs(folder, exist_ok=True)
     ext = "jpg" if cfg.get("save_format", "png") == "jpg" else "png"
-    name = datetime.datetime.now().strftime(f"Screenshot_%Y-%m-%d_%H-%M-%S.{ext}")
+    stem = datetime.datetime.now().strftime("Screenshot_%Y-%m-%d_%H-%M-%S")
+    name = f"{stem}.{ext}"
+    if not cfg.get("save_ask", True):
+        # без вопроса: имя занимается сразу, второе сохранение в ту же секунду получает _2 (Г9 проверки гонок)
+        try:
+            return hidpi.reserve_path(folder, stem, ext)
+        except OSError:
+            return os.path.join(folder, name)   # запись не удастся и скажет об этом
     if cfg.get("save_ask", True):
         filters = ["PNG (*.png)", "JPEG (*.jpg *.jpeg)"]
         if ext == "jpg":
@@ -4472,6 +4479,12 @@ class EditorWindow(QMainWindow):
         key = self.canvas.base.cacheKey()
 
         def done(text, error, help=None):
+            # 1.32.3 (Г1 проверки гонок): редактор закрыли, пока шло распознавание (1,5-3 с на большом снимке). Окно и
+            # кружок уже удалены, а обращение к ним в обработчике сигнала роняло всю программу (SIGABRT). Закрытое окно
+            # отвязывает задание (closeEvent), удалённое пропускается.
+            from PyQt6 import sip
+            if sip.isdeleted(self) or self._ocr_job is not job:
+                return
             self._ocr_job = None
             if getattr(self, "_ocr_spinner", None) is not None:
                 self._ocr_spinner.stop()
@@ -5224,6 +5237,7 @@ class EditorWindow(QMainWindow):
         if not path:
             return
         if not hidpi.save_image(image, path, self.ctx.config):
+            hidpi.discard_reserved(path)
             from .dialogs import MessageCard
             card = MessageCard(self, tr("editor.error"), tr("editor.save_error", path=path), "error")
             card.exec()
@@ -5251,6 +5265,8 @@ class EditorWindow(QMainWindow):
                 return
         self.ctx.save_config()
         self._remove_key_filter()
+        self._ocr_job = None        # распознавание, которое ещё идёт, больше ничего не пишет в это окно (Г1)
+        self._ocr_spinner = None    # кружок удаляется вместе с окном
         layer = getattr(self, "tr_layer", None)
         if layer is not None:
             layer.shutdown()   # перевод и вопрос про лимит отменяются, окошки закрываются вместе с редактором

@@ -7,6 +7,7 @@ The Linux part is skipped where readelf, ldconfig or dpkg are missing.
 
 Run: python3 tests/notices_test.py
 """
+import tmpclean  # noqa: F401  (временные папки этого теста убираются при его выходе)
 import importlib.util
 import os
 import shutil

@@ -7,6 +7,7 @@
 Запуск: QT_QPA_PLATFORM=offscreen python3 tests/settings_test.py [проект] [временная_папка]
 """
 
+import tmpclean  # noqa: F401  (временные папки этого теста убираются при его выходе)
 import os
 import sys
 import tempfile

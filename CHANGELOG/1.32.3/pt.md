@@ -1,0 +1,11 @@
+- O programa não fecha mais sozinho se você fechar o editor logo depois de «Copiar texto» ou fechar a primeiríssima captura logo depois que ela abrir.
+- Atualizações. Esc ou a cruz da janela de download só escondem a janela, o download continua; antes o programa fechava. «Tentar novamente» na janela de falha não começa mais um segundo download enquanto um está em andamento.
+- Atualizações. Uma captura copiada logo antes da reinicialização para atualizar não some mais da área de transferência: depois de «Copiar e fechar» ou de copiar durante o download, o programa espera até 2 minutos para você conseguir colá-la e só depois reinicia.
+- Atualizações. A janela de falha e «Novidades» não aparecem mais por cima da janela de seleção ou do editor: elas aparecem um minuto depois que você terminar. Se o programa fechar antes disso, a janela de falha aparece na próxima vez que ele iniciar.
+- Atualizações. «Verificar atualizações» responde com uma janela também quando o programa está justamente verificando atualizações sozinho naquele momento. Se a janela de falha da atualização estiver aberta, o botão a traz para a frente.
+- Linux. Alt+W durante a instalação de uma atualização não faz mais a atualização falhar.
+- Dois inícios quase ao mesmo tempo, por exemplo um clique duplo no ícone, não dão mais duas cópias do programa com dois ícones.
+- Um clique no ícone sempre abre a seleção: a janela de avaliação ou uma oferta de atualização não aparece mais no lugar dela.
+- Se a combinação de teclas para a captura estiver ocupada por outro programa, o aviso não se perde mais (Windows e Linux fora do GNOME): antes a combinação simplesmente não funcionava, sem nenhuma mensagem.
+- Duas capturas salvas no mesmo segundo não se sobrescrevem mais: o segundo arquivo recebe _2 no nome.
+- Tradução por trechos. O contador de caracteres restantes não se desajusta mais quando vários trechos são traduzidos ao mesmo tempo. Uma mensagem de erro em um trecho pequeno aparece inteira. Se você trocar o idioma bem no fim de uma tradução, o aviso de que nenhum texto foi encontrado não aparece mais como erro.

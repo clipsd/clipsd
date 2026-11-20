@@ -124,6 +124,28 @@ def _resume_cut_switch():
             pass
 
 
+def _current_program(executable=None, data_home=None):
+    """The program `current` points at, when that is another installed version than the one running this launcher;
+    "" otherwise. An update moves `current` while ClipSD is down: Alt+W in that moment (GNOME runs ~/.local/bin/clipsd
+    --region) may start the old build, which by now must not come up again, or the update rolls back (Г3 of the race
+    review of 1.32.2). Only an installed version (APP/versions/<v>/clipsd) is redirected, never an unpacked archive."""
+    if executable is None:
+        if not getattr(sys, "frozen", False):
+            return ""
+        executable = sys.executable
+    data = data_home or os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    app = os.path.join(data, "clipsd")
+    versions = os.path.realpath(os.path.join(app, "versions"))
+    own = os.path.dirname(os.path.realpath(executable))
+    if os.path.dirname(own) != versions:
+        return ""
+    current = os.path.realpath(os.path.join(app, "current"))
+    if current == own or os.path.dirname(current) != versions:
+        return ""
+    target = os.path.join(current, "clipsd")
+    return target if os.path.isfile(target) and os.access(target, os.X_OK) else ""
+
+
 def main():
     args = sys.argv[1:]
     if args[:1] == ["--make-icons"] and len(args) == 2:
@@ -139,6 +161,13 @@ def main():
     command = command_from_args(args)
     if command and send(command):
         return 0
+    other = _current_program()
+    if other:   # the update has switched to another version meanwhile: that one starts, not this one
+        from clipshot.sysenv import child_env   # an independent build: without this build's libraries and _PYI_*
+        try:
+            os.execve(other, [other, *args], child_env())
+        except OSError:
+            pass   # cannot run it: this version starts, as before
     from clipshot.app import main as app_main
     return app_main()
 

@@ -20,6 +20,7 @@ On 1.31.1 checks 2-4 fail. Nothing outside a temporary HOME is touched (no real 
 
 Run: python3 tests/frozen_env_test.py
 """
+import tmpclean  # noqa: F401  (временные папки этого теста убираются при его выходе)
 import json
 import os
 import shutil

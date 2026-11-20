@@ -8,11 +8,14 @@
 - build_linux.sh и build.ps1 кладут CHANGELOG в программу (--add-data), stage_windows.py копирует папку в раскладку
   сборки Windows (только заметки .md);
 - в «замороженной» программе заметки находятся в sys._MEIPASS, даже если рядом с пакетом папки нет;
-- заметки выпусков 1.32.0, 1.32.1 и 1.32.2 есть на 12 языках, без длинных тире;
-- в 1.32.2 первый пункт говорит, что у зажатого окошка перевода крестик в углу, а кнопки появляются при наведении мыши.
+- заметки выпусков 1.32.0, 1.32.1, 1.32.2 и 1.32.3 есть на 12 языках, без длинных тире;
+- в 1.32.2 первый пункт говорит, что у зажатого окошка перевода крестик в углу, а кнопки появляются при наведении мыши;
+- в 1.32.3 названия кнопок взяты из каталогов программы на каждом языке («Копировать текст», «Повторить»,
+  «Скопировать и закрыть», «Что нового», «Проверить обновления»).
 
 Запуск: python3 tests/changelog_bundle_test.py
 """
+import tmpclean  # noqa: F401  (временные папки этого теста убираются при его выходе)
 import os
 import shutil
 import sys
@@ -70,8 +73,8 @@ try:
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 
-# --- заметки выпусков 1.32.0, 1.32.1 и 1.32.2 -------------------------------------------------------------------------
-for version in ("1.32.0", "1.32.1", "1.32.2"):
+# --- заметки выпусков 1.32.0, 1.32.1, 1.32.2 и 1.32.3 ----------------------------------------------------------------
+for version in ("1.32.0", "1.32.1", "1.32.2", "1.32.3"):
     folder = ROOT / "CHANGELOG" / version
     missing = [lang for lang in LANGS if not (folder / f"{lang}.md").is_file()]
     check(not missing, f"CHANGELOG/{version}: 12 языков {missing or ''}")
@@ -95,6 +98,21 @@ for lang, words in CROWDED.items():
     path = ROOT / "CHANGELOG" / "1.32.2" / f"{lang}.md"
     first = path.read_text(encoding="utf-8").splitlines()[0] if path.is_file() else ""
     check(all(w in first for w in words), f"CHANGELOG/1.32.2/{lang}: в первом пункте крестик и кнопки при наведении мыши {words}")
+
+# 1.32.3: названия кнопок в заметках такие же, как в программе на этом языке (каталоги clipshot/i18n/<язык>/*.json)
+import json  # noqa: E402
+
+BUTTONS = (("selector", "selector.btn_ocr"), ("updater", "updater.button.retry"), ("editor", "editor.copy_close"),
+           ("updater", "updater.offer.whatsnew"), ("updater", "updater.menu.check"))
+for lang in LANGS:
+    path = ROOT / "CHANGELOG" / "1.32.3" / f"{lang}.md"
+    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    missing = []
+    for catalog, key in BUTTONS:
+        name = json.loads((ROOT / "clipshot" / "i18n" / lang / f"{catalog}.json").read_text(encoding="utf-8"))[key]
+        if name not in text:
+            missing.append(name)
+    check(not missing, f"CHANGELOG/1.32.3/{lang}: названия кнопок как в программе {missing or ''}")
 
 print(f"ИТОГ: провалено {len(failed)}")
 sys.exit(1 if failed else 0)

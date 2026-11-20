@@ -433,6 +433,59 @@ sync
 if ! set_current "$TO"; then rm -f "$PENDING"; result error cannot_switch; exit 2; fi
 sync
 
+# 2a. Alt+W after the old copy quit and before `current` changed (sync takes up to seconds on a busy disk): GNOME ran
+#     ~/.local/bin/clipsd --region, still the old version, and it came up again. Started now, the new version would
+#     hand its command over to that copy and exit: no start mark, the switch rolled back (Г3 of the race review of
+#     1.32.2). So the old copy is asked to quit once more (it may still be starting: its socket is waited for). Busy
+#     (the person is selecting an area right now): `current` goes back to the old version and the switch is deferred,
+#     as after the first question; the program tries again when the selection is closed. A copy of the NEW version
+#     that a launcher started from `current` meanwhile is not the old one: it stays.
+old_up() {  # a process of the old version, or a program on the socket while no process of the new version runs
+  [ -n "$(pids_of "$FROM")" ] || { sock_alive && [ -z "$(pids_of "$TO")" ]; }
+}
+defer_to_old() {  # the old copy is busy (the person selects an area): `current` back to it, the switch is deferred
+  if set_current "$FROM"; then
+    sync
+    rm -f "$PENDING"
+    result deferred busy; exit 4
+  fi
+  rm -f "$PENDING"
+  result error cannot_return; exit 2
+}
+wait_old_gone() {  # $1 seconds
+  local i=0 max=$(( $1 * 2 ))
+  while old_up && [ "$i" -lt "$max" ]; do sleep 0.5; i=$((i + 1)); done
+  ! old_up
+}
+if old_up; then
+  log "the old version $FROM came up again during the switch (Alt+W?): asking it to quit"
+  i=0; while [ -n "$(pids_of "$FROM")" ] && ! sock_alive && [ "$i" -lt 20 ]; do sleep 0.5; i=$((i + 1)); done
+  if old_up; then
+    answer="$(ask_quit)"
+    log "quit-for-update (old copy, again): $answer"
+    case "$answer" in busy*) defer_to_old ;; esac
+    # "ok" and still there a moment later: started by Alt+W with --region, it answered before its selection opened
+    # and stayed for it (Н1 of the review of 1.32.3). Never stopped by force while it may hold work: asked once more,
+    # and "busy" defers the switch, as in step 1.
+    if ! wait_old_gone 3; then
+      answer="$(ask_quit)"
+      log "quit-for-update (old copy, once more): $answer"
+      case "$answer" in busy*) defer_to_old ;; esac
+      if ! wait_old_gone "$EXIT_WAIT"; then
+        answer="$(ask_quit)"
+        log "quit-for-update (old copy, last time): $answer"
+        case "$answer" in busy*) defer_to_old ;; esac
+        [ "$answer" = ok ] && wait_old_gone 10
+        if old_up; then
+          # last resort, as in step 1: hung (no answer on the socket) or said ok and did not exit
+          log "old copy $FROM still running after ${EXIT_WAIT}s (answer: $answer), stopping it"
+          stop_version "$FROM"
+        fi
+      fi
+    fi
+  fi
+fi
+
 # 3. start
 start_program
 

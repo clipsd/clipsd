@@ -4,6 +4,7 @@
 
 The copy is a fresh git repository (no remote), so a push would fail loudly; the real repository is not touched.
 CLIPSD_TEST_CMD replaces the full test run (this test is itself part of it)."""
+import tmpclean  # noqa: F401  (временные папки этого теста убираются при его выходе)
 import json
 import os
 import re

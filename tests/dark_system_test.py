@@ -18,6 +18,7 @@ they are (measured: 4.05 and 3.5).
 
 Run: QT_QPA_PLATFORM=offscreen python3 tests/dark_system_test.py [folder for snapshots]
 """
+import tmpclean  # noqa: F401  (временные папки этого теста убираются при его выходе)
 import os
 import sys
 import tempfile

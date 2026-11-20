@@ -127,6 +127,8 @@ CRITICAL_FILE = "critical-{channel}.json"   # signed document of a pending secur
 PREVIOUS_CLEANUP_DELAY_MS = 60_000
 DEFERRED_POLL_MS = 5_000            # deferred update: how often to look whether quitting is possible
 MAX_SWITCH_TRIES = 5                # deferred update: switch attempts before giving up
+SWITCH_RELAUNCH_S = 30              # deferred update: no second helper for the same attempt within this time unless
+                                    # the first one has answered (Г4 of the race review: two helpers 0.4 s apart)
 RESULT_CLOCK_SLACK = timedelta(minutes=2)
 NETWORK_TIMEOUT_S = 10
 CHUNK = 64 * 1024
@@ -340,6 +342,9 @@ def state_dir() -> Path:
 
 def versions_dir() -> Path:
     return data_dir() / "versions"
+
+
+FAILURE_PENDING = "update-failure-pending.json"   # in mark_dir(): a failure window not shown yet (Н2 of the review)
 
 
 def mark_dir() -> Path:
@@ -1134,8 +1139,20 @@ class UpdaterUI:
         self.progress_close()
         dialog = closable(FailedDialog(version, report, title, open_url=self.open_url, hint=hint))
         dialog.place_centered()
-        dialog.exec()
+        self._failed = dialog
+        try:
+            dialog.exec()
+        finally:
+            self._failed = None
         return dialog.choice
+
+    def failure_show(self) -> None:
+        """The failure window again in front ("Check for updates" pressed while it is open, Н3 of the review)."""
+        from PyQt6 import sip
+        dialog = getattr(self, "_failed", None)
+        if dialog is not None and not sip.isdeleted(dialog):
+            dialog.raise_()
+            dialog.activateWindow()
 
     def deferred_notice(self, text: str, on_restart) -> None:
         """Non-modal: the update waits (editor open); "Restart now" tries again at once."""
@@ -1147,23 +1164,37 @@ class UpdaterUI:
         box.open_centered()
 
     def progress_start(self, version: str, on_cancel) -> None:
+        self.progress_close()   # never two download windows: a window nobody closes stayed on top until quitting
         self.progress = closable(ProgressDialog(version, on_cancel))
         self.progress.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
         self.progress.open_centered()
 
+    def _progress_window(self):
+        """The download window, or None. A window deleted under the updater (closed by the window manager, for
+        example) is forgotten: the download goes on and must not touch it (Г2 of the race review)."""
+        from PyQt6 import sip
+        if self.progress is not None and sip.isdeleted(self.progress):
+            self.progress = None
+        return self.progress
+
+    def progress_show(self) -> None:
+        """The download window again (it was hidden by Esc or its cross; the download goes on)."""
+        if self._progress_window() is not None:
+            self.progress.open_centered()
+
     def progress_stage(self, text: str) -> None:
-        if self.progress is not None:
+        if self._progress_window() is not None:
             self.progress.set_stage(text)
 
     def progress_update(self, done: int, total: int) -> None:
-        if self.progress is not None:
+        if self._progress_window() is not None:
             self.progress.set_progress(done, total)
 
     def progress_close(self) -> None:
-        if self.progress is not None:
+        if self._progress_window() is not None:
             self.progress.close()
             self.progress.deleteLater()
-            self.progress = None
+        self.progress = None
 
     def open_url(self, url: str) -> None:
         sysenv.open_url(url)
@@ -1199,8 +1230,8 @@ class Updater(QObject):
 
     _checked = pyqtSignal(object, object, bool)       # manifest, ChannelError, manual
     _progress = pyqtSignal(int, int)
-    _downloaded = pyqtSignal(object, object)           # path, UpdateError
-    _extracted = pyqtSignal(object, object)            # folder, UpdateError (Linux, worker thread)
+    _downloaded = pyqtSignal(object, object, object)   # path, UpdateError, number of the download
+    _extracted = pyqtSignal(object, object, object)    # folder, UpdateError, number (Linux, worker thread)
 
     def __init__(self, ctx, *, fetch=None, opener=None, clock=utcnow, kind=None, installed=None,
                  stable_keys=None, test_keys=None, proba_keys=None, ui=None, sync=False):
@@ -1221,6 +1252,16 @@ class Updater(QObject):
         self.timer = None
         self._pending = None           # (manifest, trace_id) while downloading
         self._installing = None        # (record, manifest) while the Linux package is unpacked
+        self._work_no = 0              # number of the current download / unpack: a late result of another is ignored
+        self._switch_started = None    # (attempt_id, time.monotonic()) of the last switch this program started
+        self._quiet_queue = []         # windows waiting for a quiet minute (failure, What's new; _show_when_quiet)
+        self._failures_waiting = set()  # attempt ids whose failure window waits in that queue
+        self._quiet_timer = None
+        self._quiet_since = None
+        self._deferred_soon = None     # one timer for "an editor was closed" (Clipshot._editor_closed)
+        self._failure_open = False     # the failure window is on the screen (Retry / Close)
+        self._checking = False         # a request to the channel is running
+        self._checking_manual = False  # "Check for updates" was pressed during a silent check: its result as a window
         self._deferred_timer = None
         self._helper_timer = None       # watch of the Linux switch helper right after its start
         self._helper_attempt = ""
@@ -1315,14 +1356,28 @@ class Updater(QObject):
         if self.busy:
             if manual:
                 waiting = self._deferred_version()
-                if waiting:
+                if self._checking:
+                    # the silent check (60 s after start, once a day) is running right now: the press joins it and its
+                    # result comes as a window, as after any press (Г12 of the race review: nothing was shown at all)
+                    self._checking_manual = True
+                elif waiting:
                     reason = str((read_attempt(attempt_path()) or {}).get("deferred_reason", ""))
                     self.ui.info(wait_text(reason, waiting))
+                elif self._pending is not None or self._installing is not None:
+                    show = getattr(self.ui, "progress_show", None)   # the download goes on: its window again
+                    if show is not None:
+                        show()
+                elif self._failure_open:
+                    show = getattr(self.ui, "failure_show", None)    # the failure window (Retry) is the answer
+                    if show is not None:
+                        show()
             return False
         now = self.clock()
         if not should_check(self.config, now, manual):
             return False
         self.busy = True
+        self._checking = True
+        self._checking_manual = False
         self._auto_update = auto
         mark_checked(self.config, now)
         self._save()
@@ -1343,6 +1398,8 @@ class Updater(QObject):
         return True
 
     def _on_checked(self, signed, error, manual):
+        manual = manual or self._checking_manual
+        self._checking = self._checking_manual = False
         now = self.clock()
         channel = channel_of(self.config)
         if error is not None:
@@ -1420,6 +1477,8 @@ class Updater(QObject):
             return
         trace_id = trace_id or new_id()
         self._pending = (manifest, trace_id)
+        self._work_no += 1
+        number = self._work_no
         self.cancel.clear()
         dest = downloads_dir() / manifest.version / safe_file_name(entry["url"])
         clean_downloads(keep=dest)   # an archive kept from a failed attempt is checked below, all else goes
@@ -1431,21 +1490,25 @@ class Updater(QObject):
                 if verified_file(dest, entry["size"], entry["sha256"]):
                     log.info("update %s: the archive downloaded before has the signed sha256, used again",
                              manifest.version)
-                    self._downloaded.emit(dest, None)
+                    self._downloaded.emit(dest, None, number)
                     return
                 path = download_file(entry["url"], dest, entry["size"], entry["sha256"],
                                      progress=self._progress.emit, cancel=self.cancel,
                                      opener=self.opener, platform=platform, local_root=local_root)
-                self._downloaded.emit(path, None)
+                self._downloaded.emit(path, None, number)
             except UpdateError as exc:
-                self._downloaded.emit(None, exc)
+                self._downloaded.emit(None, exc, number)
             except Exception as exc:
                 log.exception("update download crashed")
-                self._downloaded.emit(None, UpdateError("internal", type(exc).__name__))
+                self._downloaded.emit(None, UpdateError("internal", type(exc).__name__), number)
 
         self._run(work)
 
-    def _on_downloaded(self, path, error):
+    def _on_downloaded(self, path, error, number=None):
+        if self._pending is None or (number is not None and number != self._work_no):
+            # a result of another download (Г5 of the race review: two downloads into one file): not ours
+            log.warning("update download result of another attempt ignored")
+            return
         manifest, trace_id = self._pending
         if error is None and hasattr(self.ui, "progress_stage"):
             # the same window stays and says what happens now, until ClipSD restarts or a message replaces it
@@ -1471,7 +1534,17 @@ class Updater(QObject):
         self.install(path, manifest, trace_id)
 
     # installing ------------------------------------------------------------
+    CLIPBOARD_POLL_MS = DEFERRED_POLL_MS
+
     def install(self, path: Path, manifest: Manifest, trace_id: str):
+        if self._clipboard_busy():
+            # "Update" was pressed and the download is done, but the person has just copied a snapshot or text while
+            # it ran ("You can keep working"): the restart would empty the clipboard (Windows always, X11 without a
+            # clipboard manager). Wait as the deferred update does, at most Clipshot.CLIPBOARD_HOLD_S after the copy
+            # (Н6 of the review of 1.32.3). The download window keeps saying "Installing".
+            log.info("update %s: waiting for the clipboard (a snapshot was just copied)", manifest.version)
+            QTimer.singleShot(self.CLIPBOARD_POLL_MS, lambda: self.install(path, manifest, trace_id))
+            return
         if self.kind == "linux" and switch_lock_alive():
             # a switch helper is at work (an earlier attempt): never a second one, never unpack under it
             self.ui.progress_close()
@@ -1492,19 +1565,24 @@ class Updater(QObject):
             return
         # Linux: up to 90 MB of tar.gz, unpacked off the interface thread
         self._installing = (record, manifest)
+        self._work_no += 1
+        number = self._work_no
 
         def work():
             try:
-                self._extracted.emit(extract_linux_package(path, versions_dir(), manifest.version), None)
+                self._extracted.emit(extract_linux_package(path, versions_dir(), manifest.version), None, number)
             except (UpdateError, OSError, ValueError) as exc:
-                self._extracted.emit(None, exc)
+                self._extracted.emit(None, exc, number)
             except Exception as exc:
                 log.exception("update unpack crashed")
-                self._extracted.emit(None, UpdateError("internal", type(exc).__name__))
+                self._extracted.emit(None, UpdateError("internal", type(exc).__name__), number)
 
         self._run(work)
 
-    def _on_extracted(self, folder, error):
+    def _on_extracted(self, folder, error, number=None):
+        if self._installing is None or (number is not None and number != self._work_no):
+            log.warning("update unpack result of another attempt ignored")
+            return
         record, manifest = self._installing
         self._installing = None
         if error is not None:
@@ -1552,7 +1630,52 @@ class Updater(QObject):
             return
         report = failure_report(record, reason, stage, self.kind, self.installed, self.clock())
         hint = tr(FAILURE_HINTS[reason]) if reason in FAILURE_HINTS else ""
-        if failed(version, report, report_title(record, reason), hint=hint) == "retry":
+        close = getattr(self.ui, "progress_close", None)
+        if close is not None:
+            close()   # «Устанавливается…» must not stay on the screen while the failure waits for a quiet minute
+        attempt = str(record.get("attempt_id", ""))
+        if attempt and attempt in self._failures_waiting:
+            return    # this failure already waits for a quiet minute
+        if not self._show_when_quiet(lambda: self._failure_window(record, version, report, reason, hint)):
+            # waits: kept on disk until shown, so that quitting before the quiet minute does not lose it (the attempt
+            # record is already removed); the next start shows it (_show_saved_failure; Н2 of the review of 1.32.3)
+            self._failures_waiting.add(attempt)
+            try:
+                write_json_atomic(mark_dir() / FAILURE_PENDING, {"record": record, "reason": reason, "stage": stage})
+            except OSError as exc:
+                log.warning("cannot keep the failure for the next start: %s", exc)
+
+    def _show_saved_failure(self) -> bool:
+        """At start: a failure window that waited for a quiet minute when the program quit. True when it was shown
+        or queued again. Dropped when this program is already the version of that attempt (or newer)."""
+        path = mark_dir() / FAILURE_PENDING
+        try:
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            record, reason, stage = dict(saved["record"]), str(saved["reason"]), str(saved["stage"])
+            stale = uc.compare_versions(self.installed, str(record.get("to", ""))) >= 0
+        except (OSError, ValueError, KeyError, TypeError):
+            return False
+        if stale or not REASON_RE.fullmatch(reason):
+            _unlink(path)
+            return False
+        self._show_failure(record, reason, stage)
+        return True
+
+    def _failure_window(self, record: dict, version: str, report: str, reason: str, hint: str) -> None:
+        self._failures_waiting.discard(str(record.get("attempt_id", "")))
+        _unlink(mark_dir() / FAILURE_PENDING)
+        failed = self.ui.failed
+        # While the window is open the updater is busy: a timer must not offer a version on top of it and start a
+        # download that "Retry" below would start a second time (Г5 of the race review).
+        self.busy = True
+        self._failure_open = True
+        try:
+            choice = failed(version, report, report_title(record, reason), hint=hint)
+        finally:
+            self._failure_open = False
+            if self._pending is None and self._installing is None:
+                self.busy = False
+        if choice == "retry":
             self.retry_update(record)
 
     def retry_update(self, record: dict) -> bool:
@@ -1563,6 +1686,13 @@ class Updater(QObject):
         if self.kind == "linux" and switch_lock_alive():
             self.ui.info(tr("updater.retry.busy"))
             return False
+        if self._pending is not None or self._installing is not None:
+            # the version is being downloaded or unpacked right now (offered again while the failure window was
+            # open): never a second download into the same file, show the one that runs (Г5 of the race review)
+            show = getattr(self.ui, "progress_show", None)
+            if show is not None:
+                show()
+            return False
         self.busy = False
         telemetry_event("update_retry", **attempt_fields(record))
         return self.check_now(manual=True, auto=True)
@@ -1572,6 +1702,50 @@ class Updater(QObject):
         self._notify(tr("updater.install.started", version=manifest.version))
         delay = int(SWITCH_TIMEOUT.total_seconds() * 1000) + 5000
         QTimer.singleShot(delay, self.check_previous_attempt)
+
+    # windows that come by a timer -------------------------------------------
+    QUIET_POLL_MS = 5_000
+
+    def _show_when_quiet(self, show) -> bool:
+        """The failure window and What's new come by a timer (start, the watch of the helper), not as an answer to
+        the person: never over the selection overlay or an editor (Г8 of the race review: a modal window over the
+        overlay, which holds the keyboard, froze the selection). Now when nothing is open, otherwise after a quiet
+        minute (update_prompt.QUIET), like the offer of a version and the rating window. True: shown now."""
+        from . import update_prompt
+        if not self._quiet_queue and not update_prompt.busy_reason(self.ctx):
+            show()
+            return True
+        self._quiet_queue.append(show)
+        if self._quiet_timer is None:
+            self._quiet_timer = QTimer(self)
+            self._quiet_timer.setInterval(self.QUIET_POLL_MS)
+            self._quiet_timer.timeout.connect(self.quiet_poll)
+        if not self._quiet_timer.isActive():
+            self._quiet_since = None
+            self._quiet_timer.start()
+        return False
+
+    def quiet_poll(self) -> bool:
+        """Timer of _show_when_quiet. True when the waiting windows were shown."""
+        from . import update_prompt
+        if not self._quiet_queue:
+            self._quiet_timer.stop()
+            return False
+        now = self.clock()
+        if update_prompt.busy_reason(self.ctx):
+            self._quiet_since = None
+            return False
+        if self._quiet_since is None or self._quiet_since > now:
+            self._quiet_since = now
+            return False
+        if now - self._quiet_since < update_prompt.QUIET:
+            return False
+        self._quiet_timer.stop()
+        self._quiet_since = None
+        waiting, self._quiet_queue = self._quiet_queue, []
+        for show in waiting:
+            show()
+        return True
 
     # deferred switch -------------------------------------------------------
     def _quit_blocker(self) -> str:
@@ -1596,6 +1770,7 @@ class Updater(QObject):
 
     def _defer(self, record: dict, reason: str) -> None:
         self._stop_helper_watch()
+        self._switch_started = None    # the helper got its answer (busy) and ends: a new one may start later
         first = not record.get("deferred")
         record["deferred"] = True
         record["deferred_reason"] = reason
@@ -1646,19 +1821,50 @@ class Updater(QObject):
         if self._deferred_timer is not None:
             self._deferred_timer.stop()
 
+    def deferred_soon(self, ms: int = 1000) -> None:
+        """An editor was closed: look at the deferred update in a moment. One shared timer: several editors closed
+        in a row give one look, not one each (Г4 of the race review: two helpers for one attempt)."""
+        if self._deferred_soon is None:
+            self._deferred_soon = QTimer(self)
+            self._deferred_soon.setSingleShot(True)
+            self._deferred_soon.timeout.connect(self.deferred_tick)
+        self._deferred_soon.start(ms)
+
+    def _clipboard_busy(self) -> bool:
+        """The program has just copied a snapshot or text and still holds it (Clipshot.clipboard_busy): quitting
+        right now would empty the clipboard on Windows and on X11 without a clipboard manager (Г4)."""
+        busy = getattr(self.ctx, "clipboard_busy", None)
+        try:
+            return bool(busy()) if busy is not None else False
+        except RuntimeError:
+            return False
+
     def deferred_tick(self) -> bool:
         """Deferred update: switch now if nothing blocks quitting. True when a switch was started."""
         record = read_attempt(attempt_path())
         if record is None or not record.get("deferred"):
             self._stop_watch()
             return False
-        if self._quit_blocker():
+        if self._quit_blocker() or self._clipboard_busy():
             self._watch_deferred()
             return False
         self._stop_watch()
         return self.retry_switch(record)
 
+    def _switch_in_flight(self, record: dict) -> bool:
+        """A helper for this attempt is at work: it holds update.lock (Linux), or this program started one less
+        than SWITCH_RELAUNCH_S ago and it has not answered yet (it may not have taken the lock yet)."""
+        if self.kind == "linux" and switch_lock_alive():
+            return True
+        last = self._switch_started
+        return (last is not None and last[0] == str(record.get("attempt_id", ""))
+                and 0 <= time.monotonic() - last[1] < SWITCH_RELAUNCH_S)
+
     def retry_switch(self, record: dict) -> bool:
+        if self._switch_in_flight(record):
+            log.info("deferred update to %s: a switch helper is already at work", record.get("to"))
+            self._watch_deferred()   # look again later: the helper decides, or it is gone by then
+            return False
         to_version = str(record.get("to", ""))
         tries = int(record.get("tries", 0) or 0) + 1
         record["tries"] = tries
@@ -1684,6 +1890,7 @@ class Updater(QObject):
         except (OSError, ValueError) as exc:
             self._fail_attempt(record, type(exc).__name__)
             return False
+        self._switch_started = (str(record.get("attempt_id", "")), time.monotonic())
         log.info("deferred update to %s: switch started (try %d)", to_version, tries)
         if self.kind == "linux":
             self._watch_helper(record)
@@ -1752,7 +1959,7 @@ class Updater(QObject):
         """At start (and 10 min after starting an install): result of the last attempt."""
         record = read_attempt(attempt_path())
         if record is None:
-            return "none"
+            return "failed" if self._show_saved_failure() else "none"
         state = evaluate_attempt(record, self.installed, self.clock())
         result = {}
         if state in ("pending", "failed", "deferred"):
@@ -1770,7 +1977,8 @@ class Updater(QObject):
             from . import notifications   # 1.32: «Что нового» остаётся в колокольчике редактора
             notifications.remember_whats_new(self.config, self.installed, record.get("notes"))
             self._save()
-            self.ui.whats_new(self.installed, notes_in(record.get("notes"), i18n.current()))
+            notes = notes_in(record.get("notes"), i18n.current())
+            self._show_when_quiet(lambda: self.ui.whats_new(self.installed, notes))
         elif state == "deferred":
             # the switch waits until the program can quit; at start nothing is open, so it goes now
             if not record.get("deferred"):

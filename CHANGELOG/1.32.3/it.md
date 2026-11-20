@@ -1,0 +1,11 @@
+- Il programma non si chiude più da solo se chiudete l'editor subito dopo «Copia il testo» o se chiudete il primissimo screenshot subito dopo l'apertura.
+- Aggiornamenti. Esc o la croce della finestra di download nascondono solo la finestra, il download continua; prima il programma si chiudeva. «Riprova» nella finestra di errore non avvia più un secondo download mentre uno è in corso.
+- Aggiornamenti. Uno screenshot copiato poco prima del riavvio per un aggiornamento non sparisce più dagli appunti: dopo «Copia e chiudi» o una copia fatta durante il download, il programma aspetta fino a 2 minuti perché possiate incollarlo, e solo dopo si riavvia.
+- Aggiornamenti. La finestra di errore e «Novità» non compaiono più sopra la finestra di selezione o l'editor: compaiono un minuto dopo che avete finito. Se il programma si chiude prima, la finestra di errore compare all'avvio successivo.
+- Aggiornamenti. «Controlla aggiornamenti» risponde con una finestra anche quando il programma sta proprio in quel momento controllando gli aggiornamenti da solo. Se la finestra di errore dell'aggiornamento è aperta, il pulsante la porta in primo piano.
+- Linux. Alt+W durante l'installazione di un aggiornamento non fa più fallire l'aggiornamento.
+- Due avvii quasi contemporanei, ad esempio un doppio clic sull'icona, non danno più due copie del programma con due icone.
+- Un clic sull'icona apre sempre la selezione: la finestra di valutazione o una proposta di aggiornamento non compare più al suo posto.
+- Se la combinazione di tasti per lo screenshot è occupata da un altro programma, il messaggio che lo segnala non si perde più (Windows e Linux fuori da GNOME): prima la combinazione semplicemente non funzionava, senza alcun avviso.
+- Due screenshot salvati nello stesso secondo non si sovrascrivono più: il secondo file riceve _2 nel nome.
+- Traduzione a pezzi. Il contatore dei caratteri rimasti non si sballa più quando vengono tradotti più pezzi insieme. Un messaggio di errore su un pezzo piccolo si vede per intero. Se cambiate lingua proprio alla fine di una traduzione, il messaggio che il testo non è stato trovato non viene più mostrato come errore.

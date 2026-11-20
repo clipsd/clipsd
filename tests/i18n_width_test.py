@@ -11,6 +11,7 @@
 Шрифт настоящий (системный); CLIPSD_WIDTH_FONT="Segoe UI,9" проверяет с другим шрифтом.
 Запуск: QT_QPA_PLATFORM=offscreen python3 tests/i18n_width_test.py
 """
+import tmpclean  # noqa: F401  (временные папки этого теста убираются при его выходе)
 import json
 import os
 import sys

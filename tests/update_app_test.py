@@ -9,6 +9,7 @@ Update life cycle (review R09 P0-1): an editor with unsaved changes makes quit-f
 "busy" and the real switch helper (packaging/linux/clipsd-switch) defers without stopping the
 program; without changes the answer is "ok", the program quits by itself and the helper switches;
 SIGTERM quits through Qt with the settings saved."""
+import tmpclean  # noqa: F401  (временные папки этого теста убираются при его выходе)
 import json
 import os
 import shutil

@@ -1,0 +1,11 @@
+- Das Programm schließt sich nicht mehr von selbst, wenn Sie den Editor gleich nach „Text kopieren“ schließen oder den allerersten Screenshot gleich nach dem Öffnen schließen.
+- Updates. Esc oder das Kreuz im Download-Fenster blenden nur das Fenster aus, der Download läuft weiter; bisher schloss sich das Programm. „Erneut versuchen“ im Fehlerfenster startet während eines Downloads keinen zweiten Download mehr.
+- Updates. Ein Screenshot, der kurz vor dem Neustart für ein Update kopiert wurde, verschwindet nicht mehr aus der Zwischenablage: Nach „Kopieren und schließen“ oder einem Kopieren während des Downloads wartet das Programm bis zu 2 Minuten, damit Sie ihn einfügen können, und startet erst dann neu.
+- Updates. Das Fehlerfenster und „Neu in dieser Version“ erscheinen nicht mehr über dem Auswahlfenster oder dem Editor: Beide kommen eine Minute, nachdem Sie fertig sind. Wird das Programm vorher beendet, erscheint das Fehlerfenster beim nächsten Start.
+- Updates. „Nach Updates suchen“ antwortet auch dann mit einem Fenster, wenn das Programm gerade selbst nach Updates sucht. Ist das Fehlerfenster des Updates offen, holt die Schaltfläche es nach vorn.
+- Linux. Alt+W während der Installation eines Updates bricht das Update nicht mehr ab.
+- Zwei fast gleichzeitige Starts, zum Beispiel ein Doppelklick auf das Symbol, ergeben keine zwei Programmkopien mit zwei Symbolen mehr.
+- Ein Klick auf das Symbol öffnet immer die Auswahl: Das Bewertungsfenster oder ein Update-Angebot erscheint nicht mehr stattdessen.
+- Ist die Tastenkombination für Screenshots von einem anderen Programm belegt, geht die Meldung darüber nicht mehr verloren (Windows und Linux außerhalb von GNOME): Bisher funktionierte die Kombination einfach stillschweigend nicht.
+- Zwei Screenshots, die in derselben Sekunde gespeichert werden, überschreiben sich nicht mehr: Die zweite Datei bekommt _2 im Namen.
+- Übersetzen in Stücken. Der Zähler der verbleibenden Zeichen gerät nicht mehr durcheinander, wenn mehrere Stücke gleichzeitig übersetzt werden. Eine Fehlermeldung auf einem kleinen Stück ist vollständig zu sehen. Wechseln Sie die Sprache genau am Ende einer Übersetzung, erscheint die Meldung, dass kein Text gefunden wurde, nicht mehr als Fehler.

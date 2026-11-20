@@ -246,6 +246,7 @@ class WinHotkeys(threading.Thread):
 
 class Clipshot(QObject):
     command_received = pyqtSignal(str)
+    hotkey_failed = pyqtSignal(str)   # из потока горячих клавиш (X11, Windows): сообщение в главный поток очередью
 
     def __init__(self, qapp: QApplication, migrate: bool = False):
         super().__init__()
@@ -274,11 +275,29 @@ class Clipshot(QObject):
         self._rating_timer = None
         self._rating_quiet_timer = None   # ждёт спокойной минуты, пока правила позволяют окно оценки
         self._rating_quiet_since = None   # с какого момента (time.monotonic) спокойно; None: не спокойно
+        self._clipboard_at = None         # когда программа последний раз положила что-то в буфер (time.monotonic)
+        self._capture_at = None           # снимок запрошен (щелчок по значку, Alt+W), окно выделения ещё не открыто
+        try:
+            QGuiApplication.clipboard().dataChanged.connect(self._clipboard_changed)
+        except (AttributeError, RuntimeError):
+            pass
         self.command_received.connect(self.handle_command)
+        self.hotkey_failed.connect(self._show_hotkey_error)
 
     # --- запуск --------------------------------------------------------------
 
-    def start(self, server_name: str):
+    def start(self, server_name: str, command: str = ""):
+        """Запуск фоновой копии. command: команда из командной строки (region, full, open:...), выполняется через
+        300 мс. С region и full снимок запрошен с самого начала, ещё до открытия канала команд: вопрос quit-for-update
+        в эти 300 мс получает «busy:selector», а не «ok», после которого программа осталась бы с окном выделения, и
+        помощник смены версии остановил бы её силой (Н1 проверки 1.32.3)."""
+        if command in ("region", "full"):
+            self._capture_requested()
+        self._start(server_name)
+        if command:
+            QTimer.singleShot(300, lambda: self.handle_command(command))
+
+    def _start(self, server_name: str):
         self.install_signal_handlers()
         QLocalServer.removeServer(server_name)
         self.server = QLocalServer(self)
@@ -287,6 +306,7 @@ class Clipshot(QObject):
         self.server.newConnection.connect(self._on_connection)
         if not self.server.listen(server_name):
             print(f"Не удалось открыть канал команд {server_name}: {self.server.errorString()}")
+        self._socket_id = self._socket_stat()
         QTimer.singleShot(1500, self._sync_gnome_hotkeys)   # после перезахода расширение ClipSD забирает клавиши
         if is_wayland() and not claim_shell_name():
             print("Имя org.gnome.Screenshot занято или не GNOME: снимки пойдут через портал")
@@ -426,8 +446,21 @@ class Clipshot(QObject):
         except Exception as exc:   # noqa: BLE001 — выход не должен упасть из-за записи настроек
             print(f"Не удалось записать настройки при выходе: {exc}")
         if self.server is not None:
-            self.server.close()
-            QLocalServer.removeServer(socket_path())
+            # close() убирает файл канала по имени. Если на этом месте уже канал другой копии (Г6 проверки гонок),
+            # его не трогать: процесс сейчас завершится, его соединения закроет система.
+            current = self._socket_stat()
+            if current is None or current == getattr(self, "_socket_id", None):
+                self.server.close()
+
+    def _socket_stat(self):
+        """(устройство, inode) файла канала команд (Linux), None: файла нет или это Windows (там канал не файл)."""
+        if os.name == "nt" or self.server is None:
+            return None
+        try:
+            st = os.stat(self.server.fullServerName())
+        except OSError:
+            return None
+        return (st.st_dev, st.st_ino)
 
     def _on_connection(self):
         sock = self.server.nextPendingConnection()
@@ -571,8 +604,13 @@ class Clipshot(QObject):
             print(f"Сочетания GNOME не обновлены: {exc}")
 
     def _hotkey_error(self, text):
-        # Вызывается из потока X11 — передаём в главный поток через очередь событий.
-        QTimer.singleShot(0, self.qapp, lambda: self.notify(text))
+        """Вызывается из потока горячих клавиш (X11, Windows): в главный поток сигналом, Qt доставит его очередью.
+        Раньше здесь был QTimer.singleShot(0, qapp, функция): такого варианта в PyQt6 нет, вызов падал с TypeError
+        в потоке, и сообщение «сочетание занято» не доходило до человека."""
+        self.hotkey_failed.emit(text)
+
+    def _show_hotkey_error(self, text):
+        self.notify(text)
 
     # --- команды -------------------------------------------------------------
 
@@ -598,9 +636,10 @@ class Clipshot(QObject):
     def quit_blocker(self) -> str:
         """Почему программу нельзя закрыть сейчас без потери работы ("" = можно).
 
-        selector: открыто окно выделения; text: в редакторе набирается текст; unsaved: в редакторе есть
-        пометки, которые не сохранены и не скопированы; dialog: открыто модальное окно (настройки и т.п.)."""
-        if self.selector is not None or self.insert_target is not None:
+        selector: открыто окно выделения (или вот-вот откроется: снимок запрошен); text: в редакторе набирается
+        текст; unsaved: в редакторе есть пометки, которые не сохранены и не скопированы; dialog: открыто модальное
+        окно (настройки и т.п.)."""
+        if self.selector is not None or self.insert_target is not None or self.capture_pending():
             return "selector"
         for editor in list(self.editors):
             canvas = getattr(editor, "canvas", None)
@@ -616,6 +655,29 @@ class Clipshot(QObject):
         if modal is not None and not modal.property("clipsd_closable"):
             return "dialog"   # a message of the updater («Что нового», an error) is simply closed on quitting
         return ""
+
+    CLIPBOARD_HOLD_S = 120   # отложенное обновление ждёт столько после копирования снимка или текста (Г4)
+
+    def _clipboard_changed(self):
+        if self._owns_clipboard():
+            self._clipboard_at = time.monotonic()
+
+    @staticmethod
+    def _owns_clipboard() -> bool:
+        try:
+            return QGuiApplication.clipboard().ownsClipboard()
+        except RuntimeError:
+            return False
+
+    def clipboard_busy(self) -> bool:
+        """Снимок или текст, который программа только что скопировала, живёт в её процессе (Windows, X11 без
+        менеджера буфера): выход для обновления сейчас опустошил бы буфер обмена, вставлять было бы нечего (Г4
+        проверки гонок). True CLIPBOARD_HOLD_S после копирования, пока буфер всё ещё наш (что-то скопировали в другой
+        программе: уже не наш, ждать нечего)."""
+        at = self._clipboard_at
+        if at is None or time.monotonic() - at >= self.CLIPBOARD_HOLD_S:
+            return False
+        return self._owns_clipboard()
 
     def answer_quit_for_update(self) -> str:
         """Ответ на quit-for-update: «ok» (программа сейчас выйдет) или «busy» (обновление отложено)."""
@@ -721,8 +783,21 @@ class Clipshot(QObject):
         modal = QApplication.activeModalWidget()
         return modal if modal is not None and modal.isVisible() else None
 
+    CAPTURE_PENDING_S = 2.0   # снимок запрошен, окно выделения откроется через 250-350 мс: столько это «занято»
+
+    def capture_pending(self) -> bool:
+        """Снимок запрошен, а окно выделения ещё не открыто (щелчок по значку ждёт 250 мс, «Ещё» и снимок поверх
+        редактора 300-350 мс). В эти доли секунды окно оценки, предложение обновления и выход для обновления тоже
+        ждут: раньше они успевали встать вместо выделения, и щелчок пропадал (Г10 проверки гонок)."""
+        at = self._capture_at
+        return at is not None and 0 <= time.monotonic() - at < self.CAPTURE_PENDING_S
+
+    def _capture_requested(self):
+        self._capture_at = time.monotonic()
+
     def capture_region(self, delay=0):
         if not self._busy():
+            self._capture_requested()
             QTimer.singleShot(max(delay, self.clear_way_for_capture()), self._start_region)
 
     def capture_translate(self):
@@ -731,10 +806,12 @@ class Clipshot(QObject):
         from . import translate_ui
         if self._busy():
             return
+        self._capture_requested()
         self._float_hidden = translate_ui.hide_floating()
         QTimer.singleShot(max(300, self.clear_way_for_capture()), lambda: self._start_region(translate=True))
 
     def _start_region(self, full=False, translate=False):
+        self._capture_at = None   # дальше занятость видна по самому окну выделения
         self._note_activity()
         modal = self._modal_in_the_way()
         if modal is not None:
@@ -818,6 +895,7 @@ class Clipshot(QObject):
         """Новый снимок области поверх уже открытого редактора: окно прячется на время выделения."""
         if self._busy():
             return
+        self._capture_requested()
         self.insert_target = editor
         editor.hide()
         QTimer.singleShot(max(350, self.clear_way_for_capture()), self._start_region)   # дать окну исчезнуть с экрана
@@ -874,6 +952,7 @@ class Clipshot(QObject):
     def capture_fullscreen(self, delay=0):
         """Весь экран: окно выделения сразу с рамкой по краю экрана, надписью и кнопками в центре."""
         if not self._busy():
+            self._capture_requested()
             QTimer.singleShot(max(delay, self.clear_way_for_capture()), lambda: self._start_region(full=True))
 
     def open_editor(self, image: QImage, origin):
@@ -885,7 +964,13 @@ class Clipshot(QObject):
         self.editors.append(editor)
         editor.present()
         if not self.config.get("theme_chosen"):
-            QTimer.singleShot(400, lambda: self.first_run(editor))   # первый запуск: выбор оформления, затем курс
+            # первый запуск: выбор оформления, затем курс. Таймер принадлежит окну: редактор, закрытый раньше 400 мс,
+            # удаляет его вместе с собой (Г7 проверки гонок: окно выбора строилось над удалённым редактором и роняло
+            # программу). У QTimer.singleShot в PyQt6 нет варианта с объектом-контекстом.
+            timer = QTimer(editor)
+            timer.setSingleShot(True)
+            timer.timeout.connect(lambda: self.first_run(editor))
+            timer.start(400)
         elif not self.config.get("tour_done"):
             QTimer.singleShot(500, editor.start_tour)   # первый запуск: вводный курс
         return editor
@@ -895,7 +980,7 @@ class Clipshot(QObject):
             self.editors.remove(editor)
         updater = getattr(self, "_updater", None)
         if updater is not None:
-            QTimer.singleShot(1000, updater.deferred_tick)   # отложенное обновление может пойти сейчас
+            updater.deferred_soon(1000)   # отложенное обновление может пойти сейчас (один общий таймер, Г4)
         self._note_activity()
         self.watch_rating_quiet()   # окно оценки не сразу, а после спокойной минуты (rating_quiet_poll)
 
@@ -907,8 +992,11 @@ class Clipshot(QObject):
 
     def first_run(self, editor):
         """Первый запуск: выбрать оформление (с живым переключением), затем знакомство."""
+        from PyQt6 import sip
         from . import themes
         from .theme_chooser import ThemeChooser
+        if editor not in self.editors or sip.isdeleted(editor):
+            return   # редактор уже закрыт: оформление предложит следующий снимок
 
         def apply():
             themes.apply_app(self.qapp, self.config)
@@ -1102,12 +1190,8 @@ class Clipshot(QObject):
         os.makedirs(folder, exist_ok=True)
         ext = "jpg" if self.config.get("save_format", "png") == "jpg" else "png"
         stamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        path = os.path.join(folder, f"Screenshot_{stamp}.{ext}")
-        n = 2
-        while os.path.exists(path):   # два снимка в одну секунду
-            path = os.path.join(folder, f"Screenshot_{stamp}_{n}.{ext}")
-            n += 1
-        return path
+        # два снимка в одну секунду, в том числе в двух копиях программы: имя занимается сразу (Г9 проверки гонок)
+        return hidpi.reserve_path(folder, f"Screenshot_{stamp}", ext)
 
     def autosave(self, image: QImage):
         """Каждый снимок сразу в папку для снимков (настройка auto_save). Путь файла или None."""
@@ -1120,6 +1204,7 @@ class Clipshot(QObject):
             return None
         if hidpi.save_image(image, path, self.config):
             return path
+        hidpi.discard_reserved(path)
         print(f"Автосохранение не удалось: {path}")
         return None
 
@@ -1134,6 +1219,7 @@ class Clipshot(QObject):
             self.save_config()
             self.notify(tr("app.saved", path=path))
         else:
+            hidpi.discard_reserved(path)
             self.notify(tr("app.save_failed", path=path))
 
     def copy_image(self, image: QImage):
@@ -1234,6 +1320,22 @@ def install_translations(qapp):
             qapp._translators.append(translator)
 
 
+INSTANCE_WAIT_S = 15   # другая копия держит замок, но канал ещё не открыт: столько ждать, чтобы отдать ей команду
+
+
+def hand_over(server_name: str, command: str) -> bool:
+    """Передать команду запущенной копии. False: на канале никто не отвечает."""
+    sock = QLocalSocket()
+    sock.connectToServer(server_name)
+    if not sock.waitForConnected(300):
+        return False
+    if command:
+        sock.write(command.encode())
+        sock.waitForBytesWritten(1000)
+    sock.disconnectFromServer()
+    return True
+
+
 def main() -> int:
     from . import i18n
     from .language import early_choice
@@ -1289,24 +1391,30 @@ def main() -> int:
     qapp.setQuitOnLastWindowClosed(False)
     server_name = socket_path()
 
-    # Если ClipSD уже запущен: передаём ему команду и выходим.
-    sock = QLocalSocket()
-    sock.connectToServer(server_name)
-    if sock.waitForConnected(300):
-        if command:
-            sock.write(command.encode())
-            sock.waitForBytesWritten(1000)
-        sock.disconnectFromServer()
+    # Одна копия программы (Г6 проверки гонок): замок берётся до проверки канала и держится всё время работы. Замок
+    # занят: другая копия работает или как раз запускается и ещё не открыла канал; команда отдаётся ей, когда канал
+    # откроется. Раньше две копии, запущенные почти одновременно, обе оставались работать.
+    from .ipc import InstanceLock
+    lock = InstanceLock(server_name)
+    deadline = time.monotonic() + INSTANCE_WAIT_S
+    while not lock.acquire():
+        if hand_over(server_name, command):
+            return 0
+        if time.monotonic() > deadline:
+            print("ClipSD уже запущен, но не отвечает на команды", file=sys.stderr)
+            return 1
+        time.sleep(0.1)
+    # Замок наш. Если ClipSD уже запущен (копия старой версии, без замка): передаём ему команду и выходим.
+    if hand_over(server_name, command):
         return 0
     if args.quit:
         return 0
 
     app = Clipshot(qapp, migrate=True)
+    app.instance_lock = lock   # держится до конца процесса
     from . import themes
     themes.apply_app(qapp, app.config)
-    app.start(server_name)
-    if command:
-        QTimer.singleShot(300, lambda: app.handle_command(command))
+    app.start(server_name, command)
     rc = qapp.exec()
     app.shutdown()
     return rc

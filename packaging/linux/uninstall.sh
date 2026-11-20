@@ -75,6 +75,9 @@ remove_package_state() {
   rm -rf "$STATE/update.lock"
   rm -f "$STATE"/started-* "$STATE"/update-* "$STATE"/.update-result.* "$STATE/update.log"
   [ -S "$CACHE/clipsd/clipsd.sock" ] && rm -f "$CACHE/clipsd/clipsd.sock"
+  # the lock of the one running copy (1.32.3) lies next to the socket; the program has quit by now
+  rm -f "$CACHE/clipsd/clipsd.sock.lock"
+  [ -n "${XDG_RUNTIME_DIR:-}" ] && rm -f "$XDG_RUNTIME_DIR/clipsd.sock.lock"
   rmdir "$STATE" "$CACHE/clipsd" 2>/dev/null
   return 0
 }

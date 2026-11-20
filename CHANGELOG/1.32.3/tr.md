@@ -1,0 +1,11 @@
+- “Metni kopyala” düğmesinden hemen sonra düzenleyiciyi kapatırsanız ya da ilk ekran görüntüsünü açılır açılmaz kapatırsanız program artık kendiliğinden kapanmıyor.
+- Güncellemeler. İndirme penceresinde Esc ya da çarpı yalnızca pencereyi gizler, indirme sürer; önceden program kapanıyordu. Hata penceresindeki “Yeniden dene”, bir indirme sürerken artık ikinci bir indirme başlatmıyor.
+- Güncellemeler. Güncelleme için yeniden başlatmadan hemen önce kopyalanan ekran görüntüsü artık panodan kaybolmuyor: “Kopyala ve kapat” düğmesinden ya da indirme sırasında yapılan bir kopyalamadan sonra program, yapıştırabilmeniz için 2 dakikaya kadar bekler ve ancak sonra yeniden başlar.
+- Güncellemeler. Hata penceresi ve “Yenilikler” artık seçim penceresinin ya da düzenleyicinin üstünde açılmıyor: işinizi bitirdikten bir dakika sonra görünürler. Program o zamana kadar kapanırsa hata penceresi bir sonraki başlatmada görünür.
+- Güncellemeler. “Güncellemeleri denetle”, program tam o sırada güncellemeleri kendisi denetlerken de bir pencereyle yanıt verir. Güncelleme hata penceresi açıksa düğme onu öne getirir.
+- Linux. Güncelleme kurulurken Alt+W artık güncellemeyi bozmuyor.
+- Neredeyse aynı anda iki başlatma, örneğin simgeye çift tıklama, artık iki simgeli iki program kopyası açmıyor.
+- Simgeye tıklamak her zaman seçimi açar: değerlendirme penceresi ya da güncelleme önerisi artık onun yerine açılmıyor.
+- Ekran görüntüsü kısayolu başka bir program tarafından kullanılıyorsa, bunu bildiren mesaj artık kaybolmuyor (Windows ve GNOME dışındaki Linux): önceden kısayol hiçbir mesaj olmadan çalışmıyordu.
+- Aynı saniyede kaydedilen iki ekran görüntüsü artık birbirinin üzerine yazılmıyor: ikinci dosyanın adına _2 eklenir.
+- Parça parça çeviri. Kalan karakter sayacı, birkaç parça aynı anda çevrilirken artık şaşmıyor. Küçük bir parçadaki hata mesajı tamamen görünür. Dili tam çevirinin sonunda değiştirirseniz, metin bulunamadı mesajı artık hata olarak gösterilmiyor.

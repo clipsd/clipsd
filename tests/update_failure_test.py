@@ -18,6 +18,7 @@ said nothing for 10 minutes and then only "did not finish").
 
 Run: QT_QPA_PLATFORM=offscreen python3 tests/update_failure_test.py
 """
+import tmpclean  # noqa: F401  (временные папки этого теста убираются при его выходе)
 import hashlib
 import json
 import os

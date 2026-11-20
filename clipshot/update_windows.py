@@ -146,6 +146,17 @@ class ProgressDialog(ClipDialog):
         self.body.addWidget(self.status)
         self.cancel_button = self.secondary(tr("updater.button.cancel"))
         self.cancel_button.clicked.connect(on_cancel)
+        # 1.32.3 (Г2 проверки гонок): Esc и крестик только убирают окно, загрузка идёт дальше («Можно продолжать
+        # работу»); отменяет кнопка «Отмена». Раньше Esc закрывал и удалял окно, а загрузка продолжала слать в него
+        # прогресс: программа падала на следующем шаге.
+        self.close_b.clicked.disconnect()
+        self.close_b.clicked.connect(self.hide)
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape:
+            self.hide()
+            return
+        super().keyPressEvent(event)
 
     def set_progress(self, done: int, total: int):
         percent = int(done * 100 / total) if total else 0

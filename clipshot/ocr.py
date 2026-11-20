@@ -613,9 +613,15 @@ def start(image: QImage, on_done, langs: str = DEFAULT_LANGS, quality: str = "ac
 
     def finished(text, error):
         try:
-            on_done(text, error, job.help)
-        except TypeError:   # старый обработчик с двумя аргументами
-            on_done(text, error)
+            try:
+                on_done(text, error, job.help)
+            except TypeError:   # старый обработчик с двумя аргументами
+                on_done(text, error)
+        except RuntimeError:
+            # окно обработчика удалено, пока шло распознавание (wrapped C/C++ object has been deleted): в журнал,
+            # а не необработанной ошибкой в обработчике сигнала, которая роняет всю программу (Г1 проверки гонок)
+            import sys
+            sys.excepthook(*sys.exc_info())
 
     job.done.connect(finished, Qt.ConnectionType.QueuedConnection)
     job.finished.connect(lambda: _forget(job))   # поток удаляется, только когда run() вернулся

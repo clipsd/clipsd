@@ -6,6 +6,7 @@
 
 Запуск: QT_QPA_PLATFORM=offscreen python3 tests/translate_test.py
 """
+import tmpclean  # noqa: F401  (временные папки этого теста убираются при его выходе)
 import os
 import sys
 import tempfile

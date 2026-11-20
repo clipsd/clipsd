@@ -21,6 +21,7 @@
 Запуск: QT_QPA_PLATFORM=offscreen python3 tests/perevod_mesto_test.py (сам запускает проверки с масштабом 1, 1.5 и 2
 и на двух мониторах 2560x1440 и 1920x1080 с масштабом 1, как у владельца).
 """
+import tmpclean  # noqa: F401  (временные папки этого теста убираются при его выходе)
 import difflib
 import json
 import os

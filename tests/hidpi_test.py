@@ -10,6 +10,7 @@ HTML с размером в точках в буфере только при м�
 Запуск: QT_QPA_PLATFORM=offscreen python3 tests/hidpi_test.py (сам запускает дочерние проверки с масштабом 1.5
 и с двумя мониторами разного масштаба).
 """
+import tmpclean  # noqa: F401  (временные папки этого теста убираются при его выходе)
 import base64
 import json
 import os
