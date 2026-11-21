@@ -2,6 +2,8 @@
   "phone.allow_again": "Zezwól ponownie",
   "phone.allow_done": "Gotowe. Otwórz kod w telefonie jeszcze raz.",
   "phone.allow_failed": "Reguła Windows nie została zmieniona: {error}",
+  "phone.allow_working": "Czekamy na prośbę Windows o zgodę…",
+  "phone.allow_declined": "Nie udzielono zgody. Kliknij „Zezwól ponownie” i odpowiedz „Tak”.",
   "phone.android17": "Android 17: zezwól przeglądarce na dostęp do sieci lokalnej. Ustawienia → Aplikacje → Twoja przeglądarka → Uprawnienia → Urządzenia w pobliżu → Zezwól.",
   "phone.bind_failed": "Nie udało się otworzyć odbioru na tym komputerze. Szczegóły: {error}",
   "phone.cancel": "Anuluj",
@@ -104,7 +106,11 @@
   "phone.page_too_big": "Zdjęcie jest za duże. Zrób je ponownie.",
   "phone.page_unsent": "Zdjęcie nie dotarło na komputer. Jeśli przeglądarka na to pozwala, przytrzymaj obraz, aby zapisać go w galerii.",
   "phone.page_used": "Ten kod jest już otwarty na innym telefonie. Pokaż nowy kod na komputerze.",
+  "phone.page_zoom_close": "Zamknij",
+  "phone.page_zoom_hint": "Dotknij, aby obejrzeć z bliska",
   "phone.phone_done": "Odbiór zamknięto na telefonie. Aby zrobić więcej zdjęć, pokaż nowy kod.",
+  "phone.photo_apart": "Zrzut był właśnie zamykany, więc zdjęcie z telefonu otwarto jako osobny zrzut.",
+  "phone.photo_apart_saved": "Zrzut był właśnie zamykany, więc zdjęcie z telefonu otwarto jako osobny zrzut. Plik: {path}",
   "phone.photo_late": "Zdjęcie z telefonu zostało odebrane i otwarte w edytorze.",
   "phone.received_open": "Zdjęcie odebrane: {size}. Otwieranie…",
   "phone.received_size": "Odebrane zdjęcia: {count} ({size})",
@@ -132,5 +138,8 @@
   "phone.vpn_hint": "VPN w telefonie może blokować połączenie.",
   "phone.wifi_hide": "Nie pokazuj więcej",
   "phone.wifi_ok": "Rozumiem, pokaż kod",
-  "phone.wifi_text": "Telefon i komputer muszą być połączone z tą samą siecią Wi-Fi. Przez dane komórkowe zdjęcie nie dotrze."
+  "phone.wifi_text": "Telefon i komputer muszą być połączone z tą samą siecią Wi-Fi. Przez dane komórkowe zdjęcie nie dotrze.",
+  "phone.tile_title": "Z telefonu",
+  "phone.tile_sub": "aparat lub obraz",
+  "phone.tile_tip": "Zrób zdjęcie lub wyślij obraz z telefonu"
 }

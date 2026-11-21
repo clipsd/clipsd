@@ -28,10 +28,11 @@ def steps(sel):
     close = [] if sel.bar_close_rect.isEmpty() else [sel.bar_close_rect.adjusted(-2, -2, 2, 2)]
     table = [
         ("area", kept, 1),
-        ("copy", rects("copy"), 2),
+        # 21.11.2026 (вариант Б): главная зелёная теперь «Редактировать», она и рассказывается первой после рамки
         ("edit", rects("edit") + kept, 3),
+        ("copy", rects("copy"), 2),
         ("manual", rects("manual"), 4),
-        ("top", rects("record", "full", "ocr"), 5),
+        ("top", rects("record", "full", "ocr", "phone"), 5),
         ("translate", rects("translate", "translate_pick"), 6),
         ("lang", lang, 7),
         ("close", close, 8),

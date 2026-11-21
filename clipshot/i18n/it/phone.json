@@ -2,6 +2,8 @@
   "phone.allow_again": "Consenti di nuovo",
   "phone.allow_done": "Fatto. Apri di nuovo il codice sul telefono.",
   "phone.allow_failed": "La regola di Windows non è stata modificata: {error}",
+  "phone.allow_working": "In attesa della richiesta di autorizzazione di Windows…",
+  "phone.allow_declined": "Autorizzazione non concessa. Fai clic su «Consenti di nuovo» e rispondi «Sì».",
   "phone.android17": "Android 17: consenti al browser l’accesso alla rete locale. Impostazioni → App → il tuo browser → Autorizzazioni → Dispositivi nelle vicinanze → Consenti.",
   "phone.bind_failed": "Impossibile aprire la ricezione su questo computer. Dettagli: {error}",
   "phone.cancel": "Annulla",
@@ -104,7 +106,11 @@
   "phone.page_too_big": "La foto è troppo grande. Scattala di nuovo.",
   "phone.page_unsent": "La foto non è arrivata sul computer. Se il browser lo consente, tieni premuta l’immagine per salvarla nella galleria.",
   "phone.page_used": "Questo codice è già aperto su un altro telefono. Mostra un nuovo codice sul computer.",
+  "phone.page_zoom_close": "Chiudi",
+  "phone.page_zoom_hint": "Tocca per guardarla da vicino",
   "phone.phone_done": "La ricezione è stata chiusa dal telefono. Per altre foto, mostra un nuovo codice.",
+  "phone.photo_apart": "Lo screenshot si stava chiudendo, quindi la foto dal telefono è stata aperta a parte.",
+  "phone.photo_apart_saved": "Lo screenshot si stava chiudendo, quindi la foto dal telefono è stata aperta a parte. File: {path}",
   "phone.photo_late": "La foto dal telefono è stata ricevuta e aperta nell’editor.",
   "phone.received_open": "Foto ricevuta: {size}. Apertura…",
   "phone.received_size": "Foto ricevute: {count} ({size})",
@@ -132,5 +138,8 @@
   "phone.vpn_hint": "Una VPN sul telefono può bloccare il collegamento.",
   "phone.wifi_hide": "Non mostrare più",
   "phone.wifi_ok": "Ho capito, mostra il codice",
-  "phone.wifi_text": "Il telefono e il computer devono essere collegati alla stessa rete Wi-Fi. Con i dati mobili la foto non arriva."
+  "phone.wifi_text": "Il telefono e il computer devono essere collegati alla stessa rete Wi-Fi. Con i dati mobili la foto non arriva.",
+  "phone.tile_title": "Dal telefono",
+  "phone.tile_sub": "foto o immagine",
+  "phone.tile_tip": "Scatta una foto o invia un'immagine dal telefono"
 }

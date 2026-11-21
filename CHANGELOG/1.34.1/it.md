@@ -1,0 +1,9 @@
+- La finestra «Novità della versione» non compare più sopra la finestra di selezione se premi Alt+W subito dopo uno screenshot: appare quando hai finito.
+- Dal telefono. Una foto che arriva mentre uno screenshot si sta chiudendo (con la domanda «Screenshot non salvato» aperta) non va più persa: si apre come uno screenshot a parte. Ogni foto dal telefono viene salvata subito nella cartella degli screenshot (se il salvataggio automatico è attivo), anche quando è finita in uno screenshot aperto.
+- Finestra di selezione. Premere di nuovo «Salva» per lo stesso screenshot non crea più file uguali: compare «Già salvato» con il nome del file. Anche Ctrl+S tenuto premuto salva una volta sola.
+- Windows. L'elenco «Finestre aperte ▾» non aspetta le unità di rete: un programma su un'unità di rete ha una lettera al posto dell'icona.
+- Il suggerimento accanto alla tavolozza non è più largo di prima: una riga lunga va a capo.
+- Il pulsante «Dal telefono» nell'editor si raggiunge da tastiera (Tab).
+- La finestra «Novità della versione» cambia lingua insieme al programma.
+- Correzioni nelle traduzioni in ucraino, cinese, spagnolo, inglese, portoghese e turco.
+- Windows. Il testo russo di un'immagine non si trasforma più in lettere latine. Se in Windows manca il riconoscimento del testo russo, il programma propone di installarlo con il pulsante «Installa riconoscimento».

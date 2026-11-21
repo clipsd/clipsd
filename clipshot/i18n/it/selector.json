@@ -5,7 +5,7 @@
   "selector.btn_full_shot": "Screenshot a schermo intero",
   "selector.btn_ocr": "Copia il testo",
   "selector.btn_record": "Registra video",
-  "selector.btn_retake": "Riseleziona",
+  "selector.btn_retake": "Altra area",
   "selector.btn_save": "Salva",
   "selector.btn_translate": "Traduci la selezione",
   "selector.btn_translate_all": "Traduci tutto lo schermo",
@@ -45,7 +45,7 @@
   "selector.trc_translation": "Traduzione",
   "selector.trc_all": "Tutto lo schermo",
   "selector.btn_window": "Cattura finestra",
-  "selector.win_chip": "Finestre",
+  "selector.win_chip": "Finestre aperte",
   "selector.win_minimized": "ridotta a icona",
   "selector.win_monitor": "Schermo {n}",
   "selector.win_untitled": "Senza titolo",
@@ -62,5 +62,9 @@
   "selector.win_offscreen": "Questa finestra ora è fuori dallo schermo",
   "selector.win_slow": "GNOME risponde lentamente: non tutte le finestre sono ancora elencate",
   "selector.win_failed": "Elenco delle finestre non ottenuto: seleziona la finestra con il mouse",
-  "selector.win_visible_only": "La finestra è coperta da altre: qui verrà catturata solo la parte visibile"
+  "selector.win_visible_only": "La finestra è coperta da altre: qui verrà catturata solo la parte visibile",
+  "selector.sub_edit_tools": "frecce, testo, sfocatura",
+  "selector.saved": "Salvato: {name}",
+  "selector.saved_already": "Già salvato: {name}",
+  "selector.save_failed": "Impossibile salvare lo screenshot"
 }

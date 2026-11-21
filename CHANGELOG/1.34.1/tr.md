@@ -1,0 +1,9 @@
+- “Sürümdeki yenilikler” penceresi, ekran görüntüsünden hemen sonra Alt+W'ye basarsanız artık seçim penceresinin üstünde açılmıyor: siz bitirince görünüyor.
+- Telefondan. Bir ekran görüntüsü kapanırken (“Ekran görüntüsü kaydedilmedi” sorusu açıkken) gelen fotoğraf artık kaybolmuyor: ayrı bir ekran görüntüsü olarak açılıyor. Telefondan gelen her fotoğraf hemen ekran görüntüleri klasörüne kaydediliyor (otomatik kaydetme açıksa), açık bir ekran görüntüsüne eklense bile.
+- Seçim penceresi. Aynı ekran görüntüsü için yeniden “Kaydet” artık aynı dosyaları oluşturmuyor: “Zaten kaydedildi” ve dosya adı görünüyor. Basılı tutulan Ctrl+S de yalnızca bir kez kaydediyor.
+- Windows. “Açık pencereler ▾” listesi ağ sürücülerini beklemiyor: ağ sürücüsündeki bir programın simgesi yerine harf görünüyor.
+- Paletin yanındaki ipucu artık eskisinden geniş değil: uzun satır ikinci satıra geçiyor.
+- Düzenleyicideki “Telefondan” düğmesine klavyeyle (Tab) ulaşılabiliyor.
+- “Sürümdeki yenilikler” penceresi dili programla birlikte değiştiriyor.
+- Ukraynaca, Çince, İspanyolca, İngilizce, Portekizce ve Türkçe çevirilerde düzeltmeler.
+- Windows. Resimdeki Rusça metin artık Latin harflerine dönüşmüyor. Windows'ta Rusça metin tanıma yoksa program onu “Tanımayı yükle” düğmesiyle kurmayı öneriyor.

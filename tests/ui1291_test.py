@@ -419,29 +419,43 @@ def selector(width, kept=None, cfg=None, translate=False):
     return sel
 
 
-TOP5 = ["record", "full", "ocr", "translate", "translate_pick"]
+TOP5 = ["record", "full", "ocr", "phone", "translate", "translate_pick"]   # 1.34: шесть плиток
 BOTTOM4 = ["save", "edit", "manual", "copy"]
-for width, level in ((1280, "wide"), (800, "mid"), (480, "narrow")):
+# 1.34 (вариант Б): на экранах с подписями «Сохранить» и «Другая область» равные мелкие отдельным рядом, под ними крупные:
+# широкая «Редактировать» и поуже «Скопировать и закрыть»; на 800 размер «wide»
+for width, level in ((1280, "wide"), (800, "wide"), (480, "narrow")):
     sel = selector(width, QRect(width // 2 - 150, 90, 300, 200))
     sel.repaint()
     buttons, bar, hint = sel._bar_layout()
     rects = {k: r for k, _t, _s, r in buttons}
     texts = {k: t for k, t, _s, _r in buttons}
     check([k for k, *_x in buttons] == TOP5 + BOTTOM4, f"{width}: пять плиток сверху и четыре кнопки снизу {[k for k, *_x in buttons]}")
-    check(all(rects[k].top() == rects["record"].top() for k in TOP5) and all(rects[k].top() == rects["save"].top() for k in BOTTOM4)
-          and rects["save"].top() > rects["record"].bottom(), f"{width}: «Сохранить» стоит в нижнем ряду, не в верхнем")
+    choice = sel._choice(sel.bar_level)
     ws = [rects[k].width() for k in BOTTOM4]
-    check(all(a <= b for a, b in zip(ws, ws[1:])) and ws[1] < ws[3], f"{width}: нижние кнопки, чем правее, тем шире {ws}")
-    check(rects["record"].left() == rects["save"].left() and abs(rects["translate_pick"].right() - rects["copy"].right()) <= 1,
-          f"{width}: края рядов совпадают")
+    if choice:
+        check(all(rects[k].top() == rects["record"].top() for k in TOP5) and rects["save"].top() == rects["manual"].top()
+              and rects["edit"].top() == rects["copy"].top() > rects["save"].bottom() > rects["record"].bottom(),
+              f"{width}: «Сохранить» в мелком ряду под плитками, крупные ниже")
+        check(ws[1] > ws[3] and abs(ws[0] - ws[2]) <= 1, f"{width}: «Редактировать» шире «Скопировать», мелкие равные {ws}")
+        check(rects["record"].left() == rects["edit"].left() and abs(rects["translate_pick"].right() - rects["copy"].right()) <= 1,
+              f"{width}: края рядов совпадают")
+    else:
+        check(all(rects[k].top() == rects["record"].top() for k in TOP5) and all(rects[k].top() == rects["save"].top() for k in BOTTOM4)
+              and rects["save"].top() > rects["record"].bottom(), f"{width}: «Сохранить» стоит в нижнем ряду, не в верхнем")
+        check(all(a <= b for a, b in zip(ws, ws[1:])) and ws[1] < ws[3], f"{width}: нижние кнопки, чем правее, тем шире {ws}")
+        check(rects["record"].left() == rects["save"].left() and abs(rects["translate_pick"].right() - rects["copy"].right()) <= 1,
+              f"{width}: края рядов совпадают")
     check(sel.bar_level["name"] == level, f"{width}: размер панели «{sel.bar_level['name']}»")
     lv = sel.bar_level
     if lv["text"]:
-        check(rects["copy"].height() == lv["btn_h"] and (level != "wide" or lv["btn_h"] == 52), f"{width}: высота нижних кнопок {rects['copy'].height()}")
+        check(rects["copy"].height() == lv["btn_h"] + 10 and (level != "wide" or lv["btn_h"] == 52),
+              f"{width}: высота крупных кнопок {rects['copy'].height()}")
         bl, bs = sel._bar_bfonts(lv)
         fb, fs = QFontMetrics(bl), QFontMetrics(bs)
-        bad = [k for k in BOTTOM4 if fb.horizontalAdvance(texts[k]) > rects[k].width() - lv["pl"] - lv["sq"] - lv["gp"] - 4
-               or fs.horizontalAdvance(sel.BAR_SUB[k]) > rects[k].width() - lv["pl"] - lv["sq"] - lv["gp"] - 4]
+        fl = QFontMetrics(sel._bar_fonts(lv)[0])
+        bad = [k for k in ("edit", "copy") if fb.horizontalAdvance(texts[k]) > rects[k].width() - lv["pl"] - lv["sq"] - 6 - lv["gp"] - 4
+               or fs.horizontalAdvance(sel._choice_sub(k)) > rects[k].width() - lv["pl"] - lv["sq"] - 6 - lv["gp"] - 4]
+        bad += [k for k in ("save", "manual") if fl.horizontalAdvance(texts[k]) > rects[k].width() - 12 - 16 - 7 - 6]
         check(not bad, f"{width}: подписи и пояснения нижних кнопок не обрезаются {bad}")
         if level == "wide":
             check(lv["bl"] == 15 and abs(lv["bs"] - 11) < 0.01 and lv["sq"] == 32, "широкий (1.31.1, компактнее): название 15, пояснение 11, квадрат значка 32")
@@ -460,7 +474,7 @@ check(all(k in btns for k in BOTTOM4) and sel.translate_mode and set(sel.BAR_DIS
 sel.close()
 sel = selector(1280, QRect(500, 90, 300, 200), cfg={"translate_enabled": False})
 keys = [k for k, *_x in sel._bar_layout()[0]]
-check(keys == ["record", "full", "ocr"] + BOTTOM4, f"перевод выключен: три плитки и четыре кнопки {keys}")
+check(keys == ["record", "full", "ocr", "phone"] + BOTTOM4, f"перевод выключен: три плитки и четыре кнопки {keys}")
 sel.close()
 
 # --- строка режима перевода в окне выделения: шрифт и длинные языки ----------------------------------------------

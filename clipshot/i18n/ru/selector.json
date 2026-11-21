@@ -5,7 +5,7 @@
   "selector.btn_full_shot": "Снимок всего экрана",
   "selector.btn_ocr": "Копировать текст",
   "selector.btn_record": "Запись видео",
-  "selector.btn_retake": "Выделить заново",
+  "selector.btn_retake": "Другая область",
   "selector.btn_save": "Сохранить",
   "selector.btn_translate": "Перевести выделенное",
   "selector.btn_translate_all": "Перевести весь экран",
@@ -49,7 +49,7 @@
   "selector.win_minimized": "свёрнуто",
   "selector.win_monitor": "Экран {n}",
   "selector.win_untitled": "Без названия",
-  "selector.win_chip": "Окна",
+  "selector.win_chip": "Открытые окна",
   "selector.win_loading": "Список окон готовится…",
   "selector.win_need_update": "Для полного списка окон нужно обновить дополнение ClipSD в GNOME",
   "selector.win_need_install": "Для полного списка окон нужно установить дополнение ClipSD в GNOME",
@@ -62,5 +62,9 @@
   "selector.win_offscreen": "Это окно сейчас вне экрана",
   "selector.win_slow": "GNOME отвечает медленно: пока видны не все окна",
   "selector.win_failed": "Список окон не получен: выделите окно мышью",
-  "selector.win_visible_only": "Окно закрыто другими: здесь снимется только видимая часть"
+  "selector.win_visible_only": "Окно закрыто другими: здесь снимется только видимая часть",
+  "selector.sub_edit_tools": "стрелки, текст, размытие",
+  "selector.saved": "Сохранено: {name}",
+  "selector.saved_already": "Уже сохранено: {name}",
+  "selector.save_failed": "Не удалось сохранить снимок"
 }

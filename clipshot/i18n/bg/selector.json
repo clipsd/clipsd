@@ -5,7 +5,7 @@
   "selector.btn_full_shot": "Снимка на целия екран",
   "selector.btn_ocr": "Копирай текст",
   "selector.btn_record": "Запис на видео",
-  "selector.btn_retake": "Избери наново",
+  "selector.btn_retake": "Друга област",
   "selector.btn_save": "Запази",
   "selector.btn_translate": "Преведи избраното",
   "selector.btn_translate_all": "Преведи целия екран",
@@ -48,7 +48,7 @@
   "selector.trc_translation": "Превод",
   "selector.trc_all": "Целият екран",
   "selector.btn_window": "Снимка на прозорец",
-  "selector.win_chip": "Прозорци",
+  "selector.win_chip": "Отворени прозорци",
   "selector.win_minimized": "минимизиран",
   "selector.win_monitor": "Екран {n}",
   "selector.win_untitled": "Без заглавие",
@@ -65,5 +65,9 @@
   "selector.win_offscreen": "Този прозорец сега е извън екрана",
   "selector.win_slow": "GNOME отговаря бавно: засега не се виждат всички прозорци",
   "selector.win_failed": "Списъкът с прозорци не беше получен: изберете прозореца с мишката",
-  "selector.win_visible_only": "Прозорецът е закрит от други: тук ще се заснеме само видимата част"
+  "selector.win_visible_only": "Прозорецът е закрит от други: тук ще се заснеме само видимата част",
+  "selector.sub_edit_tools": "стрелки, текст, размазване",
+  "selector.saved": "Запазено: {name}",
+  "selector.saved_already": "Вече е запазено: {name}",
+  "selector.save_failed": "Снимката не можа да се запази"
 }

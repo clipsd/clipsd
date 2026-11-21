@@ -48,12 +48,14 @@ DEFAULTS = {
     "size": 2,
     "text_color": "",               # цвет текста в номере и сноске; пусто — авто
     "custom_colors": [],            # 1.32.1: свои цвета из «+» в палитре редактора (до трёх, новый вытесняет старый)
+    "number_hint_count": 0,         # 1.34: сколько раз показана подсказка «Этот цвет: нумерация с N» (до трёх)
     "show_zoom": True,
     "show_size": True,
     "last_region": None,
     "settings_page": "general",     # 1.32: раздел окна настроек, открытый в прошлый раз
     "tour_selector_done": False,    # 1.32: знакомство с окном выделения уже показано (при первом выделении само)
     "tour_done": False,             # вводный курс уже показан (при первом редакторе показывается сам)
+    "novoe_enabled": True,          # 1.34: после обновления окно «Новое в версии» и метки «Новое» (novoe.py)
     "ui_theme": "standard",
     "theme_chosen": False,
     "editor_system_title": False,   # окно редактора с системным заголовком (по умолчанию своя шапка и скруглённые углы)
@@ -74,6 +76,9 @@ DEFAULTS = {
     "default_tool": "",             # инструмент по умолчанию: редактор открывается с ним; пусто: с последним (правая кнопка по инструменту)
     "remember_region": True,        # подсвечивать прошлую область при новом снимке
     "save_format": "png",           # png | jpg — формат по умолчанию при сохранении
+    "form_last": "round2",          # 1.34: последняя форма снимка (кнопка «Форма снимка» включает её одним щелчком)
+    "form_radius": 28.0,            # 1.34: свой радиус скруглённых углов (точки), когда form_last = round
+    "shape_background": "#ffffff",  # 1.34: фон за формой там, где нет прозрачности (JPG, запасная картинка буфера)
     "snapshot_size": "full",        # full: полное разрешение; screen: как на экране, 100% (уменьшено до размера в точках)
     "clip_html": hidpi.html_default(),   # в буфер вместе с картинкой HTML с размером в точках (при масштабе экрана ≠ 100%)
     "language": "auto",             # язык интерфейса: код (ru, en, de…) или auto = язык системы; см. language.config_choice
@@ -296,6 +301,9 @@ class Clipshot(QObject):
         помощник смены версии остановил бы её силой (Н1 проверки 1.32.3)."""
         if command in ("region", "full"):
             self._capture_requested()
+        from . import novoe
+        if novoe.on_start(self.config):   # 1.34: первая установка или обновление (версия в настройках)
+            self.save_config()
         self._start(server_name)
         if command:
             QTimer.singleShot(300, lambda: self.handle_command(command))
@@ -522,6 +530,7 @@ class Clipshot(QObject):
             (tr("app.menu_folder"), self.open_folder),
             (tr("app.menu_settings"), lambda: self.open_settings()),
             ("language", None),
+            (tr("novoe.menu"), lambda: self.show_novoe()),   # 1.34: «Что нового» в любой момент (novoe.py)
             (tr("app.menu_tour"), self.demo_tour),
             (tr("app.menu_tour_selector"), self.demo_selector_tour),
             (tr("feedback.rate_title"), self.show_rating),
@@ -1067,7 +1076,149 @@ class Clipshot(QObject):
             timer.start(400)
         elif not self.config.get("tour_done"):
             QTimer.singleShot(500, editor.start_tour)   # первый запуск: вводный курс
+            from . import novoe
+            novoe.window_done(self.config)   # всё знакомство и так покажет программу: окно новинок не нужно
+        else:
+            self._maybe_novoe(editor)
         return editor
+
+    # --- новинки после обновления (1.34, novoe.py) -----------------------------------------------------
+
+    NOVOE_DELAY_MS = 700   # окно новинок чуть позже окна редактора, как знакомство
+
+    def _maybe_novoe(self, editor):
+        """Первый редактор после обновления: одно окно «Новое в версии X». Таймер принадлежит окну (как у выбора
+        оформления): редактор, закрытый раньше, удаляет его вместе с собой."""
+        from . import novoe
+        if not novoe.window_pending(self.config):
+            return
+        timer = QTimer(editor)
+        timer.setSingleShot(True)
+        timer.timeout.connect(lambda: self._novoe_from_editor(editor))
+        timer.start(self.NOVOE_DELAY_MS)
+
+    def _novoe_from_editor(self, editor):
+        from PyQt6 import sip
+        from . import novoe
+        if editor not in self.editors or sip.isdeleted(editor) or getattr(editor, "tour", None) is not None:
+            return
+        if not novoe.window_pending(self.config):
+            return   # уже показано
+        if self.editors and self.editors[-1] is not editor:
+            return   # открыт новый редактор: окно предложит его собственный таймер, над ним человек и работает
+        if not self.editor_quiet(editor):
+            # 1.34.1 (Б1 проверки 1.34.0): Alt+W меньше чем через 0,7 с после редактора. Модальное окно новинок
+            # поверх открытого (или запрошенного) выделения заморозило бы его. Ждём спокойного момента у этого же
+            # редактора: выделение закрыто, редактор на экране, других модальных окон нет.
+            self._retry_on_editor(editor, lambda: self._novoe_from_editor(editor))
+            return
+        self.show_novoe(editor, auto=True)
+
+    QUIET_RETRY_MS = 1000   # окно знакомства или новинок ждёт спокойного момента: проверка раз в секунду
+
+    def editor_quiet(self, editor) -> bool:
+        """Можно ли сейчас показать окно, которое приходит к редактору по таймеру (выбор оформления, новинки,
+        вопрос про обзор): окно выделения не открыто и не запрошено, снимок не вставляется в редактор, сам редактор
+        виден и не свёрнут, другого модального окна нет. Иначе такое окно встало бы поверх выделения (Г8, Б1)."""
+        if self.selector is not None or self.insert_target is not None or self.capture_pending():
+            return False
+        if self._modal_in_the_way() is not None:
+            return False
+        try:
+            return editor.isVisible() and not editor.isMinimized()
+        except RuntimeError:
+            return False
+
+    def _retry_on_editor(self, editor, again):
+        """Повторить проверку позже. Таймер принадлежит редактору: закрытый редактор удаляет его вместе с собой."""
+        timer = QTimer(editor)
+        timer.setSingleShot(True)
+        timer.timeout.connect(again)
+        timer.timeout.connect(timer.deleteLater)
+        timer.start(self.QUIET_RETRY_MS)
+
+    def show_novoe_after_update(self, version: str) -> bool:
+        """Обновление поставила сама программа (updater, спокойная минута): вместо окна «ClipSD обновлён» окно новинок
+        с той же строкой «Обновление установлено». True: показано или уже было, окно «ClipSD обновлён» не нужно."""
+        from . import __version__, novoe
+        if version != __version__ or not novoe.enabled(self.config) or not novoe.items_since(self.config):
+            return False
+        if novoe.window_pending(self.config):
+            self.show_novoe(None, auto=True, updated=True)
+        return True
+
+    def show_novoe(self, editor=None, auto=False, updated=False):
+        """Окно «Новое в версии X» (меню значка «Что нового», первый редактор после обновления, updater).
+        «Показать новое»: короткий курс по новым кнопкам в этом редакторе (нет редактора: в примере снимка), потом
+        вопрос про обзор. Новинок этой версии в таблице нет: обычное окно «Что нового» с заметками версии."""
+        from . import __version__, notifications, novoe
+        notes = notifications.whats_new_notes(self.config, __version__)
+        items = novoe.window_items(self.config)
+        if not items:
+            from . import updater
+            updater.UpdaterUI().whats_new(__version__, notes)
+            return "notes"
+        if getattr(self, "_novoe_window", None) is not None:
+            self._novoe_window.raise_()
+            return "open"
+        from PyQt6 import sip
+        while True:
+            box = novoe.make_window(__version__, items, editor, updated=updated, notes=bool(notes))
+            if editor is None:
+                box.place_centered()
+            self._novoe_window = box
+            try:
+                box.exec()
+            finally:
+                self._novoe_window = None
+            choice = box.choice
+            if choice != "relang":
+                break
+            # язык сменили при открытом окне: то же окно на новом языке (М6 проверки 1.34.0)
+            notes = notifications.whats_new_notes(self.config, __version__)
+            items = novoe.window_items(self.config) or items
+            if editor is not None and (editor not in self.editors or sip.isdeleted(editor)):
+                editor = None
+        if choice in ("show", "notes"):
+            novoe.window_done(self.config)
+        elif auto:
+            novoe.later(self.config)   # «Позже» или крестик: спросит при следующем редакторе, не больше двух раз
+        self.save_config()
+        if choice == "notes":
+            from . import updater
+            updater.UpdaterUI().whats_new(__version__, notes)
+        elif choice == "show":
+            from PyQt6 import sip
+            if editor is None or editor not in self.editors or sip.isdeleted(editor):
+                editor = self.open_editor(demo_image(), None)
+                if editor is not None:
+                    editor.demo_maker = demo_image
+            if editor is not None:
+                QTimer.singleShot(300, lambda: self._novoe_tour(editor))
+        return choice
+
+    def _novoe_tour(self, editor):
+        from PyQt6 import sip
+        from . import novoe
+        if editor not in self.editors or sip.isdeleted(editor):
+            return
+        novoe.start_tour(editor, self.config, on_done=lambda: QTimer.singleShot(200, lambda: self._ask_overview(editor)))
+
+    def _ask_overview(self, editor):
+        """После короткого курса: «Хотите узнать о других функциях программы?» Один раз на версию."""
+        from PyQt6 import sip
+        from . import novoe
+        if not novoe.ask_pending(self.config) or editor not in self.editors or sip.isdeleted(editor):
+            return
+        if not self.editor_quiet(editor):
+            self._retry_on_editor(editor, lambda: self._ask_overview(editor))   # не поверх выделения (Б1)
+            return
+        box = novoe.make_question(editor)
+        box.exec()
+        novoe.ask_done(self.config)   # «Не сейчас» и крестик: до следующей версии не спрашивает
+        self.save_config()
+        if box.choice == "primary" and editor in self.editors and not sip.isdeleted(editor):
+            QTimer.singleShot(200, lambda: editor.start_tour(language=False))
 
     def _editor_closed(self, editor):
         if editor in self.editors:
@@ -1096,6 +1247,9 @@ class Clipshot(QObject):
         from .theme_chooser import ThemeChooser
         if editor not in self.editors or sip.isdeleted(editor):
             return   # редактор уже закрыт: оформление предложит следующий снимок
+        if not self.editor_quiet(editor):
+            self._retry_on_editor(editor, lambda: self.first_run(editor))   # не поверх выделения (Б1 проверки 1.34.0)
+            return
 
         def apply():
             themes.apply_app(self.qapp, self.config)
@@ -1308,6 +1462,33 @@ class Clipshot(QObject):
         print(f"Автосохранение не удалось: {path}")
         return None
 
+    def save_from_selector(self, selector, pixmap, rect):
+        """«Сохранить» в окне выделения (с 1.34 окно не закрывается): окно выбора места (или сразу в save_dir, если
+        save_ask выключен). Путь файла, None (отмена) или False (запись не удалась). Прошлая область запоминается, как
+        при других действиях; автосохранение в папку снимков не делается: человек сам выбрал файл, а если потом
+        скопирует или откроет редактор, снимок автосохранится как обычно."""
+        from .editor import ask_save_path
+        ask = self.config.get("save_ask", True)
+        if ask:
+            selector.suspend_for_dialog()
+        try:
+            path = ask_save_path(None, self.config)
+        finally:
+            if ask:
+                selector.resume_after_dialog()
+        if not path:
+            return None
+        if not hidpi.save_image(pixmap.toImage(), path, self.config):
+            hidpi.discard_reserved(path)
+            print(f"Сохранение не удалось: {path}")
+            return False
+        self.config["save_dir"] = os.path.dirname(path)
+        if not getattr(selector, "full_mode", False) and self.config.get("remember_region", True):
+            self.config["last_region"] = [rect.x(), rect.y(), rect.width(), rect.height()]
+        self.save_config()
+        print(tr("app.saved", path=path))
+        return path
+
     def save_quick(self, image: QImage):
         """Кнопка «Сохранить» под областью: окно выбора места (с папки «Загрузки»), без редактора."""
         from .editor import ask_save_path
@@ -1462,12 +1643,7 @@ def main() -> int:
     group.add_argument("--quit", action="store_true", help=tr("app.cli_quit"))
     group.add_argument("--demo", action="store_true", help=tr("app.cli_demo"))
     group.add_argument("--selfcheck", nargs="?", const="-", metavar="REPORT", help=argparse.SUPPRESS)   # проверка сборки
-    # Windows, «Фото с телефона» → «Разрешить заново»: эта же программа от имени администратора меняет правило брандмауэра
-    group.add_argument("--allow-phone-firewall", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
-    if args.allow_phone_firewall:
-        from . import phone
-        return phone.apply_windows_firewall(sys.executable) if sys.platform == "win32" else 2
     if args.selfcheck:   # как в 1.30: --selfcheck [ФАЙЛ] (без файла: в stdout)
         lines = i18n.selfcheck_lines()
         text = "\n".join(lines) + "\n"

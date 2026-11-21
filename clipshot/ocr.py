@@ -11,12 +11,14 @@ Windows без Tesseract: встроенное распознавание Window
 Распознавание идёт в фоновом потоке (OcrJob), окно не замирает.
 """
 
+import base64
 import os
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 
 from PyQt6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QRect, QRectF, QThread, QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFontMetrics, QGuiApplication, QImage, QPainter, QTextOption
@@ -25,12 +27,15 @@ from PyQt6.QtWidgets import (QFrame, QGraphicsOpacityEffect, QLabel, QPushButton
 
 from .dialogs import ClipDialog, icon_pixmap, link_colored
 from .i18n import tr
-from .sysenv import child_env, open_url
+from .sysenv import child_env, elevated_powershell_parameters, encoded_command, open_url
 
 DEFAULT_LANGS = "rus+eng"
 # 1.31: языки распознавания по умолчанию (config ocr_langs = "auto"): язык интерфейса и английский
 TESS_CODES = {"ru": "rus", "en": "eng", "bg": "bul", "uk": "ukr", "de": "deu", "fr": "fra", "es": "spa", "it": "ita",
               "pt": "por", "pl": "pol", "tr": "tur", "zh": "chi_sim"}
+# компонент Windows «распознавание текста» для языка (Add-WindowsCapability Language.OCR~~~<тег>~0.0.1.0)
+OCR_CAPS = {"rus": "ru-RU", "eng": "en-US", "bul": "bg-BG", "ukr": "uk-UA", "deu": "de-DE", "fra": "fr-FR",
+            "spa": "es-ES", "ita": "it-IT", "por": "pt-BR", "pol": "pl-PL", "tur": "tr-TR", "chi_sim": "zh-CN"}
 WIN_TAGS = {"rus": "ru", "eng": "en-US", "bul": "bg", "ukr": "uk", "deu": "de-DE", "fra": "fr-FR", "spa": "es-ES",
             "ita": "it-IT", "por": "pt-BR", "pol": "pl", "tur": "tr", "chi_sim": "zh-Hans"}
 
@@ -66,6 +71,7 @@ def win_tag(langs: str) -> str:
     main = next((c for c in codes if c != "eng"), codes[0] if codes else "eng")
     return WIN_TAGS.get(main, "en-US")
 last_info = ""   # Windows: каким языком распознавало и сколько строк нашло (для проверки и разбора сбоев)
+_found = threading.local()   # .help: подсказка последнего распознавания в этом потоке (Windows взял не тот язык)
 TIMEOUT = 90            # секунд на одно распознавание
 MAX_PIXELS = 24_000_000  # после увеличения: больше не нужно, Tesseract только замедлится
 
@@ -79,9 +85,10 @@ class InstallHelp:
     """Что поставить, чтобы распознавание заработало: объяснение, команда (если есть) и ссылка на инструкцию."""
 
     def __init__(self, what: str, command: str = None, url: str = None, url_title: str = "",
-                 settings_url: str = None):
+                 settings_url: str = None, ocr_capability: str = None):
         self.what, self.command, self.url, self.url_title = what, command, url, url_title
         self.settings_url = settings_url   # Windows: кнопка «Открыть параметры языка»
+        self.ocr_capability = ocr_capability   # Windows: кнопка «Установить распознавание» (тег, напр. ru-RU)
 
 
 def linux_family() -> str:
@@ -125,11 +132,12 @@ def install_help(kind: str = "missing", lang: str = "") -> InstallHelp:
     if kind == "windows_lang" or (sys.platform == "win32" and kind == "missing"):
         if lang and lang != "rus":   # 1.31: нерусский интерфейс: нужен язык интерфейса, а не русский
             return InstallHelp(tr("ocr.win_lang_need_lang", lang=_lang_title(lang)), None, WINDOWS_LANG_GUIDE,
-                               tr("ocr.win_lang_guide_title"), settings_url=WINDOWS_LANG_SETTINGS)
+                               tr("ocr.win_lang_guide_title"), settings_url=WINDOWS_LANG_SETTINGS,
+                               ocr_capability=OCR_CAPS.get(lang))
         return InstallHelp(
             tr("ocr.win_lang_need"),
             None, WINDOWS_LANG_GUIDE, tr("ocr.win_lang_guide_title"),
-            settings_url=WINDOWS_LANG_SETTINGS)
+            settings_url=WINDOWS_LANG_SETTINGS, ocr_capability=OCR_CAPS["rus"])
     family = linux_family()
     full, rus_only = LINUX_COMMANDS.get(family, (None, None))
     if kind == "no_rus":
@@ -402,10 +410,25 @@ def _run_tesseract(exe, path, langs) -> str:
 
 
 # Встроенное распознавание Windows 10/11. Windows PowerShell 5.1 умеет звать WinRT; асинхронные вызовы ждём через AsTask.
-WINDOWS_PS = r'''
-param([string]$Path, [string]$Lang)
+# 1.34.1: слова идут в вывод строкой «U» с текстом в base64 от UTF-8, то есть только латиницей и цифрами. Кодовая
+# страница консоли (cp866 у русской Windows, cp1251, UTF-8) на них не влияет: кириллица не превращается в каракули,
+# даже если [Console]::OutputEncoding не подействовал (вывод в трубу, Console.Out создан раньше и т.п.).
+# 1.34.1 (Б4 проверки): сценарий идёт в PowerShell через -EncodedCommand, без файла во временной папке (файл можно
+# подменить между записью и чтением); путь картинки и языки через переменные окружения CLIPSD_OCR_PATH и
+# CLIPSD_OCR_LANG. Сбой: строка OCR_ERROR=… в поток ошибок (без CLIXML, который PowerShell пишет при -EncodedCommand).
+WINDOWS_PS_HEAD = r'''
 $ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
+trap { [Console]::Error.WriteLine("OCR_ERROR=" + $_.Exception.Message); exit 4 }
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+function Emit-Word($li, $x, $y, $w, $h, [string]$text) {
+    $b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($text))
+    [Console]::Out.WriteLine((@("U", $li, [int]$x, [int]$y, [int]$w, [int]$h, $b64) -join "`t"))
+}
+'''
+WINDOWS_PS = WINDOWS_PS_HEAD + r'''
+$Path = $env:CLIPSD_OCR_PATH
+$Lang = $env:CLIPSD_OCR_LANG
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 $null = [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType = WindowsRuntime]
 $null = [Windows.Graphics.Imaging.BitmapDecoder, Windows.Foundation, ContentType = WindowsRuntime]
@@ -419,16 +442,26 @@ function Await($op, [Type]$type) {
     $null = $task.Wait(-1)
     $task.Result
 }
+# 1.34.1: язык выбирается из установленных в Windows языков распознавания (AvailableRecognizerLanguages) по основной
+# части тега: «ru» найдёт и «ru», и «ru-RU». Список идёт в отчёт (OCR_AVAIL) для подсказки и разбора сбоев.
+$avail = @()
+try { $avail = @([Windows.Media.Ocr.OcrEngine]::AvailableRecognizerLanguages) } catch { }
+[Console]::Error.WriteLine("OCR_AVAIL=" + (($avail | ForEach-Object { $_.LanguageTag }) -join ','))
 $engine = $null
 foreach ($tag in ($Lang -split ',')) {
     if (-not $engine -and $tag) {
-        $l = New-Object Windows.Globalization.Language $tag
-        if ([Windows.Media.Ocr.OcrEngine]::IsLanguageSupported($l)) { $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage($l) }
+        $main = ($tag -split '-')[0]
+        $hit = @($avail | Where-Object { $_.LanguageTag -eq $tag }) + @($avail | Where-Object { ($_.LanguageTag -split '-')[0] -eq $main })
+        if ($hit.Count -gt 0) { $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage($hit[0]) }
+        if (-not $engine) {
+            $l = New-Object Windows.Globalization.Language $tag
+            if ([Windows.Media.Ocr.OcrEngine]::IsLanguageSupported($l)) { $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage($l) }
+        }
     }
 }
 if (-not $engine) { $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages() }
-if (-not $engine) { Write-Error "NO_OCR_LANGUAGE"; exit 3 }
-[Console]::Error.WriteLine("OCR_LANG=" + $engine.RecognizerLanguage.LanguageTag)
+if (-not $engine) { [Console]::Error.WriteLine("NO_OCR_LANGUAGE"); exit 3 }
+[Console]::Error.WriteLine("OCR_WANT=" + ($Lang -split ',')[0] + " OCR_LANG=" + $engine.RecognizerLanguage.LanguageTag)
 $file = Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync($Path)) ([Windows.Storage.StorageFile])
 $stream = Await ($file.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])
 $decoder = Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)) ([Windows.Graphics.Imaging.BitmapDecoder])
@@ -439,7 +472,7 @@ $li = 0
 foreach ($line in $result.Lines) {
     foreach ($word in $line.Words) {
         $r = $word.BoundingRect
-        [Console]::Out.WriteLine((@("W", $li, [int]$r.X, [int]$r.Y, [int]$r.Width, [int]$r.Height, $word.Text) -join "`t"))
+        Emit-Word $li $r.X $r.Y $r.Width $r.Height $word.Text
     }
     $li++
 }
@@ -447,44 +480,157 @@ $stream.Dispose()
 '''
 
 
-def _run_windows(path, lang="ru") -> str:
-    folder = tempfile.mkdtemp(prefix="clipsd-ocr-")
-    script = os.path.join(folder, "ocr.ps1")
-    with open(script, "w", encoding="utf-8-sig") as fh:   # BOM: иначе PowerShell 5.1 читает кириллицу неверно
-        fh.write(WINDOWS_PS)
+def _decode_console(data: bytes, fallback: str = None) -> str:
+    """Вывод PowerShell в текст: UTF-8, а если байты не UTF-8 (кодировка вывода не переключилась), кодовая страница
+    консоли Windows (oem: cp866 у русской Windows). Слова приходят в base64 и от этого не зависят; это для сообщений
+    об ошибках, которые PowerShell пишет сам на языке Windows."""
     try:
-        out = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                              "-File", script, "-Path", path, "-Lang", lang],
-                             capture_output=True, timeout=TIMEOUT, **_no_window())
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    if fallback is None and sys.platform == "win32":
+        fallback = "oem"
+    if fallback:
+        try:
+            return data.decode(fallback)
+        except (LookupError, UnicodeDecodeError):
+            pass
+    return data.decode("utf-8", "replace")
+
+
+def _powershell(script_text: str, env: dict = None, timeout: int = None) -> subprocess.CompletedProcess:
+    """Запустить сценарий в Windows PowerShell без окна и без файла: полный путь из системной папки
+    (sysenv.powershell_exe, не по имени), текст через -EncodedCommand, данные через переменные окружения env.
+    Вывод байтами. OcrError, если не запустился."""
+    from .sysenv import powershell_exe
+    try:
+        exe = powershell_exe()
+        child = dict(os.environ)
+        child.update(env or {})
+        return subprocess.run([exe, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                               "-EncodedCommand", encoded_command(script_text)],
+                              stdin=subprocess.DEVNULL, capture_output=True, timeout=timeout or TIMEOUT, env=child,
+                              **_no_window())
     except subprocess.TimeoutExpired:
         raise OcrError("ocr.err_timeout")
     except OSError as exc:
         raise OcrError("ocr.err_powershell_start", detail=exc)
-    finally:
-        shutil.rmtree(folder, ignore_errors=True)
-    err = out.stderr.decode("utf-8", "replace")
+
+
+# 1.34.1: кнопка «Установить распознавание». Б4 проверки: с правами администратора идёт только PowerShell Windows по
+# полному пути из системной папки, команда целиком в -EncodedCommand (тег языка только из OCR_CAPS, вписан в текст),
+# файлов пользователя он не читает и не пишет; итог: код выхода, который ClipSD ждёт в фоне (sysenv.run_elevated_wait).
+WINDOWS_INSTALL_PS = r'''
+$ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
+try {
+    $name = "Language.OCR~~~@TAG@~0.0.1.0"
+    $cap = Get-WindowsCapability -Online -Name $name
+    if (-not $cap -or -not $cap.Name) { exit 4 }
+    if ("$($cap.State)" -ne "Installed") { $null = Add-WindowsCapability -Online -Name $name }
+    if ("$((Get-WindowsCapability -Online -Name $name).State)" -eq "Installed") { exit 0 }
+    exit 1
+} catch { exit 3 }
+'''
+INSTALL_TIMEOUT = 20 * 60   # секунд: скачивание компонента через Windows Update
+
+
+def install_parameters(tag: str) -> str:
+    """Командная строка PowerShell для установки распознавания языка tag (только из OCR_CAPS, иначе ValueError)."""
+    if tag not in OCR_CAPS.values():
+        raise ValueError(f"unknown OCR language: {tag!r}")
+    return elevated_powershell_parameters(WINDOWS_INSTALL_PS.replace("@TAG@", tag))
+
+
+class InstallJob(QThread):
+    """Установка распознавания в фоне: запрос UAC и ожидание конца установки, окно не замирает.
+    done(ok, причина, отказ UAC). Живёт в _install_jobs, а не в окне: окно можно закрыть посреди установки."""
+    done = pyqtSignal(bool, str, bool)
+
+    def __init__(self, tag: str):
+        super().__init__()
+        self.tag = tag
+
+    def run(self):
+        from . import sysenv
+        try:
+            code, reason, declined = sysenv.run_elevated_wait(sysenv.powershell_exe(), install_parameters(self.tag),
+                                                              INSTALL_TIMEOUT * 1000)
+        except (OSError, ValueError) as exc:
+            code, reason, declined = None, str(exc), False
+        if code == 0:
+            self.done.emit(True, "", False)
+        else:
+            self.done.emit(False, reason or f"exit {code}", declined)
+
+
+_install_jobs = []   # живые установки: иначе QThread удалится раньше времени
+
+
+def _forget_install(job):
+    if job in _install_jobs:
+        _install_jobs.remove(job)
+    job.deleteLater()
+
+
+def _lang_main(tag: str) -> str:
+    """«ru-RU» и «ru» → «ru»; «zh-Hans» → «zh»."""
+    return (tag or "").strip().split("-")[0].lower()
+
+
+def _tess_code(tag: str) -> str:
+    """Код Tesseract для тега Windows: «ru» → «rus», «de-DE» → «deu» (для подсказки, какой язык поставить)."""
+    main = _lang_main(tag)
+    return next((c for c, t in WIN_TAGS.items() if _lang_main(t) == main), "rus")
+
+
+def windows_fallback_help(info: str):
+    """1.34.1: Windows распознал не тем языком, что просили (русского в Windows нет, взял английский из профиля):
+    русский текст тогда выходит похожими латинскими буквами, «каракулями». Подсказка, как поставить язык (иначе None).
+    info: строка last_info («OCR_WANT=ru OCR_LANG=en-US …»)."""
+    fields = dict(part.split("=", 1) for part in (info or "").split() if "=" in part)
+    want, got = fields.get("OCR_WANT", ""), fields.get("OCR_LANG", "")
+    if not want or not got or _lang_main(want) == _lang_main(got):
+        return None
+    return install_help("windows_lang", _tess_code(want))
+
+
+def _run_windows(path, lang="ru") -> str:
+    out = _powershell(WINDOWS_PS, {"CLIPSD_OCR_PATH": path, "CLIPSD_OCR_LANG": lang})
+    err = _decode_console(out.stderr)
     global last_info
     last_info = " ".join(line.strip() for line in err.splitlines() if line.startswith("OCR_"))
     if out.returncode != 0:
         if "NO_OCR_LANGUAGE" in err:
-            missing = next((c for c, t in WIN_TAGS.items() if t == lang.split(",")[0]), "rus")
-            raise OcrError("ocr.err_windows_no_lang", install_help("windows_lang", missing))
-        tail = [line for line in err.strip().splitlines() if line.strip()]
+            raise OcrError("ocr.err_windows_no_lang", install_help("windows_lang", _tess_code(lang.split(",")[0])))
+        failed = [line.split("=", 1)[1] for line in err.splitlines() if line.startswith("OCR_ERROR=")]
+        tail = failed or [line for line in err.strip().splitlines()
+                          if line.strip() and not line.startswith(("#< CLIXML", "<Objs", "OCR_"))]
         raise OcrError("ocr.err_windows_failed_detail", detail=tail[-1]) if tail else OcrError("ocr.err_windows_failed")
-    return out.stdout.decode("utf-8", "replace")
+    _found.help = windows_fallback_help(last_info)
+    return _decode_console(out.stdout)
 
 
 def _parse_windows(out: str, scale_x: float, scale_y: float):
+    """Строки «U» (1.34.1: текст слова в base64 от UTF-8) и прежние «W» (текст как есть)."""
     words = []
     for row in out.splitlines():
-        cols = row.split("\t")
-        if len(cols) < 7 or cols[0] != "W" or not cols[6].strip():
+        cols = row.rstrip("\r").split("\t")
+        if len(cols) < 7 or cols[0].lstrip("\ufeff") not in ("U", "W"):
+            continue
+        text = cols[6].strip()
+        if cols[0].lstrip("\ufeff") == "U":
+            try:
+                text = base64.b64decode(text, validate=True).decode("utf-8").strip()
+            except (ValueError, UnicodeDecodeError):
+                continue
+        if not text:
             continue
         try:
             x, y, w, h = (float(c) for c in cols[2:6])
         except ValueError:
             continue
-        words.append(Word(cols[6].strip(), QRectF(x / scale_x, y / scale_y, w / scale_x, h / scale_y), ("w", cols[1])))
+        words.append(Word(text, QRectF(x / scale_x, y / scale_y, w / scale_x, h / scale_y), ("w", cols[1])))
     return words
 
 
@@ -496,6 +642,7 @@ def recognize(image: QImage, langs: str = DEFAULT_LANGS, quality: str = "accurat
 def recognize_words(image: QImage, langs: str = DEFAULT_LANGS, quality: str = "accurate"):
     """Слова с рамками в пикселях исходной картинки, по порядку чтения. Бросает OcrError."""
     langs = resolve_langs(langs)
+    _found.help = None
     if image is None or image.isNull():
         raise OcrError("ocr.err_empty_image")
     exe = find_tesseract()
@@ -585,9 +732,12 @@ class OcrJob(QThread):
 
     def run(self):
         try:
+            _found.help = None
             self.words = recognize_words(self.image, self.langs, self.quality)
             text = tidy(words_text(self.words))
-            self.help = missing_rus_help(self.langs)   # текст есть, но русский не установлен: подсказать
+            # текст есть, но нужного языка нет: подсказать. Tesseract без русского; Windows без русского
+            # распознал английским (1.34.1, «каракули» вместо русского текста)
+            self.help = missing_rus_help(self.langs) or getattr(_found, "help", None)
             self.done.emit(text, "")
         except OcrError as exc:
             self.help = exc.help
@@ -1007,6 +1157,16 @@ class InstallBlock(QFrame):
             hint = QLabel(tr("ocr.terminal_hint"))
             hint.setWordWrap(True)
             box.addWidget(hint)
+        self.install_button = self.install_status = None
+        if sys.platform == "win32" and getattr(help, "ocr_capability", None):
+            self.install_button = QPushButton(tr("ocr.win_install_button"))
+            self.install_button.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.install_button.clicked.connect(lambda: self.install_ocr(help.ocr_capability))
+            box.addWidget(self.install_button, 0, Qt.AlignmentFlag.AlignLeft)
+            self.install_status = QLabel()
+            self.install_status.setWordWrap(True)
+            self.install_status.setVisible(False)
+            box.addWidget(self.install_status)
         if help.settings_url:
             self.settings_button = QPushButton(tr("ocr.open_win_settings"))
             self.settings_button.clicked.connect(lambda: open_url(help.settings_url))
@@ -1030,6 +1190,23 @@ class InstallBlock(QFrame):
             link2.setWordWrap(True)
             box.addWidget(link2)
             self._copy_row(box, TESSERACT_WINDOWS, tr("ocr.copy_link"), self._compact)
+
+    def install_ocr(self, tag: str):
+        """«Установить распознавание»: запрос UAC и ожидание конца установки в фоне (InstallJob)."""
+        job = InstallJob(tag)
+        _install_jobs.append(job)
+        job.done.connect(self._install_finished)   # метод окна: закрытое окно Qt отвязывает само
+        job.finished.connect(lambda: _forget_install(job))
+        self.install_button.setEnabled(False)
+        self.install_status.setVisible(True)
+        self.install_status.setText(tr("ocr.win_install_started"))
+        job.start()
+        return job
+
+    def _install_finished(self, ok: bool, error: str, declined: bool):
+        self.install_button.setEnabled(not ok)
+        self.install_status.setText(tr("ocr.win_install_done") if ok else tr("ocr.win_install_declined") if declined
+                                    else tr("ocr.win_install_failed", error=error))
 
     @staticmethod
     def _copy_row(box, value, caption, compact=False):

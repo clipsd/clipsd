@@ -70,7 +70,7 @@ class Ctx:
         pass
 
 
-TOP5 = ["record", "full", "ocr", "translate", "translate_pick"]
+TOP5 = ["record", "full", "ocr", "phone", "translate", "translate_pick"]   # 1.34: плитка «С телефона»
 BOTTOM4 = ["save", "edit", "manual", "copy"]
 levels = {}
 
@@ -95,10 +95,16 @@ def selector_case(lang):
         if lv["text"]:
             bl, bs = sel._bar_bfonts(lv)
             fb, fs = QFontMetrics(bl), QFontMetrics(bs)
+            proto = sel._choice(lv)   # 1.34 (вариант Б 21.11.2026): крупные «Редактировать» и «Скопировать», мелкие «Сохранить» и «Другая область»
             for k in BOTTOM4:
-                room = rects[k].width() - lv["pl"] - lv["sq"] - lv["gp"] - 4
+                if proto and k in ("save", "manual"):
+                    fl = QFontMetrics(sel._bar_fonts(lv)[0])
+                    check(fl.horizontalAdvance(texts[k]) <= rects[k].width() - 12 - 16 - 7 - 6, f"{lang} {width}: подпись «{texts[k]}» обрезана")
+                    continue
+                room = rects[k].width() - lv["pl"] - lv["sq"] - (6 if proto else 0) - lv["gp"] - 4
+                sub = sel._choice_sub(k) if proto else sel.BAR_SUB[k]
                 check(fb.horizontalAdvance(texts[k]) <= room, f"{lang} {width}: подпись «{texts[k]}» обрезана")
-                check(fs.horizontalAdvance(sel.BAR_SUB[k]) <= room, f"{lang} {width}: пояснение «{sel.BAR_SUB[k]}» обрезано")
+                check(fs.horizontalAdvance(sub) <= room, f"{lang} {width}: пояснение «{sub}» обрезано")
             label_font, _small = sel._bar_fonts(lv)
             fl = QFontMetrics(label_font)
             for k in TOP5:

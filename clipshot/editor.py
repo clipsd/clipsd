@@ -12,13 +12,13 @@ from PyQt6.QtCore import QEvent, QKeyCombination, QMimeData, QObject, QPoint, QP
 from PyQt6.QtGui import (QAction, QActionGroup, QColor, QContextMenuEvent, QDrag, QFont, QFontMetrics, QFontMetricsF, QPolygonF, QGuiApplication, QIcon, QImage, QKeySequence, QPainter, QPainterPath, QPen,
                          QPixmap, QShortcut)
 from PyQt6.QtWidgets import (QAbstractButton, QAbstractSpinBox, QKeySequenceEdit, QLineEdit, QTextEdit,
-                             QApplication, QButtonGroup, QColorDialog, QDialog, QFileDialog, QFrame, QGraphicsDropShadowEffect,
+                             QApplication, QButtonGroup, QColorDialog, QDialog, QFileDialog, QFrame,
                              QGridLayout, QHBoxLayout, QLabel, QMainWindow, QMenu, QWidgetAction,
                              QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy, QToolButton,
                              QVBoxLayout,
                              QWidget)
 
-from . import hidpi, icons
+from . import forma, hidpi, icons
 from .dialogs import PALETTES as CARD_PALETTES, ClipDialog
 from .frame_extents import track_frame_extents
 from .i18n import dynamic, tr
@@ -71,6 +71,38 @@ def _is_image_file(path: str) -> bool:
     return bool(path) and path.lower().endswith(IMAGE_EXTENSIONS) and os.path.isfile(path)
 
 
+def _transparent_png(mime, image: QImage) -> QImage:
+    """1.34: в буфере снимок с формой: картинка на белом фоне и рядом PNG с прозрачностью. Вставка берёт PNG,
+    чтобы углы остались прозрачными (размер и масштаб экрана как у картинки)."""
+    for key in (hidpi.WINDOWS_PNG, "image/png"):
+        if not mime.hasFormat(key):
+            continue
+        data = bytes(mime.data(key))
+        if not _png_may_have_alpha(data, image.width(), image.height()):
+            continue   # М7 проверки 1.34.0: обычный снимок (PNG без прозрачности) заново не раскодируется
+        alt = QImage.fromData(data)
+        if not alt.isNull() and alt.size() == image.size() and forma.has_transparency(alt):
+            alt.setDevicePixelRatio(image.devicePixelRatio())
+            return alt
+    return image
+
+
+def _png_may_have_alpha(data: bytes, width: int, height: int) -> bool:
+    """По заголовку PNG, без раскодирования: тот же размер и может быть прозрачность (тип цвета с альфой или блок
+    tRNS). Не PNG или заголовок не читается: True (решит раскодирование, как раньше)."""
+    import struct
+    if len(data) < 33 or data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
+        return True
+    w, h = struct.unpack(">II", data[16:24])
+    if (w, h) != (width, height):
+        return False
+    color_type = data[25]
+    if color_type in (4, 6):   # серый с альфой, RGBA
+        return True
+    head = data[:data.find(b"IDAT")] if b"IDAT" in data[:65536] else data[:65536]
+    return b"tRNS" in head   # палитра или RGB с прозрачным цветом
+
+
 def logical_size(image: QImage) -> QSize:
     """Размер картинки в точках экрана: при масштабе Windows 125–150 % снимок не раздувается."""
     return image.deviceIndependentSize().toSize()
@@ -93,6 +125,7 @@ class Canvas(QWidget):
     zoom_requested = pyqtSignal(float, object)       # Ctrl+колесо: во сколько раз изменить масштаб, глобальная точка
     pressed = pyqtSignal()                           # нажатие мыши по снимку (подсказка про цвет объекта уходит)
     size_wheeled = pyqtSignal(int)                   # колесо над выделенным объектом поменяло его толщину
+    form_changed = pyqtSignal()                      # 1.34: форма снимка сменилась (меню, отмена, повтор)
     ZOOM_MIN, ZOOM_MAX = 0.1, 8.0
 
     def __init__(self, image: QImage, tool, color, size):
@@ -143,6 +176,10 @@ class Canvas(QWidget):
         self.text_kind = TEXT      # TEXT или CALLOUT
         self.text_anchor = None    # для сноски — точка, на которую она указывает
         self._editing_original = None
+        self.form = forma.Form()   # 1.34: форма снимка; каждый новый снимок прямоугольный
+        self.checker_dark = False  # шахматка за формой в цветах тёмного оформления
+        self._form_drag = None     # круг тянут за поле вокруг него: [точка нажатия, центр круга в начале, шаг отмены записан]
+        self._radius_drag = None   # маркер радиуса у левого верхнего угла тянут: [шаг отмены записан]
 
         self._apply_size()
         self.setMouseTracking(True)
@@ -186,14 +223,20 @@ class Canvas(QWidget):
 
     # --- состояние и отмена ------------------------------------------------
 
+    def _snapshot(self):
+        return (self.base, [s.copy() for s in self.shapes], self.form.copy())
+
     def push_undo(self):
-        self.undo_stack.append((self.base, [s.copy() for s in self.shapes]))
+        self.undo_stack.append(self._snapshot())
         self.redo_stack.clear()
         self.modified = True
         self.changed.emit()
 
     def _restore(self, snapshot):
-        self.base, shapes = snapshot
+        self.base, shapes = snapshot[0], snapshot[1]
+        if len(snapshot) > 2:
+            self.form = snapshot[2].copy()   # форма снимка отменяется и повторяется вместе с остальным
+            self.form_changed.emit()
         self.shapes = [s.copy() for s in shapes]
         self.select(None)
         self.cancel_crop()
@@ -204,14 +247,14 @@ class Canvas(QWidget):
     def undo(self):
         self.commit_text()
         if self.undo_stack:
-            self.redo_stack.append((self.base, [s.copy() for s in self.shapes]))
+            self.redo_stack.append(self._snapshot())
             self._restore(self.undo_stack.pop())
             self.changed.emit()
 
     def redo(self):
         self.commit_text()
         if self.redo_stack:
-            self.undo_stack.append((self.base, [s.copy() for s in self.shapes]))
+            self.undo_stack.append(self._snapshot())
             self._restore(self.redo_stack.pop())
             self.changed.emit()
 
@@ -443,7 +486,71 @@ class Canvas(QWidget):
         for shape in self.shapes:
             shape.paint(p, self.base)
         p.end()
-        return image
+        return forma.apply(image, self.form)   # 1.34: за формой прозрачно, пометки обрезаны вместе со снимком
+
+    # --- форма снимка (1.34) ----------------------------------------------------
+
+    def set_form(self, code, center=None):
+        """Сменить форму снимка (один шаг отмены). Круг по умолчанию в середине снимка."""
+        new = forma.Form(code, center)
+        if new == self.form:
+            return
+        self.commit_text()
+        self.push_undo()
+        self.form = new
+        self.form_changed.emit()
+        self.update()
+
+    def set_radius(self, radius: float, record: bool = True):
+        """Свой радиус скругления углов (точки снимка, 0 … половина меньшей стороны). record: отдельный шаг отмены;
+        ползунок пишет шаг один раз за всё перетаскивание."""
+        radius = min(max(0.0, float(radius)), forma.max_radius(self.lw(), self.lh()))
+        new = forma.rounded(radius)
+        if new == self.form:
+            return
+        if record:
+            self.commit_text()
+            self.push_undo()
+        self.form = new
+        self.form_changed.emit()
+        self.update()
+
+    def _over_radius_handle(self, pos) -> bool:
+        """Курсор на маркере радиуса (середина дуги левого верхнего угла)."""
+        if not self.form.is_round or not self.form_active() or self.tool in (OCR, TRANSLATE, ERASER) \
+                or self.text_edit is not None:
+            return False
+        h = forma.radius_handle(self.form, self.lw(), self.lh())
+        reach = max(HANDLE, 7) / max(self.zoom, 0.01)
+        return abs(pos.x() - h.x()) <= reach and abs(pos.y() - h.y()) <= reach
+
+    def _drag_radius(self, pos):
+        radius = forma.radius_from_point(pos, self.lw(), self.lh())
+        record = not self._radius_drag[0]
+        if forma.rounded(radius) != self.form:
+            self.set_radius(radius, record=record)
+            self._radius_drag[0] = True
+
+    def form_active(self) -> bool:
+        """Шахматка за формой видна (в режиме обрезки снимок показан целиком, чтобы рамку ставить по всему снимку)."""
+        return not self.form.is_rect and self.tool != CROP
+
+    def _over_form_margin(self, pos) -> bool:
+        """Курсор на поле вокруг круга: оттуда круг перетаскивается по снимку."""
+        if self.form.code != forma.CIRCLE or self.tool in (CROP, OCR, TRANSLATE, ERASER) or self.text_edit is not None:
+            return False
+        inside = QRectF(0, 0, self.lw(), self.lh()).contains(pos)
+        return inside and not forma.path(self.form, self.lw(), self.lh()).contains(pos)
+
+    def _drag_form(self, pos):
+        start, center, pushed = self._form_drag
+        if not pushed:
+            if (pos - start).manhattanLength() < 1:
+                return
+            self.push_undo()          # один шаг отмены на весь перенос, и только если круг сдвинули
+            self._form_drag[2] = True
+        moved = forma.Form(forma.CIRCLE, center + (pos - start))
+        self.form.center = forma.clamp_center(moved, self.lw(), self.lh())
 
     # --- отрисовка ---------------------------------------------------------
 
@@ -470,6 +577,8 @@ class Canvas(QWidget):
             preview.text = self.text_edit.toPlainText() or " "
             preview.text_color = self.text_color
             preview.paint(p, self.base)
+        if self.form_active():
+            self._paint_form(p)
         if self.selected is not None:
             self._paint_selection(p, self.selected)
         if self.crop_rect is not None:
@@ -478,6 +587,17 @@ class Canvas(QWidget):
             self._paint_words(p)
         if self.tool == ERASER:
             self._paint_eraser(p)
+
+    def _paint_form(self, p):
+        """1.34: за формой шахматка, как прозрачность в графических программах; пометки за формой тоже скрыты.
+        У скруглённых углов маркер радиуса на дуге левого верхнего угла: его можно тянуть мышью."""
+        forma.paint_checker(p, forma.outside(self.form, self.lw(), self.lh()), self.zoom, self.checker_dark)
+        if self.form.is_round and self.tool not in (OCR, TRANSLATE, ERASER):
+            c = forma.radius_handle(self.form, self.lw(), self.lh())
+            k = 1.0 / max(self.zoom, 0.01)
+            p.setPen(QPen(QColor(SELECTED_BAR_COLOR[0]), 2 * k))
+            p.setBrush(QColor("#ffffff"))
+            p.drawEllipse(c, 5 * k, 5 * k)
 
     def eraser_width(self):
         return ERASER_SIZES.get(self.eraser_size, 14)
@@ -760,7 +880,14 @@ class Canvas(QWidget):
                     "tr": Qt.CursorShape.SizeBDiagCursor, "bl": Qt.CursorShape.SizeBDiagCursor}
 
     def update_cursor(self, pos=None):
-        if self.tool == ERASER:
+        if self._radius_drag is not None or (pos is not None and self._radius_drag is None and self._form_drag is None
+                                             and self._handle_at(pos) is None and self._over_radius_handle(pos)):
+            self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+        elif self._form_drag is not None:
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+        elif pos is not None and self.selected is None and self._over_form_margin(pos) and self.shape_at(pos) is None:
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
+        elif self.tool == ERASER:
             self.setCursor(Qt.CursorShape.BlankCursor if self.eraser_mode == "part" else Qt.CursorShape.CrossCursor)
         elif pos is not None and self._handle_at(pos) is not None:
             self.setCursor(Qt.CursorShape.SizeAllCursor)
@@ -819,6 +946,11 @@ class Canvas(QWidget):
             self.handle_index = handle
             self.move_pending = True
             return
+        if self._over_radius_handle(pos):
+            self.select(None)
+            self._radius_drag = [False]   # 1.34: радиус углов тянут мышью за маркер
+            self.update_cursor(pos)
+            return
         if self.tool != MOVE and self.selected is not None and self.selected.hit(pos) and not (
                 self.selected is self.fresh and self.tool in STROKE_TOOLS):
             # Выделенный объект можно двигать любым инструментом. Только что проведённый маркер или карандаш нет:
@@ -826,6 +958,12 @@ class Canvas(QWidget):
             self.drag_from = pos
             self.move_pending = True
             self._arm_click_edit(self.selected, event)
+            return
+        if self._over_form_margin(pos) and self.shape_at(pos) is None:
+            # 1.34: круг двигают по снимку за поле вокруг него (там всё равно ничего не видно в готовой картинке)
+            self.select(None)
+            self._form_drag = [pos, forma.clamp_center(self.form, self.lw(), self.lh()), False]
+            self.update_cursor(pos)
             return
         if self.tool == TEXT:
             # Щелчок по готовому тексту или сноске: правка (протянуть — перенести), а не новый текст поверх
@@ -949,6 +1087,13 @@ class Canvas(QWidget):
             if (event.position().toPoint() - self._press_wpos).manhattanLength() < 4:
                 return
             self._click_candidate = None   # сдвинули: это перенос, а не щелчок
+        if self._form_drag is not None:
+            self._drag_form(pos)
+            self.update()
+            return
+        if self._radius_drag is not None:
+            self._drag_radius(pos)
+            return
         if self.tool == ERASER and self._rpress is None:
             self.eraser_pos = pos
             if self.erasing is not None:
@@ -1023,6 +1168,19 @@ class Canvas(QWidget):
             return
         if event.button() != Qt.MouseButton.LeftButton:
             return
+        if self._radius_drag is not None:
+            self._drag_radius(self._ep(event))
+            self._radius_drag = None
+            self.update_cursor(self._ep(event))
+            self.update()
+            return
+        if self._form_drag is not None:
+            self._drag_form(self._ep(event))
+            self._form_drag = None
+            self.form_changed.emit()
+            self.update_cursor(self._ep(event))
+            self.update()
+            return
         candidate, self._click_candidate = self._click_candidate, None
         was_dragging = self.drag_from is not None
         self.drag_from = None
@@ -1079,6 +1237,8 @@ class Canvas(QWidget):
         offset = QPointF(-rect.x(), -rect.y())
         for shape in self.shapes:
             shape.translate(offset)
+        if self.form.center is not None:
+            self.form.center = self.form.center + offset   # круг остаётся над тем же местом снимка
         self._apply_size()
         self.resized.emit()
 
@@ -1338,6 +1498,9 @@ def chrome_params(cfg) -> dict:
 SOFT = {   # 1.32: «Копировать текст» и «Перевести» мягкой заливкой: (фон, текст, наведение, отмеченная) светлое / тёмное
     "ocr": (("#efe7fe", "#5b21b6", "#e4d6fd", "#7c3aed"), ("#2e2547", "#d9c8ff", "#3a2f5a", "#7c3aed")),
     "tr": (("#e0f4f1", "#0b5f57", "#cdeee9", "#0b766c"), ("#13302d", "#a7ece4", "#1a3f3b", "#0b766c")),   # отмеченная: themes.TEAL_BUTTON
+    # 1.34: «С телефона» (просьба владельца 21.11.2026): мягкая малиновая, значок цвета плитки окна выделения #b4236e;
+    # четвёртое значение: цвет значка (в тёмной теме светлее, чтобы значок читался на тёмной кнопке)
+    "phone": (("#fbe9f2", "#8a1653", "#f6d5e6", "#b4236e"), ("#3a1f2d", "#f6c0da", "#4a2939", "#f07ab0")),
 }
 
 
@@ -1358,6 +1521,7 @@ def make_style(cfg) -> str:
     from . import themes as G   # 1.32: зелёный главной кнопки из одного места
     ocr_bg, ocr_fg, ocr_hover, ocr_on = soft_colors("ocr", dark)
     tr_bg, tr_fg, tr_hover, tr_on = soft_colors("tr", dark)
+    ph_bg, ph_fg, ph_hover, _ph_icon = soft_colors("phone", dark)
     return f"""
 QMainWindow {{ background: transparent; }}
 #panel, #bottom, #titlebar, #modeHint {{ background: transparent; color: {P['t']}; }}
@@ -1370,6 +1534,9 @@ QToolButton#group {{ padding-right: {GROUP_ARROW_W + 3}px; }}
 QToolButton#more {{ padding: 0px 10px 0px 7px; background: {P['s2']}; font-size: {font - 1}px; }}
 QToolButton#tool:hover, QToolButton#group:hover, QToolButton#action:hover, QToolButton#bell:hover {{ background: {P['hover']}; }}
 QToolButton#more:hover {{ background: {P['s3']}; }}
+QToolButton#phone {{ border: none; border-radius: 6px; padding: 0px 10px 0px 7px; background: {ph_bg}; color: {ph_fg};
+    font-size: {font - 1}px; font-weight: 600; }}
+QToolButton#phone:hover {{ background: {ph_hover}; }}
 QToolButton#tool:checked, QToolButton#group:checked {{ background: {P['accs']}; }}
 QToolButton#action::menu-indicator, QToolButton#bell::menu-indicator {{ image: none; width: 0px; }}
 QToolButton#size {{ border: none; border-radius: 4px; padding: 0px 6px; background: transparent; }}
@@ -1742,26 +1909,41 @@ class ChromeShell(QWidget):
 
 
 class ConfirmDialog(ClipDialog):
-    """Вопрос в стиле окон ClipSD: значок-предупреждение, заголовок, текст, две кнопки справа.
+    """Вопрос в стиле окон ClipSD: значок-предупреждение, заголовок, текст, кнопки.
 
-    Левая кнопка: результат YES, правая: NO, Esc: отмена (CANCEL). Enter: кнопка по умолчанию (она главная, залитая)."""
+    Кнопка yes: результат YES, no: NO, extra (если задана): EXTRA, Esc и крестик: отмена (CANCEL). Enter: кнопка по
+    умолчанию (главная, зелёная). Без extra: две кнопки справа, как раньше. С danger_yes кнопка yes разрушительная:
+    стоит отдельно слева, красным текстом, зелёной не бывает; с extra главной (зелёной) становится extra, no спокойная.
+    note: строка-пояснение под текстом (13 px, приглушённый цвет не ниже 4,5:1)."""
 
-    CANCEL, YES, NO = 0, 1, 2
+    CANCEL, YES, NO, EXTRA = 0, 1, 2, 3
 
-    def __init__(self, parent, title: str, text: str, yes_text=None, no_text=None, default_yes=True):
+    def __init__(self, parent, title: str, text: str, yes_text=None, no_text=None, default_yes=True, note=None,
+                 extra_text=None, danger_yes=False):
         yes_text = tr("editor.yes") if yes_text is None else yes_text
         no_text = tr("editor.no") if no_text is None else no_text
         super().__init__(parent, title, "", "warning", 520)
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, False)
         self.setModal(True)
         self.title.setText(title)
-        self.text(text)
-        self.yes = self._button(yes_text, "clipPrimary" if default_yes else "clipSecondary", "right")
-        self.no = self._button(no_text, "clipSecondary" if default_yes else "clipPrimary", "right")
+        self.body_label = self.text(text, "clipBody")   # 15 px цветом основного текста карточки, не серым
+        self.note_label = self.text(note, "clipHint") if note else None
+        if danger_yes:
+            self.yes = self._button(yes_text, "clipDanger", "left")
+            self.footer_left.addSpacing(16)   # разрушительная кнопка отдельно от спокойной и главной
+        else:
+            self.yes = self._button(yes_text, "clipPrimary" if default_yes and extra_text is None else "clipSecondary",
+                                    "right")
+        self.no = self._button(no_text, "clipSecondary" if default_yes or extra_text is not None else "clipPrimary", "right")
+        self.extra = self._button(extra_text, "clipPrimary", "right") if extra_text is not None else None
         self.yes.clicked.connect(lambda: self.done(self.YES))
         self.no.clicked.connect(lambda: self.done(self.NO))
-        self.default = self.YES if default_yes else self.NO
-        (self.yes if default_yes else self.no).setFocus()
+        if self.extra is not None:
+            self.extra.clicked.connect(lambda: self.done(self.EXTRA))
+            self.default = self.EXTRA
+        else:
+            self.default = self.YES if default_yes else self.NO
+        {self.YES: self.yes, self.NO: self.no, self.EXTRA: self.extra}[self.default].setFocus()
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
@@ -2027,6 +2209,46 @@ class GroupButton(DraggableToolButton):
             _paint_selected_bar(self, center=(self.width() - GROUP_ARROW_W - 2) / 2 + 1)
         if self.default_mark:
             _paint_default_mark(self, right=GROUP_ARROW_W + 1)
+
+
+class FormButton(QToolButton):
+    """1.34: кнопка «Форма снимка», как кнопка группы: щелчок по значку включает последнюю выбранную форму
+    (или возвращает прямоугольник), стрелка ▾ открывает список форм (menu_requested)."""
+
+    menu_requested = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+        self.menu_open = False
+        self._arrow_hover = False
+        self.setMouseTracking(True)
+
+    def in_arrow(self, pos) -> bool:
+        return pos.x() >= self.width() - GROUP_ARROW_W - 2
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self.in_arrow(event.position()):
+            event.accept()
+            self.menu_requested.emit()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        hover = self.in_arrow(event.position())
+        if hover != self._arrow_hover:
+            self._arrow_hover = hover
+            self.update()
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event):
+        self._arrow_hover = False
+        self.update()
+        super().leaveEvent(event)
+
+    def paintEvent(self, event):
+        GroupButton.paintEvent(self, event)   # та же стрелка и та же полоска «включено», что у кнопок групп
+
+    default_mark = False
 
 
 class ToolStrip(QWidget):
@@ -2499,6 +2721,7 @@ class PenHint(QFrame):
     карточка поверх снимка, рисовать не мешает, уходит сама через несколько секунд или при следующем действии;
     повторная смена обновляет ту же карточку. Цвета карточки из общей палитры окон (dialogs.PALETTES)."""
     SHOW_MS = 6000       # сколько держится без наведения мыши
+    NUMBER_MS = 4000     # «Этот цвет: нумерация с N» (1.34): 4 секунды или до следующего действия
     LINGER_MS = 2500     # после того как мышь ушла с карточки
     adopt = pyqtSignal()
 
@@ -2513,9 +2736,16 @@ class PenHint(QFrame):
         row.setContentsMargins(12, 9, 10, 9)
         row.setSpacing(14)
         texts = QVBoxLayout()
-        texts.setSpacing(2)
+        texts.setSpacing(3)
+        title_row = QHBoxLayout()
+        title_row.setSpacing(7)
+        self.title_sample = QLabel()   # 1.34: цвет, о счёте которого говорит подсказка номеров
+        self.title_sample.setFixedSize(14, 14)
+        self.title_sample.hide()
         self.title = QLabel()
         self.title.setObjectName("penHintTitle")
+        title_row.addWidget(self.title_sample, 0, Qt.AlignmentFlag.AlignVCenter)
+        title_row.addWidget(self.title, 1)
         sub_row = QHBoxLayout()
         sub_row.setSpacing(6)
         self.sample = QLabel()   # прежний цвет: им рисуются новые линии
@@ -2524,7 +2754,7 @@ class PenHint(QFrame):
         self.sub.setObjectName("penHintSub")
         sub_row.addWidget(self.sample, 0, Qt.AlignmentFlag.AlignVCenter)
         sub_row.addWidget(self.sub, 1)
-        texts.addWidget(self.title)
+        texts.addLayout(title_row)
         texts.addLayout(sub_row)
         row.addLayout(texts, 1)
         self.button = QPushButton()
@@ -2533,11 +2763,9 @@ class PenHint(QFrame):
         self.button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.button.clicked.connect(self.adopt)
         row.addWidget(self.button, 0, Qt.AlignmentFlag.AlignVCenter)
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(18)
-        shadow.setOffset(0, 4)
-        shadow.setColor(QColor(0, 0, 0, 60))
-        self.setGraphicsEffect(shadow)
+        # 1.34 (замечание владельца 21.11.2026: «сообщение мало видно, кнопка мало видна»): без QGraphicsDropShadowEffect
+        # (эффект рисует текст через промежуточную картинку, на Windows с масштабом буквы бледнеют), карточку отделяет
+        # от снимка более заметная рамка; текст крупнее и цветом основного текста, кнопка мягкая синяя.
         self.timer = QTimer(self)
         self.timer.setSingleShot(True)
         self.timer.timeout.connect(self.dismiss)
@@ -2549,18 +2777,74 @@ class PenHint(QFrame):
         self.dark = bool(dark)
         c = CARD_PALETTES[self.dark]
         self.setStyleSheet(f"""
-QFrame#penHint {{ background: {c['card']}; border: 1px solid {c['edge']}; border-radius: 8px; }}
-QLabel#penHintTitle {{ color: {c['text']}; font-size: 13px; font-weight: bold; background: transparent; }}
-QLabel#penHintSub {{ color: {c['muted']}; font-size: 12px; background: transparent; }}
-QPushButton#penHintButton {{ color: {c['text']}; background: {c['card']}; border: 1px solid {c['line']};
-    border-radius: 6px; padding: 5px 12px; font-size: 13px; min-height: 18px; }}
-QPushButton#penHintButton:hover {{ background: {c['soft']}; }}
-QPushButton#penHintButton:pressed {{ background: {c['edge']}; }}
+QFrame#penHint {{ background: {c['card']}; border: 1px solid {c['handle']}; border-radius: 8px; }}
+QLabel#penHintTitle {{ color: {c['text']}; font-size: 14px; font-weight: bold; background: transparent; }}
+QLabel#penHintSub {{ color: {c['text']}; font-size: 13px; background: transparent; }}
+QPushButton#penHintButton {{ color: {HINT_BUTTON[self.dark][1]}; background: {HINT_BUTTON[self.dark][0]};
+    border: 1px solid {HINT_BUTTON[self.dark][2]}; border-radius: 6px; padding: 6px 12px; font-size: 13px;
+    font-weight: 600; min-height: 20px; }}
+QPushButton#penHintButton:hover {{ background: {HINT_BUTTON[self.dark][3]}; }}
+QPushButton#penHintButton:pressed {{ background: {HINT_BUTTON[self.dark][3]}; border-color: {HINT_BUTTON[self.dark][1]}; }}
 """)
 
-    TEXTS = {"color": ("editor.pen_hint_color_title", "editor.pen_hint_color_sub", "editor.pen_hint_color_button"),
+    TEXTS = {"number": ("editor.number_hint_title", "editor.number_hint_sub", None),
+             "color": ("editor.pen_hint_color_title", "editor.pen_hint_color_sub", "editor.pen_hint_color_button"),
              "size": ("editor.pen_hint_size_title", "editor.pen_hint_size_sub", "editor.pen_hint_size_button"),
              "both": ("editor.pen_hint_both_title", "editor.pen_hint_both_sub", "editor.pen_hint_both_button")}
+
+    def show_number(self, color, n: int):
+        """1.34: выбран другой цвет при инструменте «Номер»: «Этот цвет: нумерация с N», «У каждого цвета свой счёт
+        номеров». Без кнопки; 4 секунды или до следующего действия."""
+        self.kind = "number"
+        self.pending = {}
+        self.target = None
+        title, sub = tr(self.TEXTS["number"][0], n=n), tr(self.TEXTS["number"][1])
+        self.title.setText(title)
+        self.sub.setText(sub)
+        self.setAccessibleName(f"{title}. {sub}")
+        edge = "#6b7178" if self.dark else "#8a8f98"
+        self.title_sample.setStyleSheet(f"background: {QColor(color).name()}; border: 1px solid {edge}; border-radius: 3px;")
+        self.title_sample.setToolTip(QColor(color).name().upper())
+        self.title_sample.show()
+        self.sample.hide()
+        self.button.hide()
+        self._fit()
+        self.raise_()
+        self.timer.start(self.NUMBER_MS)
+
+    MAX_W = 600   # карточка не шире (как в 1.33: не закрывает снимок); длинная строка переносится по словам
+
+    def _fit(self):
+        """Размер по тексту: подписи и кнопка меняются (вид подсказки, язык), поэтому раскладка пересчитывается
+        до и после показа (без этого после подсказки номеров без кнопки кнопка следующей обрезалась).
+        1.34.1 (Б3 проверки 1.34.0): текст 1.34 крупнее, и на ru, bg, fr карточка «Толщина» вышла шире 640 точек.
+        Строка, из-за которой карточка шире MAX_W, переносится по словам; шрифт остаётся крупным."""
+        for lbl in (self.title, self.sub):
+            lbl.setWordWrap(False)
+            lbl.setMinimumWidth(0)
+            lbl.setMaximumWidth(16777215)
+        self._relayout()
+        self.show()
+        self._relayout()
+        room = max(self.title.sizeHint().width(), self.sub.sizeHint().width())
+        for _ in range(3):
+            over = self.sizeHint().width() - self.MAX_W
+            if over <= 0 or room <= 160:
+                break
+            # строки не шире оставшегося места: ширина ровно по месту, высота по числу строк
+            room = max(160, room - over)
+            for lbl in (self.title, self.sub):
+                if lbl.wordWrap() or lbl.sizeHint().width() > room:
+                    lbl.setWordWrap(True)
+                    lbl.setFixedWidth(room)
+            self._relayout()
+
+    def _relayout(self):
+        for w in (self, self.title, self.sub, self.button):
+            w.ensurePolished()
+        self.layout().invalidate()
+        self.layout().activate()
+        self.adjustSize()
 
     def show_kind(self, kind: str, pen_color):
         """kind: color, size или both; pen_color: прежний цвет (образец рядом с пояснением) или None."""
@@ -2570,14 +2854,15 @@ QPushButton#penHintButton:pressed {{ background: {c['edge']}; }}
         self.sub.setText(sub)
         self.button.setText(button)
         self.button.setAccessibleName(button)
+        self.button.show()
+        self.title_sample.hide()
         self.setAccessibleName(f"{title}. {sub}")
         if pen_color is not None:
             edge = "#6b7178" if self.dark else "#8a8f98"
             self.sample.setStyleSheet(f"background: {QColor(pen_color).name()}; border: 1px solid {edge}; border-radius: 3px;")
             self.sample.setToolTip(QColor(pen_color).name().upper())
         self.sample.setVisible(pen_color is not None)
-        self.adjustSize()
-        self.show()
+        self._fit()
         self.raise_()
         self.timer.start(self.SHOW_MS)
 
@@ -2600,6 +2885,11 @@ QPushButton#penHintButton:pressed {{ background: {c['edge']}; }}
         if self.isVisible():
             self.timer.start(self.LINGER_MS)
         super().leaveEvent(event)
+
+
+# 1.34: кнопка подсказки у палитры мягкая синяя (фон, текст, рамка, наведение): заметнее белой, но не спорит с зелёной
+HINT_BUTTON = {False: ("#e8f1ff", "#1660d0", "#8fb8f5", "#d6e6fd"), True: ("#1d3450", "#8cc4ff", "#3d6da6", "#25416a")}
+NUMBER_HINT_TIMES = 3   # «Этот цвет: нумерация с N» показывается первые 3 раза (настройка number_hint_count)
 
 
 class BellButton(QToolButton):
@@ -2779,6 +3069,8 @@ class EditorWindow(QMainWindow):
         self.canvas.zoom_requested.connect(self.zoom_by)
         self.canvas.pressed.connect(self._dismiss_pen_hint)        # следующее действие на снимке убирает подсказку
         self.canvas.size_wheeled.connect(lambda size: self._object_restyled(size=size))
+        self.canvas.form_changed.connect(self._sync_form)
+        self.canvas.checker_dark = palette(cfg)["dark"]
         self._pen_hint = None
         self.canvas.crop_state_changed.connect(self._update_info)
         self.canvas.crop_confirmed.connect(self.exit_crop_mode)   # обрезали любым способом: режим завершён
@@ -2976,6 +3268,15 @@ class EditorWindow(QMainWindow):
         insert.setMenu(menu)
         self.insert_button = insert
         row1.addWidget(insert)
+        # 1.34: «Форма снимка» рядом со «Вставить»: обе кнопки про весь снимок, а не про один инструмент
+        form_button = FormButton()
+        self._style_tool_button(form_button, icons.icon("form_" + forma.DEFAULT_LAST), "", "group")
+        form_button.setFixedSize(GROUP_W, 36)
+        form_button.setAccessibleName(tr("forma.title"))
+        form_button.clicked.connect(self.toggle_form)
+        form_button.menu_requested.connect(self.show_form_menu)
+        self.form_button = form_button
+        row1.addWidget(form_button)
         # «⋯ Все инструменты» (1.32): видна всегда; панель со всеми инструментами по группам и их клавишами.
         # В узком окне только значок «⋯»
         more = QToolButton()
@@ -2998,6 +3299,23 @@ class EditorWindow(QMainWindow):
         top_row = QHBoxLayout(top)
         top_row.setContentsMargins(0, 0, 0, 0)
         top_row.setSpacing(2)
+        # 1.34 (просьба владельца 21.11.2026): заметная кнопка «С телефона» в шапке окна, слева от колокольчика: там она
+        # видна с подписью при любой ширине окна и не делает окно шире. То же окно приёма, что пункт «Вставить → Фото
+        # с телефона»; принятое фото ложится поверх этого снимка отдельной картинкой (canvas.insert_image, как Ctrl+V и
+        # «Из файла»). Значок и подписи те же, что у плитки окна выделения. При системном заголовке (группа в первом
+        # ряду) и в слишком узкой шапке только значок.
+        phone_b = QToolButton()
+        phone_b.setObjectName("phone")
+        phone_b.setIconSize(QSize(20, 20))
+        phone_b.setFixedHeight(30)
+        phone_b.setFocusPolicy(Qt.FocusPolicy.TabFocus)   # с клавиатуры (Tab), щелчок фокус у снимка не забирает (М3)
+        phone_b.setCursor(Qt.CursorShape.PointingHandCursor)
+        phone_b.clicked.connect(self.insert_from_phone)
+        self.phone_button = phone_b
+        self._phone_icon()
+        self._set_phone_label(not self.system_title)
+        top_row.addWidget(phone_b)
+        top_row.addSpacing(8)
         bell = BellButton()
         self._style_tool_button(bell, icons.icon("bell"), tr("editor.bell_tip"), "bell", False)
         bell.clicked.connect(self.show_notifications)
@@ -3122,9 +3440,11 @@ class EditorWindow(QMainWindow):
             box.addWidget(button)
         self.eraser_box.setVisible(self.canvas.tool == ERASER)
         row2.addWidget(self.eraser_box)
+        row2.addWidget(self._build_radius_box())   # 1.34: радиус скругления, виден при скруглённых углах
         row2.addStretch(1)
         self.panel_row2 = row2   # справа сюда встают «Копировать текст» и «Перевести» (см. _build_bottom)
         rows.addLayout(row2)
+        self._sync_form()
         return panel
 
     # --- режим перевода (1.29): сверху «Перевод» и «Готово (Esc)», внизу бирюзовая полоса ---------------
@@ -3831,10 +4151,13 @@ class EditorWindow(QMainWindow):
         """Ничего не выделено: цвет следующих линий (запоминается). Выделен объект: перекрашивается только он,
         у палитры подсказка с кнопкой «Рисовать дальше этим цветом» (решение владельца 20.11.2026)."""
         color = QColor(color).name().lower()
+        was = QColor(self.canvas.color).name().lower()
         if self.canvas.set_color(color):
             self.ctx.config["color"] = color
-            self.ctx.save_config()
             self._dismiss_pen_hint()
+            if self.canvas.tool == NUMBER and color != was:
+                self._number_color_hint(color)
+            self.ctx.save_config()
         else:
             self._object_restyled(color=color)
         self._sync_controls()
@@ -3963,6 +4286,26 @@ class EditorWindow(QMainWindow):
         keys = set(hint.pending)
         kind = "size" if keys == {"size"} else ("both" if "size" in keys else "color")
         hint.show_kind(kind, pen_color if "color" in keys else None)
+        self._place_pen_hint()
+
+    def _number_color_hint(self, color):
+        """1.34 (замечание владельца 21.11.2026): при инструменте «Номер» выбран другой цвет: у каждого цвета свой счёт,
+        раньше об этом говорила только подсказка кнопки «Номер». Первые NUMBER_HINT_TIMES раз у палитры заметная
+        карточка «Этот цвет: нумерация с N» и «У каждого цвета свой счёт номеров»."""
+        cfg = self.ctx.config
+        try:
+            shown = int(cfg.get("number_hint_count", 0) or 0)
+        except (TypeError, ValueError):
+            shown = 0
+        if shown >= NUMBER_HINT_TIMES:
+            return
+        cfg["number_hint_count"] = shown + 1
+        hint = self._pen_hint
+        if hint is None:
+            hint = self._pen_hint = PenHint(self)
+            hint.apply_theme(palette(self.ctx.config)["dark"])
+            hint.adopt.connect(self._adopt_pending)
+        hint.show_number(color, self.canvas.next_number(color))
         self._place_pen_hint()
 
     def _place_pen_hint(self):
@@ -4140,6 +4483,7 @@ class EditorWindow(QMainWindow):
         image = QImage()
         if mime is not None and mime.hasImage():
             image = QImage(mime.imageData())
+            image = _transparent_png(mime, image)
         elif mime is not None:
             for url in mime.urls():
                 if _is_image_file(url.toLocalFile()):
@@ -4193,6 +4537,208 @@ class EditorWindow(QMainWindow):
     def _save_tool_order(self, order):
         self.ctx.config["tool_order"] = order
         self.ctx.save_config()
+
+    # --- 1.34: форма снимка ---------------------------------------------------------------------
+
+    def last_form(self) -> str:
+        """Последняя выбранная форма (не прямоугольник): её включает щелчок по кнопке."""
+        code = self.ctx.config.get("form_last")
+        return code if code in forma.ALL_CODES and code != forma.RECT else forma.DEFAULT_LAST
+
+    def _last_form_obj(self):
+        code = self.last_form()
+        if code == forma.ROUND:   # свой радиус запоминается вместе с формой
+            return forma.rounded(float(self.ctx.config.get("form_radius") or forma.RADII[forma.ROUND_M]))
+        return forma.Form(code)
+
+    def _remember_form(self, form):
+        if not form.is_rect:
+            self.ctx.config["form_last"] = form.code
+            if form.code == forma.ROUND:
+                self.ctx.config["form_radius"] = round(form.radius, 2)
+
+    def form_title(self, form) -> str:
+        if form.code == forma.ROUND:
+            return tr("forma.round_custom", r=self._radius_px(form.radius))
+        return tr(forma.TITLE_KEYS[form.code])
+
+    def set_form(self, code):
+        """Форма снимка из меню или щелчком по кнопке. Не прямоугольник запоминается для следующего щелчка."""
+        code = forma.valid(code)
+        if code == forma.ROUND:
+            self.set_radius(self._last_form_obj().radius if self.last_form() == forma.ROUND else forma.RADII[forma.ROUND_M])
+            return
+        self._remember_form(forma.Form(code))
+        self.canvas.set_form(code)
+        self._sync_form()
+        if code == forma.CIRCLE and self.canvas.lw() != self.canvas.lh():
+            from . import hints   # круг меньше снимка: подсказать, что его можно сдвинуть
+            hints.hint(self, tr("forma.hint_circle"), tr("forma.hint_circle_sub"))
+
+    def toggle_form(self):
+        """Щелчок по значку: прямоугольник → последняя форма, любая форма → снова прямоугольник."""
+        self.set_form(self.last_form() if self.canvas.form.is_rect else forma.RECT)
+
+    # радиус: в поле и на ползунке пиксели снимка (как размер «1000 × 600 px» внизу), в холсте точки
+
+    def _ratio(self) -> float:
+        return self.canvas.base.devicePixelRatio() or 1.0
+
+    def _radius_px(self, points: float) -> int:
+        return int(round(points * self._ratio()))
+
+    def _radius_max_px(self) -> int:
+        return max(0, min(self.canvas.base.width(), self.canvas.base.height()) // 2)
+
+    def set_radius(self, px, record: bool = True):
+        """Свой радиус углов в пикселях снимка (ползунок, поле): форма становится «Скруглённые углы»."""
+        px = max(0, min(int(px), self._radius_max_px()))
+        self.canvas.set_radius(px / self._ratio(), record=record)
+        self._remember_form(self.canvas.form)
+        self._sync_form()
+
+    def _build_radius_box(self) -> QWidget:
+        from PyQt6.QtWidgets import QSlider, QSpinBox
+        box = QWidget()
+        box.setObjectName("radiusBox")
+        row = QHBoxLayout(box)
+        row.setContentsMargins(6, 0, 0, 0)
+        row.setSpacing(6)
+        row.addWidget(_separator())
+        row.addSpacing(2)
+        label = QLabel(tr("forma.radius"))
+        label.setObjectName("radiusLabel")
+        row.addWidget(label)
+        slider = QSlider(Qt.Orientation.Horizontal)
+        slider.setObjectName("radiusSlider")
+        slider.setFixedWidth(140)
+        slider.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        spin = QSpinBox()
+        spin.setObjectName("radiusSpin")
+        spin.setSuffix(" px")
+        spin.setKeyboardTracking(False)   # число применяется по Enter, стрелкам и уходу из поля, а не на каждой цифре
+        spin.setFixedHeight(28)
+        label.setBuddy(spin)
+        tip = tr("forma.radius_tip")
+        for w in (label, slider, spin):
+            w.setToolTip(tip)
+        slider.setAccessibleName(tr("forma.radius"))
+        spin.setAccessibleName(tr("forma.radius"))
+        row.addWidget(slider)
+        row.addWidget(spin)
+        self._radius_drag_pending = False
+        slider.sliderPressed.connect(self._radius_slider_pressed)
+        slider.valueChanged.connect(self._radius_slider_moved)
+        spin.valueChanged.connect(lambda v: self.set_radius(v, record=True))
+        self.radius_box, self.radius_slider, self.radius_spin = box, slider, spin
+        box.setVisible(self.canvas.form.is_round)
+        return box
+
+    def _radius_slider_pressed(self):
+        self._radius_drag_pending = True   # один шаг отмены на всё перетаскивание ползунка
+
+    def _radius_slider_moved(self, value):
+        if self.radius_slider.isSliderDown():
+            record, self._radius_drag_pending = self._radius_drag_pending, False
+            self.set_radius(value, record=record)
+        else:
+            self.set_radius(value, record=True)   # щелчок по дорожке, клавиши: каждый шаг отдельно
+
+    def form_note(self) -> str:
+        """Строка про JPG: прозрачности нет, за формой будет фон (белый по умолчанию). Пусто для PNG."""
+        if self.ctx.config.get("save_format", "png") != "jpg":
+            return ""
+        color = forma.background(self.ctx.config)
+        if color == QColor(forma.DEFAULT_BACKGROUND):
+            return tr("forma.jpg_note")
+        return tr("forma.jpg_note_color", color=color.name().upper())
+
+    def _form_tip(self) -> str:
+        form = self.canvas.form
+        if form.is_rect:
+            lines = [tr("forma.tip_off", name=self.form_title(self._last_form_obj()))]
+        else:
+            lines = [tr("forma.tip_on", name=self.form_title(form))]
+            if form.code == forma.CIRCLE:
+                lines.append(tr("forma.circle_move"))
+            if self.form_note():
+                lines.append(self.form_note())
+        return "\n".join(lines)
+
+    def _sync_form(self):
+        """Кнопка формы: значок текущей формы (или той, что включит щелчок), полоска «включено», подсказка."""
+        button = getattr(self, "form_button", None)
+        if button is None:
+            return
+        form = self.canvas.form
+        self._remember_form(form)   # и маркер радиуса на холсте, и отмена: последняя форма та, что видна
+        button.setIcon(icons.icon("form_" + forma.icon_code(self._last_form_obj() if form.is_rect else form)))
+        button.setChecked(not form.is_rect)
+        tip = self._form_tip()
+        button.setToolTip(tip)
+        button.setAccessibleDescription(tip)
+        box = getattr(self, "radius_box", None)
+        if box is not None:
+            top = self._radius_max_px()
+            value = min(self._radius_px(form.radius), top)
+            for w in (self.radius_slider, self.radius_spin):
+                w.blockSignals(True)   # значения из формы: без нового шага отмены
+                w.setRange(0, top)
+                if w.value() != value:
+                    w.setValue(value)
+                w.blockSignals(False)
+            if box.isHidden() == form.is_round:
+                box.setVisible(form.is_round)
+                if hasattr(self, "_need_row1"):   # второй ряд стал шире или уже: ступени пересчитать
+                    self._measure_rows()
+                    self._adapt_rows()
+        if getattr(self, "info", None) is not None:
+            self._update_info()
+
+    def build_form_menu(self) -> QMenu:
+        menu = QMenu(self)
+        style_menu(menu, self.ctx.config)
+        group = QActionGroup(menu)
+        group.setExclusive(True)
+        current = self.canvas.form.code
+        for code in forma.FORMS:
+            if code == forma.OVAL:
+                menu.addSeparator()
+            action = menu.addAction(icons.icon("form_" + code), tr(forma.TITLE_KEYS[code]))
+            action.setCheckable(True)
+            action.setChecked(code == current)
+            action.setData(code)
+            group.addAction(action)
+            action.triggered.connect(lambda _c=False, c=code: self.set_form(c))
+            if code == forma.RECT:
+                menu.addSeparator()
+        note = self.form_note()
+        if note:
+            # одной строкой под списком: в JPG за формой будет фон, а не прозрачность. Подпись, а не неактивный пункт:
+            # серый текст неактивного пункта читается плохо (контраст ниже 3:1), а это сведение, а не выключенная кнопка
+            menu.addSeparator()
+            label = QLabel(note)
+            label.setObjectName("formNote")
+            label.setWordWrap(True)
+            label.setMaximumWidth(320)
+            label.setStyleSheet(f"QLabel {{ color: {palette(self.ctx.config)['t2']}; padding: 6px 14px 8px 14px;"
+                                " background: transparent; }")
+            info = QWidgetAction(menu)
+            info.setDefaultWidget(label)
+            info.setEnabled(False)
+            menu.addAction(info)
+        return menu
+
+    def show_form_menu(self):
+        button = self.form_button
+        menu = self.build_form_menu()
+        button.menu_open = True
+        button.update()
+        try:
+            menu.exec(button.mapToGlobal(QPoint(0, button.height() + 2)))
+        finally:
+            button.menu_open = False
+            button.update()
 
     def _tool_strip_menu(self, pos):
         button = self.tool_strip.childAt(pos)
@@ -4341,6 +4887,58 @@ class EditorWindow(QMainWindow):
         self.build_tool_menu(tool).exec(event.globalPosition().toPoint())
         return True
 
+    def _phone_icon(self):
+        """Значок «С телефона» в цвете своей мягкой кнопки (светлая и тёмная тема)."""
+        b = getattr(self, "phone_button", None)
+        if b is not None:
+            b.setIcon(icons.icon("phone", soft_colors("phone", palette(self.ctx.config)["dark"])[3]))
+
+    def _set_phone_label(self, on: bool):
+        """«С телефона» с подписью или (системный заголовок, слишком узкая шапка) только значок."""
+        b = getattr(self, "phone_button", None)
+        if b is None:
+            return
+        label = tr("phone.tile_title")
+        tip = label + " · " + tr("phone.tile_tip")
+        b.setAccessibleName(label)
+        b.setAccessibleDescription(tr("phone.tile_tip"))
+        b.setToolTip(tip)
+        b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon if on else Qt.ToolButtonStyle.ToolButtonIconOnly)
+        b.setText(label if on else "")
+        b.ensurePolished()
+        bold = QFont(b.font())
+        bold.setWeight(QFont.Weight.DemiBold)
+        self._phone_full_w = QFontMetrics(bold).horizontalAdvance(label) + 20 + 17 + 6   # значок, поля, промежуток
+        if on:
+            b.setMinimumWidth(0)
+            b.setMaximumWidth(16777215)
+            self._phone_full_w = max(b.sizeHint().width(), self._phone_full_w)
+            b.setFixedWidth(self._phone_full_w)
+        else:
+            b.setFixedWidth(TOOL_W)
+        self._phone_label = on
+
+    def _title_need(self):
+        """Ширина своей шапки окна с подписью «С телефона» и только со значком: (с подписью, значком) или None."""
+        tb = getattr(self, "titlebar", None)
+        b = getattr(self, "phone_button", None)
+        if tb is None or b is None or self.system_title or tb.icons_widget is not self.top_icons:
+            return None
+        lay = tb.layout()
+        lay.invalidate()
+        base = lay.minimumSize().width() - b.width()
+        return base + getattr(self, "_phone_full_w", TOOL_W), base + TOOL_W
+
+    def _fit_phone_label(self, width):
+        """Подпись «С телефона» в шапке, пока шапка помещается (обратно с запасом COLLAPSE_SLACK)."""
+        need = self._title_need()
+        if need is None:
+            return
+        on = getattr(self, "_phone_label", True)
+        want = width >= need[0] + (COLLAPSE_SLACK if not on else 0)
+        if want != on:
+            self._set_phone_label(want)
+
     def _set_more_label(self, on: bool):
         """«⋯ Все инструменты» с подписью или (узкое окно) только значок «⋯»."""
         b = self.more_button
@@ -4415,6 +5013,13 @@ class EditorWindow(QMainWindow):
         action = QWidgetAction(menu)
         action.setDefaultWidget(holder)
         menu.addAction(action)
+        # 1.34: формы снимка и здесь: в узком окне кнопки «Форма снимка» в ряду нет
+        menu.addSeparator()
+        forms = self.build_form_menu()
+        forms.setTitle(tr("forma.title"))
+        forms.setIcon(icons.icon("form_" + forma.icon_code(self._last_form_obj() if self.canvas.form.is_rect
+                                                            else self.canvas.form)))
+        menu.addMenu(forms)
         self._all_tools_menu = menu
         return menu
 
@@ -4445,18 +5050,29 @@ class EditorWindow(QMainWindow):
         self.panel.ensurePolished()
         for w in self.panel.findChildren(QWidget):
             w.ensurePolished()   # размеры по таблице стилей (шрифт, отступы), даже пока окно не показано
+        if getattr(self, "phone_button", None) is not None:   # ширина «С телефона» по шрифту из таблицы стилей
+            self.phone_button.ensurePolished()
+            self._set_phone_label(getattr(self, "_phone_label", not self.system_title))
         margins = self.panel.layout().contentsMargins()
         side = margins.left() + margins.right()
         row1 = self.panel_row1
         label_was = getattr(self, "_more_label", True)
         self._set_more_label(True)
         more_full = self.more_button.maximumWidth()
+        form = getattr(self, "form_button", None)
+        form_shown = form is not None and not form.isHidden()
+        if form is not None:
+            form.setVisible(True)
         self.tool_strip.row.invalidate()
         self.tool_strip.updateGeometry()
         row1.invalidate()
         rest = row1.sizeHint().width() - self.tool_strip.sizeHint().width() - more_full
         self._set_more_label(label_was)
-        self._need_row1 = [side + rest + self.tool_strip.width_for(c) + (more_full if label else TOOL_W)
+        # 1.34: «Форма снимка» уходит из ряда вместе с подписью «Все инструменты» (формы остаются в этом меню)
+        form_w = form.width() + row1.spacing() if form is not None else 0
+        if form is not None:
+            form.setVisible(form_shown)
+        self._need_row1 = [side + rest + self.tool_strip.width_for(c) + (more_full if label else TOOL_W - form_w)
                            for c, label in self._stages()]
         # ряд 2: три вида: обе большие кнопки, только «Копировать текст», ни одной (1.32.2: «Перевести» уходит первой)
         row2 = self.panel_row2
@@ -4497,7 +5113,8 @@ class EditorWindow(QMainWindow):
         """Самое узкое содержимое окна: всё свёрнуто, второй ряд без больших кнопок, внизу значки."""
         if not hasattr(self, "_need_row1"):
             self._measure_rows()
-        return max(self._need_row1[-1], self._need_row2[-1], self._need_bottom[1])
+        need = self._title_need()   # шапка со значком «С телефона» без подписи (обычно уже первого ряда)
+        return max(self._need_row1[-1], self._need_row2[-1], self._need_bottom[1], need[1] if need else 0)
 
     @staticmethod
     def _pick(needs, width, current):
@@ -4525,6 +5142,8 @@ class EditorWindow(QMainWindow):
         self.tool_strip.set_collapsed(collapsed)
         if label != getattr(self, "_more_label", None):
             self._set_more_label(label)
+        if getattr(self, "form_button", None) is not None:
+            self.form_button.setVisible(label)   # узкое окно: форма снимка в меню «Все инструменты»
         big = self._pick(list(self._need_row2), width, getattr(self, "_row2_state", None))
         self._row2_state = big
         self._set_row2_compact(big)
@@ -4532,6 +5151,7 @@ class EditorWindow(QMainWindow):
         self._bottom_state = low
         if (low == 1) != getattr(self, "_bottom_compact", False):
             self._set_bottom_compact(low == 1)
+        self._fit_phone_label(width)
 
     def _set_row2_compact(self, level):
         """Узкое окно, второй ряд: 0 обе большие кнопки, 1 только «Копировать текст» («Перевести» ушла первой),
@@ -5102,6 +5722,9 @@ class EditorWindow(QMainWindow):
         if self.titlebar is not None:
             self.titlebar.set_icons(self.top_icons)   # новая группа колокольчика, «?», шестерёнки и глобуса
         self._sync_bell()
+        if getattr(self, "_novoe", None) is not None:   # 1.34: кнопки построены заново, метки «Новое» на новые
+            from . import novoe
+            novoe.attach_editor(self)
         if self.titlebar is not None:   # подсказки шапки: Свернуть, Развернуть/Восстановить, Закрыть
             self.titlebar.min_button.setToolTip(tr("editor.minimize"))
             self.titlebar.close_button.setToolTip(tr("editor.close"))
@@ -5155,6 +5778,7 @@ class EditorWindow(QMainWindow):
             button.setIcon(icons.icon(tool))
         self._sync_groups()
         self.more_button.setIcon(icons.icon("more"))
+        self._phone_icon()
         if getattr(self, "_bottom_compact", False):
             self.zoom_fit_button.setIcon(icons.icon("fit"))
         for button, name in ((self.undo_button, "undo"), (self.redo_button, "redo"),
@@ -5165,6 +5789,9 @@ class EditorWindow(QMainWindow):
             button.setIcon(icons.icon(name))
         for level in range(1, 6):
             self.size_group.button(level).setIcon(icons.size_icon(level))
+        self.canvas.checker_dark = pal["dark"]
+        self.canvas.update()
+        self._sync_form()
         self._sync_ocr()
         self.fit_size()
 
@@ -5301,8 +5928,9 @@ class EditorWindow(QMainWindow):
             return
         shape = self.canvas.selected if self.canvas.editing_object() else None
         if shape is None:
-            self.info.setText(size)
-            self.info.setToolTip("")
+            note = self.form_note() if not self.canvas.form.is_rect else ""
+            self.info.setText(f"{size} · {note}" if note else size)   # 1.34: JPG и форма: за формой будет фон
+            self.info.setToolTip(note)
             return
         name = tr(SHAPE_NAMES.get(shape.kind, "editor.shape_object"))
         self.info.setText(tr("editor.selected_info", name=name))
@@ -5451,6 +6079,8 @@ class EditorWindow(QMainWindow):
         self.canvas.setFocus()
         QTimer.singleShot(0, self._auto_fit)
         QTimer.singleShot(60, self._align_to_origin)
+        from . import novoe
+        novoe.attach_editor(self)   # 1.34: метка «Новое» на кнопках, новых в этой версии (после обновления)
 
     def _align_to_origin(self):
         """Ставим окно так, чтобы картинка легла ровно на снятую область, но не вылезла за экран."""
@@ -5543,16 +6173,32 @@ class EditorWindow(QMainWindow):
             event.ignore()
             return
         if self.canvas.modified and not self.exported:
+            # 1.34 (замечание владельца 21.11.2026: текст бледный, читается трудно): текст 15 px цветом основного текста,
+            # «Esc: вернуться к редактированию» отдельной строкой; главная зелёная «Скопировать и закрыть» (основное
+            # действие редактора, ничего не теряется), «Сохранить» спокойная, «Закрыть без сохранения» отдельно слева
+            # красным текстом. Esc и крестик возвращают к редактированию, Enter: «Скопировать и закрыть».
             dialog = ConfirmDialog(self, tr("editor.unsaved_title"), tr("editor.unsaved_text"),
-                                   tr("editor.unsaved_discard"), tr("editor.save"), default_yes=False)
-            answer = dialog.exec()
+                                   tr("editor.unsaved_discard"), tr("editor.save"), default_yes=False,
+                                   note=tr("editor.unsaved_hint"), extra_text=tr("editor.copy_close"), danger_yes=True)
+            # 1.34.1 (Б2 проверки 1.34.0): пока открыт вопрос, фото с телефона сюда не кладётся (phone_ui), а
+            # открывается отдельным снимком: «Закрыть без сохранения» не должно уносить то, чего человек не видел
+            self.closing = True
+            try:
+                answer = dialog.exec()
+            finally:
+                self.closing = False
             if answer == ConfirmDialog.NO:
                 event.ignore()
                 QTimer.singleShot(0, self.save_and_close)   # если в окне сохранения нажать «Отмена» — редактор останется
                 return
+            if answer == ConfirmDialog.EXTRA:
+                event.ignore()
+                QTimer.singleShot(0, self.copy_and_close)   # копирует в буфер обмена и закрывает (exported: без вопроса)
+                return
             if answer != ConfirmDialog.YES:
                 event.ignore()
                 return
+        self.closing = True         # окно закрывается: новое фото с телефона пойдёт в отдельный снимок
         self.ctx.save_config()
         self._remove_key_filter()
         self._ocr_job = None        # распознавание, которое ещё идёт, больше ничего не пишет в это окно (Г1)

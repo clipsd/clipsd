@@ -2,6 +2,8 @@
   "phone.allow_again": "Permitir de nuevo",
   "phone.allow_done": "Listo. Vuelva a abrir el código en el teléfono.",
   "phone.allow_failed": "La regla de Windows no se ha cambiado: {error}",
+  "phone.allow_working": "Esperando la solicitud de permiso de Windows…",
+  "phone.allow_declined": "No se dio el permiso. Pulse «Permitir de nuevo» y responda «Sí».",
   "phone.android17": "Android 17: permita al navegador acceder a la red local. Ajustes → Aplicaciones → su navegador → Permisos → Dispositivos cercanos → Permitir.",
   "phone.bind_failed": "No se pudo abrir la recepción en este equipo. Detalles: {error}",
   "phone.cancel": "Cancelar",
@@ -104,7 +106,11 @@
   "phone.page_too_big": "La foto es demasiado grande. Hágala otra vez.",
   "phone.page_unsent": "La foto no llegó al equipo. Si su navegador lo permite, mantenga pulsada la imagen para guardarla en la galería.",
   "phone.page_used": "Este código ya está abierto en otro teléfono. Muestre un código nuevo en el equipo.",
+  "phone.page_zoom_close": "Cerrar",
+  "phone.page_zoom_hint": "Toque para verla de cerca",
   "phone.phone_done": "La recepción se cerró desde el teléfono. Para hacer más fotos, muestre un código nuevo.",
+  "phone.photo_apart": "La captura se estaba cerrando, así que la foto del teléfono se abrió como una captura aparte.",
+  "phone.photo_apart_saved": "La captura se estaba cerrando, así que la foto del teléfono se abrió como una captura aparte. Archivo: {path}",
   "phone.photo_late": "La foto del teléfono se recibió y se abrió en el editor.",
   "phone.received_open": "Foto recibida: {size}. Abriendo…",
   "phone.received_size": "Fotos recibidas: {count} ({size})",
@@ -132,5 +138,8 @@
   "phone.vpn_hint": "Una VPN en el teléfono puede bloquear la conexión.",
   "phone.wifi_hide": "No volver a mostrar",
   "phone.wifi_ok": "Entendido, mostrar el código",
-  "phone.wifi_text": "El teléfono y el equipo deben estar conectados a la misma red Wi-Fi. Con datos móviles la foto no llegará."
+  "phone.wifi_text": "El teléfono y el equipo deben estar conectados a la misma red Wi-Fi. Con datos móviles la foto no llegará.",
+  "phone.tile_title": "Del teléfono",
+  "phone.tile_sub": "cámara o imagen",
+  "phone.tile_tip": "Haga una foto o envíe una imagen desde el teléfono"
 }

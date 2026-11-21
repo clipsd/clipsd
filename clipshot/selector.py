@@ -9,6 +9,7 @@
 (set_desktop), под затемнение подкладывается замороженный кадр и включается лупа.
 Если выделение закончено раньше, чем пришёл снимок, вырезка делается сразу по его приходу."""
 
+import os
 import sys
 
 from PyQt6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QTimer, pyqtSignal
@@ -105,6 +106,48 @@ def span_rect(a: QPoint, b: QPoint) -> QRect:
     return QRect(min(a.x(), b.x()), min(a.y(), b.y()), abs(b.x() - a.x()), abs(b.y() - a.y()))
 
 
+_exe_icons = {}   # значки программ Windows по пути exe: файл читается один раз за жизнь ClipSD
+
+
+def _exe_icon(path: str):
+    """Значок из файла программы Windows (QFileIconProvider: SHGetFileInfo, значок exe, а не общий значок типа
+    файла) или None. Только локальные пути: значок с сетевого диска (UNC и подключённый диск, windows.is_local_path)
+    мог бы задержать меню."""
+    import os
+    from . import windows
+    if sys.platform != "win32" or not path or not windows.is_local_path(path):
+        return None
+    key = path.casefold()
+    if key not in _exe_icons:
+        icon = None
+        try:
+            if os.path.isfile(path):
+                from PyQt6.QtCore import QFileInfo
+                from PyQt6.QtWidgets import QFileIconProvider
+                icon = QFileIconProvider().icon(QFileInfo(path))
+        except Exception:   # noqa: BLE001 — без значка остаётся буква
+            icon = None
+        if len(_exe_icons) > 256:
+            _exe_icons.clear()
+        _exe_icons[key] = icon
+    return _exe_icons[key]
+
+
+def _program_icon(win):
+    """QIcon программы окна или None: GNOME и X11 по значку темы (имя или путь), Windows из exe."""
+    import os
+    from PyQt6.QtGui import QIcon
+    if not win.icon:
+        return None
+    if win.source == "win32":
+        return _exe_icon(win.icon)
+    if win.source in ("gnome-ext", "ewmh"):
+        if os.path.isabs(win.icon):
+            return QIcon(win.icon) if os.path.isfile(win.icon) else None
+        return QIcon.fromTheme(win.icon)
+    return None
+
+
 class RegionSelector(TranslateMixin, QWidget):
     """Полноэкранный оверлей. finished(pixmap | None, глобальный прямоугольник)."""
 
@@ -160,6 +203,7 @@ class RegionSelector(TranslateMixin, QWidget):
         self.hover_button = None
         self.bar_level = None
         self.bar_hint_text = ""
+        self.dims_rect = self.hint_text_rect = QRect()   # компоновка 21.11.2026 (_bar_layout_for)
         # Выбор языка в нижней строке панели (1.31.1): приложение (ctx с set_language и config); None: чипа нет
         self.lang_ctx = None
         self.lang_rect = QRect()   # чип языка в строке подсказки; пустой: чипа нет
@@ -185,6 +229,8 @@ class RegionSelector(TranslateMixin, QWidget):
         self._lift = None            # идущий запрос содержимого выбранного окна
         self._lift_pixmap = None     # содержимое пришло раньше кадра стола: впишется, когда кадр придёт
         self._win_open_pending = False   # список попросили (W, чип), пока он ещё не пришёл
+        self._novoe = None           # 1.34: {ключ кнопки: id} меток «Новое» (novoe.badges), считается при первой отрисовке
+        self._novoe_counted = set()
 
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -605,6 +651,7 @@ class RegionSelector(TranslateMixin, QWidget):
     BAR_BUTTONS = (("record", "selector.btn_record", "Ctrl+R"),
                    ("full", "selector.btn_full_shot", "Ctrl+A"),
                    ("ocr", "selector.btn_ocr", "Ctrl+T"),
+                   ("phone", "phone.tile_title", "phone.tile_tip"),   # те же ключи у кнопки «С телефона» в редакторе
                    ("translate", "selector.btn_translate", "Ctrl+L"),
                    ("translate_pick", "selector.btn_translate_pick", "Ctrl+P"),
                    ("save", "selector.btn_save", "Ctrl+S"),
@@ -613,7 +660,8 @@ class RegionSelector(TranslateMixin, QWidget):
                    ("copy", "selector.btn_copy", "Ctrl+Enter"))
     # 1.29.1: сверху пять плиток, снизу четыре кнопки справа налево по частоте: «Скопировать и закрыть», «Выделить заново»,
     # «Редактировать», «Сохранить»; ширина по тексту, чем правее, тем шире; слева значок в цветном квадрате.
-    BAR_TOP = ("record", "full", "ocr", "translate", "translate_pick")
+    # 1.34 (просьба владельца 21.11.2026): шестая плитка «С телефона», тот же приём фото, что пункт меню значка у часов
+    BAR_TOP = ("record", "full", "ocr", "phone", "translate", "translate_pick")
     BAR_BOTTOM = ("save", "edit", "manual", "copy")
     BAR_WEIGHTS = {"save": 1.0, "edit": 1.2, "manual": 1.4, "copy": 1.65}
 
@@ -625,13 +673,15 @@ class RegionSelector(TranslateMixin, QWidget):
     def BAR_SUB(self):
         return {"save": tr("selector.sub_save_file"), "edit": tr("selector.sub_edit_frame"),
                 "manual": tr("selector.sub_retake_empty"), "copy": tr("selector.sub_copy_clipboard"),
-                "translate": tr("selector.sub_translate"), "translate_pick": tr("selector.sub_translate_pick")}
+                "translate": tr("selector.sub_translate"), "translate_pick": tr("selector.sub_translate_pick"),
+                "phone": tr("phone.tile_sub")}
     BAR_ICONS = {"full": "fullscreen", "edit": "pencil", "copy": "copy", "save": "save", "record": "record",
-                 "manual": "region", "ocr": "ocr", "translate": "translate", "translate_pick": "translate_pick"}
+                 "manual": "region", "ocr": "ocr", "translate": "translate", "translate_pick": "translate_pick",
+                 "phone": "phone"}
     # цвет у главных кнопок фоном, у плиток только значком
     BAR_ICON_COLORS = {"record": "#d92d20", "full": "#2a6df4", "save": "#5a6270", "ocr": "#7c3aed",
                        "translate": "#0d9488", "translate_pick": "#0d9488", "edit": "#0b6fd6", "manual": "#0b4fb3",
-                       "copy": "#f4fff8"}
+                       "copy": "#f4fff8", "phone": "#b4236e"}
     BAR_SQUARE = {"save": ("#e3e6eb", "#5a6270"), "edit": ("#d6e7fc", "#0b6fd6"),   # цвет квадрата и значка нижних кнопок
                   "manual": ("#1e6fe0", "#ffffff"), "copy": ("#4fc487", "#ffffff")}
 
@@ -646,7 +696,7 @@ class RegionSelector(TranslateMixin, QWidget):
                 continue
             if key in ("translate", "translate_pick") and not self.translate_enabled():
                 continue
-            out.append((key, tr(b[1]), tr(b[2]) if b[2].startswith("selector.") else i18n_keys(b[2])))
+            out.append((key, tr(b[1]), tr(b[2]) if b[2].startswith(("selector.", "phone.")) else i18n_keys(b[2])))
         return out
 
     def _mon_list(self):
@@ -765,7 +815,38 @@ class RegionSelector(TranslateMixin, QWidget):
             return self.TR_HINTS if self.tr_pieces else self.TR_HINTS_FIRST
         return {"wide": (self.BAR_HINT,), "mid": (self.BAR_HINT_SHORT,), "narrow": (self.BAR_HINT_ICONS,)}[lv["name"]]
 
-    def _bar_sizes(self, lv):
+    # --- нижние ряды панели по решению владельца 21.11.2026 (эскиз «кнопка Редактировать», вариант Б; до этого был В
+    # с вопросом «Что сделать со снимком?»): ряд из двух равных кнопок на всю ширину, «Сохранить» и «Другая область»,
+    # под ним крупные: «Редактировать» главная (зелёная, единственная заливка панели, шире, пояснение «стрелки, текст,
+    # размытие», то же делает Enter) и «Скопировать и закрыть» (светло-зелёная с зелёной рамкой, поуже, «в буфер
+    # обмена», на привычном месте справа внизу, Ctrl+Enter). Только при подписях на кнопках; на узком экране (одни
+    # значки) нижний ряд прежний, в одну строку.
+    # --- компоновка строки подсказки (просьба владельца 21.11.2026, выбрана компоновка 1 из двух эскизов): язык
+    # и шестерёнка в левом углу строки подсказки, чип «Открытые окна ▾» справа, под «Скопировать и закрыть»;
+    # «С телефона» плиткой в верхнем ряду. Режим перевода: строка подсказки как в 1.33 (в ней свои кнопки).
+
+    @staticmethod
+    def _choice(lv=None) -> bool:
+        return lv is None or bool(lv["text"])
+
+    @staticmethod
+    def _choice_sub(key):
+        return tr("selector.sub_edit_tools") if key == "edit" else tr("selector.sub_copy_clipboard")
+
+    def _choice_mins(self, lv, texts):
+        """Минимальные ширины: крупные кнопки (значок, подпись, пояснение) и мелкие (значок, подпись)."""
+        bl_font, bs_font = self._bar_bfonts(lv)
+        fm_bl, fm_bs = QFontMetrics(bl_font), QFontMetrics(bs_font)
+        big = {}
+        for k in ("edit", "copy"):
+            widest = max(fm_bl.horizontalAdvance(texts[k]), fm_bs.horizontalAdvance(self._choice_sub(k)))
+            big[k] = lv["pl"] + lv["sq"] + 6 + lv["gp"] + widest + lv.get("rm", 12)
+        label_font, _s = self._bar_fonts(lv)
+        fm = QFontMetrics(label_font)
+        small = {k: 12 + 16 + 7 + fm.horizontalAdvance(texts[k]) + 12 for k in ("save", "manual")}
+        return big, small
+
+    def _bar_sizes(self, lv, room=None):
         """Ширина содержимого рядов (без полей панели) и минимумы нижних кнопок на этом размере."""
         label_font, small_font = self._bar_fonts(lv)
         fm_l, fm_s = QFontMetrics(label_font), QFontMetrics(small_font)
@@ -777,9 +858,16 @@ class RegionSelector(TranslateMixin, QWidget):
         texts = {b[0]: b[1] for b in self._bar_buttons()}
         if lv["text"]:
             words = max([fm_l.horizontalAdvance(w) for k in top for w in texts[k].split()] or [0]) + 16
-            sub = max(fm_s.horizontalAdvance(self.BAR_SUB[k]) for k in ("translate", "translate_pick") if k in top) + 14 \
-                if "translate" in top else 0
+            sub = max([fm_s.horizontalAdvance(self.BAR_SUB[k]) + 14 for k in ("translate", "translate_pick", "phone")
+                       if k in top] or [0])
             tile_min = max(lv["tile_min"], words, sub)
+            # 1.34: плиток шесть; если равные не помещаются, каждая не уже своего самого длинного слова и пояснения
+            tile_mins = {}
+            for k in top:
+                own = max([fm_l.horizontalAdvance(w) for w in texts[k].split()] or [0]) + 16
+                if k in ("translate", "translate_pick", "phone"):
+                    own = max(own, fm_s.horizontalAdvance(self.BAR_SUB[k]) + 14)
+                tile_mins[k] = max(lv["tile_min"], own)
             mins = {}
             for k in self.BAR_BOTTOM:
                 label = self._bar_label(k, texts[k], lv)
@@ -789,11 +877,19 @@ class RegionSelector(TranslateMixin, QWidget):
                 mins[k] = lv["pl"] + lv["sq"] + lv["gp"] + widest + lv.get("rm", 12)
         else:
             tile_min = lv["tile_min"]
+            tile_mins = {k: tile_min for k in top}
             mins = {"save": 56, "edit": 56}
             for k in ("manual", "copy"):
                 mins[k] = 2 * pad + lv["icon"] + 8 + fm_l.horizontalAdvance(self._bar_label(k, texts[k], lv))
+        self._tile_mins = tile_mins
         top_w = len(top) * tile_min + gap * max(0, len(top) - 1)
         bottom_w = sum(mins.values()) + (len(mins) - 1) * gap
+        if self._choice(lv):
+            big, small = self._choice_mins(lv, texts)
+            bottom_w = max(big["edit"] + big["copy"] + gap, 2 * max(small.values()) + gap)
+        if room is not None and max(top_w, bottom_w) + 2 * self.BAR_PAD > room:
+            # равные плитки не помещаются (шесть плиток на экране 800): каждая по своему тексту
+            top_w = sum(tile_mins.values()) + gap * max(0, len(top) - 1)
         return max(top_w, bottom_w), mins, top
 
     def _bar_area(self):
@@ -808,6 +904,24 @@ class RegionSelector(TranslateMixin, QWidget):
             screen = QGuiApplication.screenAt(self.mapToGlobal(r.center()))
             area = screen.geometry().translated(-self.origin) if screen else self.rect()
         return area.intersected(self.rect()) if area.intersects(self.rect()) else self.rect()
+
+    CHOICE_COPY_SHARE = 1 / 2.2   # доля «Скопировать и закрыть» в крупном ряду (эскиз Б): «Редактировать» шире
+
+    def _choice_rects(self, lv, texts, x0, inner, by, bh_small, bh_big, gap):
+        """Нижние ряды: «Сохранить» и «Другая область» двумя равными кнопками на всю ширину; под ними крупные:
+        слева широкая главная «Редактировать», справа поуже привычное «Скопировать и закрыть». Обе не уже своего текста."""
+        big_y = by + bh_small + gap
+        mb, _ms = self._choice_mins(lv, {k: self._bar_label(k, v[0], lv) for k, v in texts.items()})
+        out = {}
+        avail = inner - gap
+        w_copy = max(mb["copy"], min(round(avail * self.CHOICE_COPY_SHARE), avail - mb["edit"]))
+        w_edit = avail - w_copy
+        out["edit"] = QRect(x0, big_y, w_edit, bh_big)
+        out["copy"] = QRect(x0 + w_edit + gap, big_y, inner - w_edit - gap, bh_big)
+        w = avail // 2
+        out["save"] = QRect(x0, by, w, bh_small)
+        out["manual"] = QRect(x0 + w + gap, by, inner - w - gap, bh_small)
+        return out
 
     BAR_PLACES = ("below", "above", "right", "left")   # куда ставить панель вне рамки, по порядку (1.31.1)
     BAR_CHIP_H = 24        # высота чипа языка и шестерёнки в нижней строке
@@ -852,7 +966,7 @@ class RegionSelector(TranslateMixin, QWidget):
                 side_room = (r.left() - gapx) - (area.left() + 8)
             room = side_room
         for lv in self.BAR_LEVELS:
-            inner, mins, top_keys = self._bar_sizes(lv)
+            inner, mins, top_keys = self._bar_sizes(lv, room)
             if inner + 2 * bp <= room:
                 break
         self.bar_level = lv
@@ -908,7 +1022,7 @@ class RegionSelector(TranslateMixin, QWidget):
             lang_w, gear_w = long_w, 28
             for cand, wcand in ((long_w, win_long), (long_w, win_short), (28, win_short)):
                 lang_w, win_w = cand, wcand
-                reserve = cand + gear_w + 4 + dims_w + 6 + (wcand + 4 if wcand else 0)
+                reserve = cand + gear_w + 4 + dims_w + 6 + (wcand + 4 if wcand else 0) + (0 if self.translate_mode else 6)
                 if any(fm_h.horizontalAdvance(t) + 24 <= inner - reserve for t in variants):
                     break
         text_room = inner - reserve
@@ -932,7 +1046,10 @@ class RegionSelector(TranslateMixin, QWidget):
             ctl_h = ctl_rows * 26 + (ctl_rows - 1) * 6 + 8
             hint_h += ctl_h
         bh_tile, bh_btn = lv["tile_h"], lv["btn_h"]
-        bar_h = bp + title_h + bh_tile + gap + bh_btn + gap + hint_h + 8
+        choice = self._choice(lv)
+        bh_small, bh_big = (34 if lv["name"] == "wide" else 30), bh_btn + 10
+        bh_rows = (bh_small + gap + bh_big) if choice else bh_btn   # нижних рядов два (мелкий и крупный), на узком один
+        bar_h = bp + title_h + bh_tile + gap + bh_rows + gap + hint_h + 8
         if r is None:   # режим перевода без рамки: панель внизу монитора
             x = area.left() + (area.width() - bar_w) // 2
             y = area.bottom() - bar_h - 56
@@ -954,7 +1071,9 @@ class RegionSelector(TranslateMixin, QWidget):
             else:
                 # Снаружи нигде нет места: внутри рамки у нижнего края, с отступом от сторон (их можно тянуть)
                 y = r.top() + r.height() - bar_h - 2 * self.GRIP - 4
-                x = max(x, r.left() + 2 * self.GRIP + 4)
+                # отступ от левой стороны рамки, но не за правый край экрана (до 1.34 широкая немецкая панель на экране
+                # 800 уходила вправо на 17 px)
+                x = min(max(x, r.left() + 2 * self.GRIP + 4), area.right() - bar_w - self.BAR_CROSS // 2 - 4)
         if full:
             x = area.left() + (area.width() - bar_w) // 2
             y = area.top() + (area.height() - bar_h) // 2
@@ -975,28 +1094,43 @@ class RegionSelector(TranslateMixin, QWidget):
         buttons = []
         texts = {b[0]: (b[1], b[2]) for b in self._bar_buttons()}
         n = len(top_keys)
-        tw = (inner - gap * (n - 1)) / n if n else 0
+        avail_t = inner - gap * (n - 1) if n else 0
+        tmins = getattr(self, "_tile_mins", {})
+        if n and any(avail_t / n < tmins.get(k, 0) for k in top_keys):
+            # равные плитки не помещаются: каждой свой минимум, остаток поровну
+            extra = max(0.0, avail_t - sum(tmins.get(k, 0) for k in top_keys)) / n
+            tws = [tmins.get(k, 0) + extra for k in top_keys]
+        else:
+            tws = [avail_t / n] * n if n else []
         ty = y + bp + title_h
+        acc = 0.0
         for i, key in enumerate(top_keys):
-            tx = x + bp + round(i * (tw + gap))
-            tx2 = x + bp + round((i + 1) * tw + i * gap)
+            tx = x + bp + round(acc + i * gap)
+            acc += tws[i]
+            tx2 = x + bp + round(acc + i * gap)
             buttons.append((key, texts[key][0], texts[key][1], QRect(tx, ty, tx2 - tx, bh_tile)))
         by = ty + bh_tile + gap
-        weights = [self.BAR_WEIGHTS[k] for k in self.BAR_BOTTOM]
-        avail = inner - (len(self.BAR_BOTTOM) - 1) * gap
-        widths = [avail * w / sum(weights) for w in weights]
-        if any(w < mins[k] for w, k in zip(widths, self.BAR_BOTTOM)):
-            extra = avail - sum(mins[k] for k in self.BAR_BOTTOM)
-            widths = [mins[k] + extra * w / sum(weights) for k, w in zip(self.BAR_BOTTOM, weights)]
-        bx = float(x + bp)
-        for key, w in zip(self.BAR_BOTTOM, widths):
-            left, right = round(bx), round(bx + w)
-            buttons.append((key, texts[key][0], texts[key][1], QRect(left, by, right - left, bh_btn)))
-            bx += w + gap
-        hint = QRect(x + bp, by + bh_btn + gap, inner, hint_h - 2)
+        if choice:
+            rects = self._choice_rects(lv, texts, x + bp, inner, by, bh_small, bh_big, gap)
+            for key in self.BAR_BOTTOM:
+                buttons.append((key, texts[key][0], texts[key][1], rects[key]))
+        else:
+            weights = [self.BAR_WEIGHTS[k] for k in self.BAR_BOTTOM]
+            avail = inner - (len(self.BAR_BOTTOM) - 1) * gap
+            widths = [avail * w / sum(weights) for w in weights]
+            if any(w < mins[k] for w, k in zip(widths, self.BAR_BOTTOM)):
+                extra = avail - sum(mins[k] for k in self.BAR_BOTTOM)
+                widths = [mins[k] + extra * w / sum(weights) for k, w in zip(self.BAR_BOTTOM, weights)]
+            bx = float(x + bp)
+            for key, w in zip(self.BAR_BOTTOM, widths):
+                left, right = round(bx), round(bx + w)
+                buttons.append((key, texts[key][0], texts[key][1], QRect(left, by, right - left, bh_btn)))
+                bx += w + gap
+        hint = QRect(x + bp, by + bh_rows + gap, inner, hint_h - 2)
         self.bar_hint_text = hint_text
         self.bar_hint_reserve = reserve
         self.lang_rect = self.gear_rect = self.win_rect = QRect()
+        self.dims_rect = self.hint_text_rect = QRect()
         if lang_w:
             ch = self.BAR_CHIP_H
             if hint_lines > 1:
@@ -1005,11 +1139,22 @@ class RegionSelector(TranslateMixin, QWidget):
                 cy = hint.top() + (fm_h.height() + 8 - ch) // 2   # по центру первой строки (бирюзовой)
             else:
                 cy = hint.top() + (hint.height() - ch) // 2
-            right = hint.right() - dims_w - (8 if self.translate_mode else 0)
-            self.gear_rect = QRect(right - gear_w, cy, gear_w, ch)
-            self.lang_rect = QRect(right - gear_w - 4 - lang_w, cy, lang_w, ch)
-            if win_w:
-                self.win_rect = QRect(self.lang_rect.left() - 4 - win_w, cy, win_w, ch)
+            if self.translate_mode:   # строка режима перевода: как в 1.33
+                right = hint.right() - dims_w - 8
+                self.gear_rect = QRect(right - gear_w, cy, gear_w, ch)
+                self.lang_rect = QRect(right - gear_w - 4 - lang_w, cy, lang_w, ch)
+                if win_w:
+                    self.win_rect = QRect(self.lang_rect.left() - 4 - win_w, cy, win_w, ch)
+            else:   # 21.11.2026: язык и шестерёнка в левом углу, «Окна ▾» справа под «Скопировать и закрыть»
+                self.lang_rect = QRect(hint.left(), cy, lang_w, ch)
+                self.gear_rect = QRect(self.lang_rect.right() + 5, cy, gear_w, ch)
+                right = hint.right() + 1
+                if win_w:
+                    self.win_rect = QRect(right - win_w, cy, win_w, ch)
+                    right = self.win_rect.left() - 4
+                self.dims_rect = QRect(right - dims_w, hint.top(), dims_w, hint.height()) if dims_w else QRect()
+                self.hint_text_rect = QRect(self.gear_rect.right() + 11, hint.top(),
+                                            max(0, (right - dims_w - 6) - (self.gear_rect.right() + 11)), hint.height())
         self.tr_ctl_rects = []
         if ctl_units:
             cur_x, cur_y = hint.left() + 8, hint.top() + hint_lines * fm_s.height() + 10
@@ -1026,7 +1171,7 @@ class RegionSelector(TranslateMixin, QWidget):
         self.bar_close_rect = QRect(bar.right() - size // 2 + 4, bar.top() - size // 2 + 3, size, size)
         return buttons, bar, hint
 
-    BAR_DISABLED_IN_TR = ("copy", "edit", "save", "ocr", "record", "full")   # в режиме перевода не работают
+    BAR_DISABLED_IN_TR = ("copy", "edit", "save", "ocr", "record", "full", "phone")   # в режиме перевода не работают
 
     @dynamic
     def BAR_TR_BLOCKED(self):
@@ -1191,27 +1336,35 @@ class RegionSelector(TranslateMixin, QWidget):
                 p.setPen(fg)
                 p.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
         hovered_text = None
+        choice = self._choice(lv)
         for key, text, short, rect in buttons:
             hover = key == self.hover_button
             blocked = self.translate_mode and key in self.BAR_DISABLED_IN_TR
             p.setOpacity(0.38 if blocked else 1.0)   # режим перевода: эти кнопки не работают, рисуются бледными
             if hover:
-                hovered_text = self.BAR_TR_BLOCKED if blocked else f"{text} ({short})"
+                hovered_text = self.BAR_TR_BLOCKED if blocked else (f"{text} · {short}" if key == "phone" else f"{text} ({short})")
+                if choice and not blocked and key in ("edit", "manual"):   # пояснение, убранное с кнопки, остаётся в подсказке
+                    hovered_text += " · " + self.BAR_SUB[key]
+            if choice and key in self.BAR_BOTTOM:
+                self._draw_choice_button(p, key, text, rect, hover, lv)
+                continue
             tile = key in self.BAR_TOP
             active = key == "translate" and self.translate_mode   # режим перевода включён: плитка подсвечена
+            narrow_icon = None   # узкий экран (одни значки): цвет значка нижней кнопки по варианту Б
             if key == "copy":
-                from .themes import GREEN, GREEN_BORDER, GREEN_GRADIENT, GREEN_GRADIENT_HOVER, GREEN_HOVER, GREEN_SHADOW, GREEN_SUB
-                fill = QColor(GREEN_HOVER) if hover else QColor(GREEN)   # 1.32: зелёный темнее, белый текст читается
-                if lv["text"]:   # зелёная: лёгкий градиент сверху вниз и тень
-                    p.setPen(Qt.PenStyle.NoPen)
-                    p.setBrush(QColor(*GREEN_SHADOW))
-                    p.drawRoundedRect(QRectF(rect).adjusted(1, 3, -1, 3), 9, 9)
-                    top, bottom = GREEN_GRADIENT_HOVER if hover else GREEN_GRADIENT
-                    grad = QLinearGradient(0, rect.top(), 0, rect.bottom())
-                    grad.setColorAt(0, QColor(top))
-                    grad.setColorAt(1, QColor(bottom))
-                    fill = QBrush(grad)
-                border, fg, sub = QColor(GREEN_BORDER), QColor("#ffffff"), QColor(*GREEN_SUB)
+                # вариант Б и в узком ряду: «Скопировать» светло-зелёная с зелёной рамкой 2 px, текст и значок зелёные
+                # (#0f5c30 на #eaf6ee 7,3:1, значок #157a40 4,9:1); единственная заливка панели у «Редактировать»
+                from .themes import GREEN
+                t = self.TONAL_GREEN
+                fill = QColor(t["fill_hover"] if hover else t["fill"])
+                border, fg, sub = QColor(GREEN), QColor(t["fg"]), QColor(t["sub"])
+                narrow_icon = GREEN
+            elif key == "edit" and not lv["text"]:
+                # вариант Б в узком ряду: «Редактировать» значком на зелёной заливке (главная, то же делает Enter)
+                from .themes import GREEN, GREEN_BORDER, GREEN_HOVER
+                fill = QColor(GREEN_HOVER) if hover else QColor(GREEN)
+                border, fg, sub = QColor(GREEN_BORDER), QColor("#ffffff"), QColor("#ffffff")
+                narrow_icon = "#ffffff"
             elif key == "manual":
                 fill = QColor("#d6e7fc") if hover else QColor("#e6f0fd")
                 from .themes import BLUE_SUB
@@ -1225,11 +1378,16 @@ class RegionSelector(TranslateMixin, QWidget):
                 border, fg, sub = QColor(ACCENT) if hover else QColor("#d9dde4"), QColor("#16181c"), QColor(TILE_SUB)   # 1.32: 5,2:1
                 if active:
                     fill, border = QColor("#d6f1ec"), QColor("#0b8f84")
+                if key == "phone":   # 1.34: редкая у других программ возможность, плитка заметнее: свой мягкий малиновый тон
+                    fill = QColor("#f9e1ee") if hover else QColor("#fdf0f6")
+                    border, fg, sub = QColor("#b4236e") if hover else QColor("#e2a6c6"), QColor("#6e1745"), QColor("#8a2a5c")
             p.setBrush(fill)
-            p.setPen(QPen(border, 2 if (active or key == "manual") else 1))
-            p.drawRoundedRect(QRectF(rect).adjusted(0.5, 0.5, -0.5, -0.5), 8, 8)
-            isize = lv["icon"]
-            ic = icons.icon(self.BAR_ICONS[key], self.BAR_SQUARE[key][1] if (lv["text"] and not tile) else self.BAR_ICON_COLORS[key])
+            p.setPen(QPen(border, 2 if (active or key in ("manual", "copy")) else 1))
+            inset = 1 if key == "copy" else 0.5   # рамка 2 px целиком внутри кнопки, чёткая, как в крупном ряду
+            p.drawRoundedRect(QRectF(rect).adjusted(inset, inset, -inset, -inset), 8, 8)
+            isize = lv["icon"] + (4 if key == "phone" else 0)
+            ic = icons.icon(self.BAR_ICONS[key], narrow_icon or (self.BAR_SQUARE[key][1] if (lv["text"] and not tile)
+                                                                   else self.BAR_ICON_COLORS[key]))
             if tile and not lv["text"]:
                 ic.paint(p, QRect(rect.center().x() - isize // 2, rect.center().y() - isize // 2, isize, isize))
                 continue
@@ -1321,16 +1479,136 @@ class RegionSelector(TranslateMixin, QWidget):
                 text = self._chip_tip(self.hover_button)
             elif hovered_text:
                 text = hovered_text   # название и клавиши кнопки под курсором
+            elif self.kept is not None and not self.full_mode and lv["text"] and not self.hint_text_rect.isEmpty():
+                if not self.dims_rect.isEmpty():
+                    phys = self.to_physical(self.kept)
+                    p.drawText(self.dims_rect, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+                               f"{phys.width()} × {phys.height()}")
             elif self.kept is not None and not self.full_mode and lv["text"]:
                 phys = self.to_physical(self.kept)
                 dims = f"{phys.width()} × {phys.height()}"
                 if fm_s.horizontalAdvance(text) + fm_s.horizontalAdvance(dims) + 24 + self.lang_rect.width() + self.gear_rect.width() \
                         + self.win_rect.width() + 4 <= hint.width():
                     p.drawText(hint, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, dims)
-            p.drawText(hint.adjusted(0, 0, -self.bar_hint_reserve, 0), flags, text)
+            if not self.hint_text_rect.isEmpty():   # язык и шестерёнка слева: текст между ними и «Окна ▾»
+                tr_ = self.hint_text_rect
+                if hovered_text or self.hover_button in ("cancel", "corner", "lang", "settings", "window"):
+                    tr_ = QRect(tr_.left(), tr_.top(), hint.right() - tr_.left() - (hint.right() - self.win_rect.left() + 6
+                                if not self.win_rect.isEmpty() and self.win_rect.top() >= hint.top() else 0), tr_.height())
+                p.drawText(tr_, flags, text)
+            else:
+                p.drawText(hint.adjusted(0, 0, -self.bar_hint_reserve, 0), flags, text)
         self._draw_lang_chip(p, small_font)
         self._draw_close(p)
+        self._draw_novoe(p, buttons)
         p.restore()
+
+    # «Скопировать и закрыть» в варианте Б: светло-зелёная с зелёной рамкой 2 px, текст тёмно-зелёный.
+    # Контраст: название #0f5c30 на #eaf6ee 7,3:1 (на #d9efe1 под курсором 6,7:1), пояснение #2f6b47 5,7:1 (5,2:1);
+    # зелёные рамка и квадрат значка #157a40 на этом фоне 4,9:1 (4,5:1).
+    TONAL_GREEN = {"fill": "#eaf6ee", "fill_hover": "#d9efe1", "fg": "#0f5c30", "sub": "#2f6b47"}
+
+    def _draw_choice_button(self, p: QPainter, key, text, rect, hover, lv):
+        """Нижние кнопки панели (см. _choice). Цвета: белый на зелёной «Редактировать» не ниже 5,4:1 (пояснение 4,9:1),
+        тёмно-зелёный на светло-зелёной «Скопировать и закрыть» не ниже 5,2:1."""
+        from . import icons
+        from .themes import GREEN, GREEN_BORDER, GREEN_GRADIENT, GREEN_GRADIENT_HOVER, GREEN_SHADOW, GREEN_SUB
+        big = key in ("edit", "copy")
+        r = QRectF(rect).adjusted(0.5, 0.5, -0.5, -0.5)
+        if key == "edit":   # главная и единственная заливка панели: зелёная
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(*GREEN_SHADOW))
+            p.drawRoundedRect(QRectF(rect).adjusted(1, 3, -1, 3), 9, 9)
+            top, bottom = GREEN_GRADIENT_HOVER if hover else GREEN_GRADIENT
+            grad = QLinearGradient(0, rect.top(), 0, rect.bottom())
+            grad.setColorAt(0, QColor(top))
+            grad.setColorAt(1, QColor(bottom))
+            p.setBrush(QBrush(grad))
+            p.setPen(QPen(QColor(GREEN_BORDER), 1))
+            p.drawRoundedRect(r, 8, 8)
+            fg, sub, sq_fill, ic_color = QColor("#ffffff"), QColor(*GREEN_SUB), QColor(255, 255, 255, 70), "#ffffff"
+        elif big:           # «Скопировать и закрыть»: светло-зелёная с зелёной рамкой, поуже
+            t = self.TONAL_GREEN
+            fill, border, fg, sub, sq_fill = QColor(t["fill_hover"] if hover else t["fill"]), QColor(GREEN), \
+                QColor(t["fg"]), QColor(t["sub"]), QColor(GREEN)
+            p.setBrush(fill)
+            p.setPen(QPen(border, 2))
+            p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 8, 8)
+            ic_color = "#ffffff"
+        else:   # мелкие «Сохранить» и «Другая область»: серые, как плитки
+            p.setBrush(QColor("#e4effb") if hover else QColor("#f5f6f8"))
+            p.setPen(QPen(QColor(ACCENT) if hover else QColor("#d9dde4"), 1))
+            p.drawRoundedRect(r, 7, 7)
+            ic = icons.icon(self.BAR_ICONS[key], self.BAR_ICON_COLORS[key])
+            label_font, _s = self._bar_fonts(lv)
+            fm = QFontMetrics(label_font)
+            ic.paint(p, QRect(rect.left() + 12, rect.center().y() - 8, 16, 16))
+            p.setFont(label_font)
+            p.setPen(QColor("#16181c"))
+            p.drawText(QRect(rect.left() + 12 + 16 + 7, rect.top(), rect.width() - 12 - 16 - 7 - 6, rect.height()),
+                       Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, fm.elidedText(text, Qt.TextElideMode.ElideRight, rect.width() - 12 - 16 - 7 - 6))
+            return
+        sq = lv["sq"] + 6
+        box = QRect(rect.left() + lv["pl"] + 2, rect.center().y() - sq // 2, sq, sq)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(sq_fill)
+        p.drawRoundedRect(QRectF(box), 9, 9)
+        isize = lv["icon"] + 4
+        icons.icon(self.BAR_ICONS[key], ic_color).paint(p, QRect(box.center().x() - isize // 2, box.center().y() - isize // 2, isize, isize))
+        tx = box.right() + 1 + lv["gp"]
+        bl_font, bs_font = self._bar_bfonts(lv)
+        fm_bl, fm_bs = QFontMetrics(bl_font), QFontMetrics(bs_font)
+        block = fm_bl.height() + fm_bs.height()
+        ty = rect.top() + (rect.height() - block) // 2
+        p.setFont(bl_font)
+        p.setPen(fg)
+        p.drawText(QRect(tx, ty, rect.right() - tx, fm_bl.height()), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, text)
+        p.setFont(bs_font)
+        p.setPen(sub)
+        p.drawText(QRect(tx, ty + fm_bl.height(), rect.right() - tx, fm_bs.height()), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                   self._choice_sub(key))
+
+    # --- метка «Новое» на плитках и кнопках, новых в этой версии (1.34, novoe.py) -----------------------
+
+    def _novoe_targets(self) -> dict:
+        """{ключ кнопки: id новинки} для этого окна; считается один раз на окно."""
+        if self._novoe is None:
+            from . import novoe
+            cfg = self.tr_cfg if isinstance(getattr(self, "tr_cfg", None), dict) else None
+            self._novoe = novoe.badges(cfg, "selector") if cfg is not None else {}
+        return self._novoe
+
+    def _draw_novoe(self, p: QPainter, buttons):
+        targets = self._novoe_targets()
+        if not targets or self.tour is not None or self.translate_mode:
+            return
+        from . import novoe
+        rects = {key: rect for key, _t, _s, rect in buttons}
+        if not self.win_rect.isEmpty():
+            rects["window"] = self.win_rect
+        fm = QFontMetrics(novoe.badge_font())
+        for key, ident in targets.items():
+            rect = rects.get(key)
+            if rect is None or rect.isEmpty():
+                continue
+            kind, r = novoe.badge_rect(rect, fm, self.rect())
+            novoe.paint_badge(p, kind, r)
+            if ident not in self._novoe_counted:   # показ считается один раз на окно выделения
+                self._novoe_counted.add(ident)
+                novoe.note_shown(self.tr_cfg, ident)
+                save = getattr(self, "tr_save", None)
+                if callable(save):
+                    # запись настроек на диск не из отрисовки (М4 проверки 1.34.0): сразу после неё
+                    QTimer.singleShot(0, save)
+
+    def _novoe_used(self, key):
+        """Нажата кнопка с меткой «Новое»: метка исчезает навсегда."""
+        ident = self._novoe_targets().pop(key, None)
+        if ident is None:
+            return
+        from . import novoe
+        if novoe.mark_used(self.tr_cfg, ident) and callable(getattr(self, "tr_save", None)):
+            self.tr_save()
 
     def _draw_lang_chip(self, p: QPainter, font):
         """Чип языка: глобус, название языка на нём самом и «▾»; места мало: один глобус."""
@@ -1363,7 +1641,7 @@ class RegionSelector(TranslateMixin, QWidget):
     @staticmethod
     def _chip_tip(key):
         if key == "window":
-            return f"{tr('selector.btn_window')} (W)"
+            return f"{tr('selector.win_chip')} (W) · {tr('selector.btn_window')}"   # 21.11.2026: «Открытые окна (W) · Снимок окна»
         return language.menu_title() if key == "lang" else tr("app.menu_settings").rstrip("…")
 
     def _draw_win_chip(self, p: QPainter, font):
@@ -1491,10 +1769,16 @@ class RegionSelector(TranslateMixin, QWidget):
         from PyQt6.QtWidgets import QMenu
         from . import icons
         from .menus import style_menu
-        from .windows import EXT_MISSING, EXT_OLD, EXT_SLOW
+        from .windows import EXT_MISSING, EXT_OLD, EXT_SLOW, display_app, menu_app_name
+        TITLE_MAX, TITLE_MIN = 72, 40   # заголовок с именем программы не длиннее 72 знаков; заголовок не короче 40
+        TEXT_PX = 480                   # и не шире 480 точек: меню вместе со значком и «Экран 2» около 700
+        from .menus import FONT_PX
         menu = QMenu(self)
         cfg = self.tr_cfg if isinstance(getattr(self, "tr_cfg", None), dict) else {}
         style_menu(menu, cfg)
+        title_font = QFont(menu.font())
+        title_font.setPixelSize(FONT_PX)   # как ClipMenuStyle._font: тем же шрифтом считается и рисуется
+        title_fm = QFontMetrics(title_font)
         menu.setObjectName("clipsdWindowList")
         if self.windows_ext in (EXT_OLD, EXT_MISSING):
             if self.window_ext_relogin:
@@ -1525,11 +1809,23 @@ class RegionSelector(TranslateMixin, QWidget):
                 menu.addSeparator()
             for w in group:
                 title = " ".join((w.title or tr("selector.win_untitled")).split())
-                if len(title) > 64:
-                    title = title[:63].rstrip() + "…"
+                # имя программы после заголовка приглушённо («Отчёт.docx · Microsoft Word»), если в заголовке его нет
+                app_name = menu_app_name(title, display_app(w))
+                tail = f" · {app_name}" if app_name else ""
+                limit = max(TITLE_MIN, TITLE_MAX - len(tail))
+                if len(title) > limit:
+                    title = title[:limit - 1].rstrip() + "…"
+                # 1.34.1: и по ширине в точках тем шрифтом, которым рисует меню (широкий шрифт или буквы «Ш» и «W»
+                # давали меню в пол-экрана при тех же 72 знаках): строка с именем программы не шире TEXT_PX
+                room = max(title_fm.horizontalAdvance("x") * 24, TEXT_PX - title_fm.horizontalAdvance(tail))
+                if title_fm.horizontalAdvance(title) > room:
+                    title = title_fm.elidedText(title.rstrip("…"), Qt.TextElideMode.ElideRight, room)
                 right = tr("selector.win_minimized") if w.minimized else (
                     tr("selector.win_monitor", n=w.monitor + 1) if many else "")
-                act = menu.addAction(QIcon(self._app_badge(w)), title.replace("&", "&&") + (f"\t{right}" if right else ""))
+                act = menu.addAction(QIcon(self._app_badge(w)),
+                                     (title + tail).replace("&", "&&") + (f"\t{right}" if right else ""))
+                if tail:
+                    act.setProperty("clipsd_tail", tail)   # menus.ClipMenuStyle рисует его приглушённым цветом
                 act.setData(w.id)
                 act.hovered.connect(lambda w=w: self._preview(w))
                 act.triggered.connect(lambda _c=False, w=w: self.pick_window(w))
@@ -1549,14 +1845,14 @@ class RegionSelector(TranslateMixin, QWidget):
 
     @staticmethod
     def _app_badge(win):
-        """Значок программы: значок темы (GNOME) или первая буква на сером квадрате (цвета чипа панели)."""
-        import os
-        from PyQt6.QtGui import QIcon
+        """Значок программы: значок темы (GNOME, X11 по файлу .desktop), значок из exe (Windows) или первая буква
+        имени программы на сером квадрате (цвета чипа панели)."""
         size = 40
-        if win.icon and win.source == "gnome-ext":   # имя значка темы или путь к файлу значка
-            themed = QIcon(win.icon) if os.path.isabs(win.icon) else QIcon.fromTheme(win.icon)
-            if not themed.isNull():
-                return themed.pixmap(size, size)
+        icon = _program_icon(win)
+        if icon is not None and not icon.isNull():
+            pm = icon.pixmap(size, size)
+            if not pm.isNull():
+                return pm
         pm = QPixmap(size, size)
         pm.fill(Qt.GlobalColor.transparent)
         p = QPainter(pm)
@@ -1569,7 +1865,8 @@ class RegionSelector(TranslateMixin, QWidget):
         f.setBold(True)
         p.setFont(f)
         p.setPen(QColor("#3c4350"))
-        letter = (win.app or win.title or "?").strip()[:1].upper()
+        from .windows import display_app
+        letter = (display_app(win) or win.title or "?").strip()[:1].upper()
         p.drawText(QRect(0, 0, size, size), Qt.AlignmentFlag.AlignCenter, letter)
         p.end()
         return pm
@@ -1598,6 +1895,7 @@ class RegionSelector(TranslateMixin, QWidget):
         С клавиатуры сразу выделена первая строка (верхнее окно), стрелки и Enter, Esc закрывает только список."""
         if self.windows_state is None or self.pending is not None or self.tour is not None or self._done:
             return
+        self._novoe_used("window")   # клавиша W тоже считается нажатием на «Окна ▾»
         if self.win_menu is not None:
             return
         if self.windows_state == "loading":
@@ -1937,6 +2235,7 @@ class RegionSelector(TranslateMixin, QWidget):
         return area.intersected(self.rect())
 
     def _do(self, action):
+        self._novoe_used(action)
         if action == "cancel":
             self._finish(None)
             return
@@ -1949,6 +2248,12 @@ class RegionSelector(TranslateMixin, QWidget):
             return
         if action == "manual":
             self.clear_kept()
+            return
+        if action == "save":
+            self.save_here()
+            return
+        if action == "phone":
+            self.open_phone()
             return
         if action == "full":
             self.show_full_screen()
@@ -2219,6 +2524,8 @@ class RegionSelector(TranslateMixin, QWidget):
         elif event.modifiers() & Qt.KeyboardModifier.ControlModifier and self.kept is not None \
                 and self.start is None and self.pending is None \
                 and event.key() in (Qt.Key.Key_C, Qt.Key.Key_S, Qt.Key.Key_R, Qt.Key.Key_T):
+            if event.isAutoRepeat():
+                return   # 1.34.1 (В1 проверки 1.34.0): удержанное Ctrl+S давало серию одинаковых файлов
             action = {Qt.Key.Key_C: "copy", Qt.Key.Key_S: "save", Qt.Key.Key_R: "record", Qt.Key.Key_T: "ocr"}[event.key()]
             if action != "ocr" or getattr(self, "ocr_enabled", True):   # распознавание выключено: Ctrl+T ничего не делает
                 self._do(action)
@@ -2229,6 +2536,90 @@ class RegionSelector(TranslateMixin, QWidget):
         elif event.modifiers() & Qt.KeyboardModifier.ControlModifier and event.key() == Qt.Key.Key_A \
                 and self.start is None and self.pending is None:
             self.show_full_screen()
+
+    def save_here(self):
+        """«Сохранить» и Ctrl+S (решение владельца 21.11.2026): снимок рамки в файл, окно выделения остаётся открытым,
+        дальше можно скопировать, редактировать или выбрать другую область. Окно выбора файла (настройка save_ask)
+        открывается, пока окно выделения спрятано: иначе оно легло бы под полноэкранное окно поверх всех; после выбора
+        окно выделения возвращается с тем же снимком и рамкой. Итог плашкой в строке подсказки: «Сохранено: имя файла».
+        Без программы (lang_ctx без save_from_selector, тесты, старые вызовы): как до 1.34, сохранение с закрытием."""
+        if self._done or self.kept is None:
+            return
+        hook = getattr(self.lang_ctx, "save_from_selector", None)
+        if hook is None:
+            self.action = "save"
+            self._finish(self.kept)
+            return
+        if self.desktop is None or self._lift is not None:   # снимок или содержимое окна ещё не пришли
+            from . import ocr
+            ocr.toast(self, tr("selector.preparing"), mark=False)
+            return
+        sel = QRect(self.kept)
+        pixmap = self._crop(sel)
+        self.hover_button = None
+        from . import ocr
+        # 1.34.1 (В1 проверки 1.34.0): окно после «Сохранить» остаётся, и люди по привычке нажимают ещё раз
+        # (двойной щелчок, второе Ctrl+S). Тот же неизменный снимок той же рамки второй файл не создаёт.
+        key = self._save_key(sel, pixmap)
+        last = getattr(self, "_last_saved", None)
+        if last is not None and last[0] == key and os.path.exists(last[1]):
+            ocr.toast(self, tr("selector.saved_already", name=os.path.basename(last[1])), ms=2600)
+            self.update()
+            return
+        result = hook(self, pixmap, sel.translated(self.origin))
+        if self._done:
+            return
+        if result:
+            self._last_saved = (key, result)
+            ocr.toast(self, tr("selector.saved", name=os.path.basename(result)), ms=2600)
+        elif result is False:
+            ocr.toast(self, tr("selector.save_failed"), mark=False, ms=2600)
+        self.update()
+
+    @staticmethod
+    def _save_key(rect, pixmap):
+        """Чем снимок для «Сохранить» отличается от прошлого: рамка и сами точки (окно, плёнка, содержимое)."""
+        import hashlib
+        img = pixmap.toImage()
+        digest = hashlib.blake2b(digest_size=16)
+        if not img.isNull():
+            ptr = img.constBits()
+            ptr.setsize(img.sizeInBytes())
+            digest.update(bytes(ptr))
+        return (rect.x(), rect.y(), rect.width(), rect.height(), img.width(), img.height(), digest.hexdigest())
+
+    def open_phone(self):
+        """Плитка «С телефона»: окно выделения закрывается без снимка, открывается то же окно приёма, что у пункта
+        «Скриншот/фото с телефона» в меню значка (phone_ui.open_phone). Фото приходит в редактор; если выделение было
+        открыто из редактора («Новый снимок» поверх него), фото вставляется в этот редактор."""
+        ctx = self.lang_ctx
+        target = getattr(ctx, "insert_target", None)
+        self._finish(None)
+        if ctx is not None and hasattr(ctx, "open_phone"):
+            QTimer.singleShot(0, lambda: ctx.open_phone(target))
+
+    def suspend_for_dialog(self):
+        """Спрятать окно выделения на время окна выбора файла (save_here); снимок, рамка и панель сохраняются."""
+        self.releaseKeyboard()
+        self.hide()
+
+    def resume_after_dialog(self):
+        if self._done:
+            return
+        self.start_selection()
+
+    def toast_anchor(self):
+        """Плашка итога («Сохранено: …») внизу по центру рамки, как «Скопировано» в окошках (навык оформления, плашка
+        итога); панель и её подсказка остаются видны."""
+        return QRect(self.kept) if self.kept is not None else QRect()
+
+    def _crop(self, sel):
+        """Снимок рамки sel (в координатах окна) с масштабом экрана, как его получают редактор и буфер обмена."""
+        pixmap = self.desktop.copy(self.to_physical(sel))
+        # Масштаб экрана сохраняем: редактор покажет снимок ровно в размер выделенной области.
+        pixmap.setDevicePixelRatio(self.ratio)
+        # Мониторы с разным масштабом: снимок в масштабе того монитора, где область (плотность PNG по нему)
+        return native_region(pixmap, sel.translated(self.origin))
 
     def _finish(self, sel):
         if self._done:
@@ -2262,10 +2653,6 @@ class RegionSelector(TranslateMixin, QWidget):
         if sel is None:
             self.finished.emit(None, QRect())
         else:
-            pixmap = self.desktop.copy(self.to_physical(sel))
-            # Масштаб экрана сохраняем: редактор покажет снимок ровно в размер выделенной области.
-            pixmap.setDevicePixelRatio(self.ratio)
-            # Мониторы с разным масштабом: снимок в масштабе того монитора, где область (плотность PNG по нему)
-            pixmap = native_region(pixmap, sel.translated(self.origin))
+            pixmap = self._crop(sel)
             self.finished.emit(pixmap, sel.translated(self.origin))
         self.close()

@@ -52,6 +52,8 @@
   "settings.nav_text": "Texto y traducción",
   "settings.nav_updates": "Actualizaciones",
   "settings.next_shot": "Se aplica a la próxima captura",
+  "settings.novoe_enabled": "Mostrar las novedades tras una actualización",
+  "settings.novoe_enabled_tip": "Tras una actualización: una breve ventana con las novedades y la marca «Nuevo» en los botones nuevos hasta que los pulse.",
   "settings.ocr_accurate": "Más preciso: la imagen se amplía antes de leerla (más lento)",
   "settings.ocr_auto": "Idioma del programa e inglés ({langs})",
   "settings.ocr_en": "Solo inglés",

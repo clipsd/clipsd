@@ -46,9 +46,12 @@ if os.environ.get("OKNO_DBUS_INNER") != "1":
     env = {k: v for k, v in os.environ.items() if k not in ("DISPLAY", "WAYLAND_DISPLAY", "DBUS_SESSION_BUS_ADDRESS")}
     env.update(OKNO_DBUS_INNER="1", OKNO_WORK=work, XDG_CURRENT_DESKTOP="ubuntu:GNOME", XDG_SESSION_TYPE="wayland")
     # своя домашняя папка: иначе состояние дополнения («нет» или «старое») зависит от дополнений настоящего пользователя
-    for key, sub in (("HOME", "home"), ("XDG_DATA_HOME", "data"), ("XDG_CONFIG_HOME", "config"), ("XDG_CACHE_HOME", "cache")):
+    # и свой XDG_RUNTIME_DIR: временные снимки окон и проверка «PNG не остался» не смешиваются с файлами ClipSD человека
+    for key, sub in (("HOME", "home"), ("XDG_DATA_HOME", "data"), ("XDG_CONFIG_HOME", "config"), ("XDG_CACHE_HOME", "cache"),
+                     ("XDG_RUNTIME_DIR", "run")):
         os.makedirs(os.path.join(work, sub), exist_ok=True)
         env[key] = os.path.join(work, sub)
+    os.chmod(env["XDG_RUNTIME_DIR"], 0o700)
     rc = subprocess.run(["dbus-run-session", f"--config-file={conf}", "--", sys.executable, os.path.abspath(__file__)],
                         env=env, timeout=300).returncode
     sys.exit(rc)

@@ -2,6 +2,8 @@
   "phone.allow_again": "Erneut erlauben",
   "phone.allow_done": "Fertig. Öffnen Sie den Code auf dem Smartphone erneut.",
   "phone.allow_failed": "Die Windows-Regel wurde nicht geändert: {error}",
+  "phone.allow_working": "Warten auf die Berechtigungsabfrage von Windows…",
+  "phone.allow_declined": "Berechtigung nicht erteilt. Klicken Sie auf „Erneut erlauben“ und antworten Sie mit „Ja“.",
   "phone.android17": "Android 17: Erlauben Sie dem Browser den Zugriff auf das lokale Netzwerk. Einstellungen → Apps → Ihr Browser → Berechtigungen → Geräte in der Nähe → Zulassen.",
   "phone.bind_failed": "Der Empfang konnte auf diesem Computer nicht geöffnet werden. Details: {error}",
   "phone.cancel": "Abbrechen",
@@ -104,7 +106,11 @@
   "phone.page_too_big": "Das Foto ist zu groß. Nehmen Sie es neu auf.",
   "phone.page_unsent": "Das Foto ist nicht am Computer angekommen. Wenn Ihr Browser es erlaubt, halten Sie das Bild gedrückt, um es in der Galerie zu speichern.",
   "phone.page_used": "Dieser Code ist schon auf einem anderen Smartphone geöffnet. Zeigen Sie am Computer einen neuen Code.",
+  "phone.page_zoom_close": "Schließen",
+  "phone.page_zoom_hint": "Zum Vergrößern antippen",
   "phone.phone_done": "Der Empfang wurde am Telefon beendet. Für weitere Fotos zeigen Sie einen neuen Code an.",
+  "phone.photo_apart": "Der Screenshot wurde gerade geschlossen, deshalb wurde das Foto vom Smartphone als eigener Screenshot geöffnet.",
+  "phone.photo_apart_saved": "Der Screenshot wurde gerade geschlossen, deshalb wurde das Foto vom Smartphone als eigener Screenshot geöffnet. Datei: {path}",
   "phone.photo_late": "Das Foto vom Smartphone wurde empfangen und im Editor geöffnet.",
   "phone.received_open": "Foto empfangen: {size}. Wird geöffnet …",
   "phone.received_size": "Fotos empfangen: {count} ({size})",
@@ -132,5 +138,8 @@
   "phone.vpn_hint": "Ein VPN auf dem Smartphone kann die Verbindung stören.",
   "phone.wifi_hide": "Nicht mehr anzeigen",
   "phone.wifi_ok": "Verstanden, Code zeigen",
-  "phone.wifi_text": "Smartphone und Computer müssen mit demselben WLAN verbunden sein. Über mobile Daten kommt das Foto nicht an."
+  "phone.wifi_text": "Smartphone und Computer müssen mit demselben WLAN verbunden sein. Über mobile Daten kommt das Foto nicht an.",
+  "phone.tile_title": "Vom Smartphone",
+  "phone.tile_sub": "Kamera oder Bild",
+  "phone.tile_tip": "Mit der Kamera aufnehmen oder ein Bild vom Smartphone senden"
 }

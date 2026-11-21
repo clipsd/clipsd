@@ -1,0 +1,19 @@
+{
+  "forma.circle": "圆形",
+  "forma.circle_move": "可用鼠标移动圆形：拖动圆形周围的区域",
+  "forma.hint_circle": "可以移动圆形",
+  "forma.hint_circle_sub": "用鼠标拖动圆形周围的区域",
+  "forma.jpg_note": "JPG 不支持透明：形状外的背景将为白色",
+  "forma.jpg_note_color": "JPG 不支持透明：形状外的背景将为 {color}",
+  "forma.oval": "椭圆",
+  "forma.radius": "半径",
+  "forma.radius_tip": "圆角半径，以截图像素计，从 0 到较短边的一半。\n也可以拖动截图左上角的控制点",
+  "forma.rect": "矩形",
+  "forma.round_custom": "圆角：半径 {r} px",
+  "forma.round_l": "圆角：大",
+  "forma.round_m": "圆角：中",
+  "forma.round_s": "圆角：小",
+  "forma.tip_off": "截图形状：圆角、椭圆、圆形\n单击启用“{name}”，旁边的箭头打开全部形状",
+  "forma.tip_on": "截图形状 · {name}\n单击恢复为矩形，旁边的箭头打开全部形状",
+  "forma.title": "截图形状"
+}

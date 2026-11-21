@@ -2,6 +2,8 @@
   "phone.allow_again": "重新允许",
   "phone.allow_done": "完成。请在手机上再次打开二维码。",
   "phone.allow_failed": "Windows 规则未更改：{error}",
+  "phone.allow_working": "正在等待 Windows 请求权限…",
+  "phone.allow_declined": "未获得权限。请点击“重新允许”并选择“是”。",
   "phone.android17": "Android 17：请允许浏览器访问本地网络。设置 → 应用 → 您的浏览器 → 权限 → 附近设备 → 允许。",
   "phone.bind_failed": "无法在这台电脑上开启接收。详情：{error}",
   "phone.cancel": "取消",
@@ -104,7 +106,11 @@
   "phone.page_too_big": "照片太大。请重新拍摄。",
   "phone.page_unsent": "照片没有传到电脑。如果浏览器支持，长按图片可将其保存到手机相册。",
   "phone.page_used": "此二维码已在另一部手机上打开。请在电脑上显示新的二维码。",
+  "phone.page_zoom_close": "关闭",
+  "phone.page_zoom_hint": "轻触放大查看",
   "phone.phone_done": "接收已在手机上关闭。要继续拍照，请显示新的二维码。",
+  "phone.photo_apart": "截图正在关闭，因此手机上的照片已单独打开。",
+  "phone.photo_apart_saved": "截图正在关闭，因此手机上的照片已单独打开。文件：{path}",
   "phone.photo_late": "手机上的照片已收到，并已在编辑器中打开。",
   "phone.received_open": "已收到照片：{size}。正在打开…",
   "phone.received_size": "已收到照片：{count} 张（{size}）",
@@ -132,5 +138,8 @@
   "phone.vpn_hint": "手机上的 VPN 可能会妨碍连接。",
   "phone.wifi_hide": "不再显示",
   "phone.wifi_ok": "知道了，显示二维码",
-  "phone.wifi_text": "手机和电脑必须连接同一个 Wi-Fi 网络。使用移动数据时照片无法送达。"
+  "phone.wifi_text": "手机和电脑必须连接同一个 Wi-Fi 网络。使用移动数据时照片无法送达。",
+  "phone.tile_title": "从手机",
+  "phone.tile_sub": "拍照或图片",
+  "phone.tile_tip": "用相机拍摄，或从手机发送图片"
 }

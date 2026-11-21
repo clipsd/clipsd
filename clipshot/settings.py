@@ -664,6 +664,9 @@ class SettingsDialog(QDialog):
         grid.addWidget(self.check_updates, 0, 2, Qt.AlignmentFlag.AlignRight)
         self.update_check = self._check(grid, 1, tr("settings.update_check"), bool(config.get("update_check", True)))
         self.update_check.setToolTip(tr("settings.update_check_tip"))
+        # 1.34: окно «Новое в версии» и метки «Новое» после обновления (novoe.py)
+        self.novoe_enabled = self._check(grid, 2, tr("settings.novoe_enabled"), bool(config.get("novoe_enabled", True)))
+        self.novoe_enabled.setToolTip(tr("settings.novoe_enabled_tip"))
 
         # Горячие клавиши
         grid = self._card(pg["general"], tr("settings.sec_hotkeys"), "hotkeys")
@@ -950,7 +953,7 @@ class SettingsDialog(QDialog):
                 ("updates", "settings.nav_updates", "update"), ("about", "settings.nav_about", "info"))
     # английские слова для поиска: находят раздел и карточку и на русском интерфейсе
     SYNONYMS = {
-        "language": "language lang locale", "updates": "update upgrade version check release",
+        "language": "language lang locale", "updates": "update upgrade version check release new whats news features highlight",
         "hotkeys": "hotkey shortcut keyboard key combination alt ctrl shift win", "tray": "tray icon click notification area",
         "start": "startup autostart launch login boot", "select": "selection area zoom magnifier size remember region capture",
         "save": "save folder directory format png jpg jpeg file autosave size scale scaling resolution dpi hidpi clipboard", "theme": "theme style appearance color dark light frame border editor",
@@ -1240,6 +1243,7 @@ class SettingsDialog(QDialog):
             "clip_html": self.clip_html.isChecked(),
             "autostart": self.autostart.isChecked(),
             "update_check": self.update_check.isChecked(),
+            "novoe_enabled": self.novoe_enabled.isChecked(),
             "ui_accent": self.colors["ui_accent"].property("color"),
             "ui_panel": self.colors["ui_panel"].property("color"),
             "ui_field": self.colors["ui_field"].property("color"),

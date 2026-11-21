@@ -5,7 +5,7 @@
   "selector.btn_full_shot": "Знімок усього екрана",
   "selector.btn_ocr": "Копіювати текст",
   "selector.btn_record": "Запис відео",
-  "selector.btn_retake": "Виділити заново",
+  "selector.btn_retake": "Інша область",
   "selector.btn_save": "Зберегти",
   "selector.btn_translate": "Перекласти виділене",
   "selector.btn_translate_all": "Перекласти весь екран",
@@ -50,7 +50,7 @@
   "selector.trc_translation": "Переклад",
   "selector.trc_all": "Весь екран",
   "selector.btn_window": "Знімок вікна",
-  "selector.win_chip": "Вікна",
+  "selector.win_chip": "Відкриті вікна",
   "selector.win_minimized": "згорнуто",
   "selector.win_monitor": "Екран {n}",
   "selector.win_untitled": "Без назви",
@@ -67,5 +67,9 @@
   "selector.win_offscreen": "Це вікно зараз поза екраном",
   "selector.win_slow": "GNOME відповідає повільно: поки видно не всі вікна",
   "selector.win_failed": "Список вікон не отримано: виділіть вікно мишею",
-  "selector.win_visible_only": "Вікно закрите іншими: тут зніметься лише видима частина"
+  "selector.win_visible_only": "Вікно закрите іншими: тут зніметься лише видима частина",
+  "selector.sub_edit_tools": "стрілки, текст, розмиття",
+  "selector.saved": "Збережено: {name}",
+  "selector.saved_already": "Уже збережено: {name}",
+  "selector.save_failed": "Не вдалося зберегти знімок"
 }

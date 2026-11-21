@@ -398,13 +398,12 @@ def test_network_rules():
           and phone.linux_firewall_command("", "x") == "", "firewalld и «нет сетевого экрана»")
     cmds = phone.windows_firewall_commands(r"C:\Users\A B\AppData\Local\Programs\ClipSD\app\ClipSD-app.exe")
     add = cmds[1]
-    check(cmds[0][:5] == ["netsh", "advfirewall", "firewall", "delete", "rule"]
+    check(os.path.basename(cmds[0][0]).lower() in ("netsh", "netsh.exe")   # на Windows полный путь из System32
+          and cmds[0][1:5] == ["advfirewall", "firewall", "delete", "rule"]
           and "profile=private" in add and "remoteip=localsubnet" in add and "localport=8765-8767" in add
           and any(a.endswith("ClipSD-app.exe") and a.startswith("program=C:\\Users\\A B") for a in add),
           "Windows: удалить запрет, разрешить только частные сети, свою подсеть и свои порты")
-    ran = []
-    rc = phone.apply_windows_firewall("C:\\x.exe", run=lambda argv: ran.append(argv) or 0)
-    check(rc == 0 and len(ran) == 2, "«Разрешить заново»: две команды netsh")
+    check(not hasattr(phone, "apply_windows_firewall"), "прежней команды ClipSD с правами администратора нет")
 
 
 def test_new_name():
@@ -1279,6 +1278,110 @@ def test_trouble_allow():
 
 
 # --- проба на Samsung 21.11.2026: «Отправить на компьютер», статус получения, размер под экран, ключ, Android 17 -----
+
+def test_allow_again_windows():
+    """Б4 проверки 1.34.1: «Разрешить заново» на Windows. С правами администратора идёт только PowerShell Windows по полному
+    пути из системной папки, команда целиком в -EncodedCommand, netsh тоже по полному пути, путь программы проверен
+    и в кавычках PowerShell; ClipSD сама не повышается, итог кодом выхода, ожидание в фоне, файлов нет."""
+    import base64
+    import tempfile
+    from clipshot import sysenv
+    i18n.set_language("ru")
+    fake_sys = os.path.join(os.path.abspath(os.sep), "Windows", "System32")
+    exe = sys.executable
+    params = phone.firewall_parameters(exe, netsh=os.path.join(fake_sys, "netsh.exe"))
+    parts = params.split()
+    check(parts[:-1] == ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand"],
+          "администратору только -EncodedCommand, без -File и -Command")
+    script = base64.b64decode(parts[-1]).decode("utf-16-le")
+    netsh_q = "'" + os.path.join(fake_sys, "netsh.exe") + "'"
+    check(script.count("& " + netsh_q + " 'advfirewall' 'firewall'") == 2 and "exit $LASTEXITCODE" in script,
+          "две команды netsh по полному пути, итог кодом выхода")
+    check(f"'program={exe}'" in script and "'profile=private'" in script and "'remoteip=localsubnet'" in script
+          and "'localport=8765-8767'" in script, "правило: эта программа, частные сети, своя подсеть, свои порты")
+    check(not any(w in script for w in ("Out-File", "Set-Content", "WriteAllText", "Get-Content", "$env:", "TEMP")),
+          "команда администратора не читает и не пишет файлы и не берёт данных из окружения")
+    # путь программы проверяется: существует, абсолютный, это сама ClipSD
+    folder = tempfile.mkdtemp(prefix="clipsd-fwtest-")
+    odd = os.path.join(folder, "O'Brien $(calc) `x` ; & B", "ClipSD-app.exe")
+    os.makedirs(os.path.dirname(odd))
+    open(odd, "wb").close()
+    script = phone.windows_firewall_script(phone.firewall_program(odd, executable=odd), netsh="netsh")
+    check("'program=" + odd.replace("'", "''") + "'" in script,
+          "апостроф удвоен, $( ), обратные кавычки, ; и & внутри одинарных кавычек PowerShell (не выполняются)")
+    for bad, why in ((odd, "не эта программа"), ("ClipSD-app.exe", "не абсолютный путь"),
+                     (os.path.join(folder, "нет.exe"), "файла нет")):
+        try:
+            phone.firewall_parameters(bad)
+            check(False, f"путь отклонён: {why}")
+        except ValueError:
+            pass
+    for bad in ("a\nb", "a\u2019b", "a\u2018b", "a\x00b"):
+        try:
+            sysenv.ps_quote(bad)
+            check(False, f"ps_quote отклоняет {bad!r}")
+        except ValueError:
+            pass
+    check(sysenv.ps_quote("A'B") == "'A''B'", "ps_quote: апостроф удвоен")
+    import shutil
+    shutil.rmtree(folder, ignore_errors=True)
+    # окно причин: кнопка, ожидание в фоне, итог
+    ctx = Ctx()
+    win = fw_window(ctx, firewall="")
+    calls = []
+    real_wait, real_sysdir, real_platform = sysenv.run_elevated_wait, sysenv._system_dir, sys.platform
+
+    def fake_wait(program, parameters, timeout_ms, api=None):
+        import time
+        calls.append((program, parameters, timeout_ms))
+        time.sleep(0.2)
+        return outcome[0]
+
+    outcome = [(0, "", False)]
+    before = set(os.listdir(tempfile.gettempdir()))
+    sysenv.run_elevated_wait, sysenv._system_dir, sys.platform = fake_wait, (lambda: fake_sys), "win32"
+    try:
+        def press(result):
+            outcome[0] = result
+            d = phone_ui.TroubleDialog(win, platform="win32")
+            d.allow_btn.click()
+            busy = not d.allow_btn.isEnabled() and d.status.text() == "Ждём ответа Windows на запрос разрешения…"
+            check(wait_for(lambda: not phone_ui._firewall_jobs and d.allow_btn.isEnabled(), 10), "ожидание закончилось")
+            settle()
+            return d, busy
+
+        d, busy = press((0, "", False))
+        check(busy, "кнопка: сразу «Ждём ответа Windows», кнопка выключена, окно живёт")
+        program, parameters, _ = calls[-1]
+        check(program == os.path.join(fake_sys, "WindowsPowerShell", "v1.0", "powershell.exe") and os.path.isabs(program),
+              "с правами администратора: PowerShell по полному пути из системной папки, не ClipSD")
+        check(parameters == phone.firewall_parameters(), "команда собрана в обычном процессе для этой ClipSD")
+        check(d.status.text() == "Готово. Откройте код на телефоне ещё раз.", "код 0: «Готово»")
+        d.close()
+        d, _ = press((None, "ShellExecuteEx 1223", True))
+        check(d.status.text() == "Разрешение не дано. Нажмите «Разрешить заново» и ответьте «Да».", "отказ UAC: понятный текст")
+        d.close()
+        d, _ = press((1, "", False))
+        check(d.status.text() == "Правило Windows не изменено: exit 1", "сбой netsh: код выхода в тексте")
+        d.close()
+        outcome[0] = (0, "", False)
+        d = phone_ui.TroubleDialog(win, platform="win32")
+        d.allow_btn.click()
+        from PyQt6 import sip
+        sip.delete(d)   # окно удалено посреди ожидания
+        check(wait_for(lambda: not phone_ui._firewall_jobs, 10), "окно удалили посреди ожидания: без падения, задание убрано")
+    finally:
+        sysenv.run_elevated_wait, sysenv._system_dir, sys.platform = real_wait, real_sysdir, real_platform
+    after = set(os.listdir(tempfile.gettempdir()))
+    check(not [n for n in after - before if n.startswith("clipsd")], f"файлов во временной папке нет ({sorted(after - before)})")
+    check(not hasattr(sysenv, "run_elevated_self"), "повышения самой ClipSD больше нет (run_elevated_self убран)")
+    import subprocess
+    cli = subprocess.run([sys.executable, "-m", "clipshot", "--allow-phone-firewall"], capture_output=True, timeout=60,
+                         env=dict(os.environ, PYTHONPATH=str(ROOT)))
+    check(cli.returncode == 2 and b"allow-phone-firewall" in cli.stderr, f"clipsd --allow-phone-firewall больше нет (код {cli.returncode})")
+    win.close()
+    settle()
+
 
 def test_receive_status_events():
     rx, ev = receiver(screen=(2560, 1440))
@@ -2320,7 +2423,7 @@ def test_no_take_another_note_when_quitting():
 for fn in (test_qr, test_token_and_page, test_size_type_origin, test_expiry_idle_lock_limit, test_connections_and_stop,
            test_network_rules, test_page_render, test_window_flow, test_window_states, test_trouble_dialog,
            test_menus, test_languages, test_new_name, test_page_new_flow, test_phone_close, test_races, test_firewall_allow_argv,
-           test_allow_step, test_allow_races, test_trouble_allow, test_receive_status_events, test_fresh_key,
+           test_allow_step, test_allow_races, test_trouble_allow, test_allow_again_windows, test_receive_status_events, test_fresh_key,
            test_close_during_upload, test_photo_to_editor_size, test_receiving_window, test_photo_files, test_hide_after_photo, test_after_photo_ttl, test_exif_and_metadata, test_queue_dup_time, test_answer_before_processing, test_full_size_checkbox, test_hint_block, test_obstacle_list, test_idle_close_does_not_deadlock,
            test_photo_not_lost_when_window_closed, test_slow_connections_do_not_block_phone, test_quit_blocker_counts_phone_window,
            test_photo_keeps_its_pixels, test_no_take_another_note_when_quitting):

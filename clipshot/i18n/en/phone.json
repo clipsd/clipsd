@@ -2,6 +2,8 @@
   "phone.allow_again": "Allow again",
   "phone.allow_done": "Done. Open the code on the phone again.",
   "phone.allow_failed": "The Windows rule was not changed: {error}",
+  "phone.allow_working": "Waiting for Windows to ask for permission…",
+  "phone.allow_declined": "Permission was not given. Click “Allow again” and answer “Yes”.",
   "phone.android17": "Android 17: allow the browser to access the local network. Settings → Apps → your browser → Permissions → Nearby devices → Allow.",
   "phone.bind_failed": "Could not open receiving on this computer. Details: {error}",
   "phone.cancel": "Cancel",
@@ -104,7 +106,11 @@
   "phone.page_too_big": "The photo is too large. Take it again.",
   "phone.page_unsent": "The photo did not reach the computer. If your browser allows it, press and hold the picture to save it to the phone gallery.",
   "phone.page_used": "This code is already open on another phone. Show a new code on the computer.",
+  "phone.page_zoom_close": "Close",
+  "phone.page_zoom_hint": "Tap to take a closer look",
   "phone.phone_done": "Receiving was closed from the phone. To take more photos, show a new code.",
+  "phone.photo_apart": "The screenshot was being closed, so the photo from the phone opened as a separate screenshot.",
+  "phone.photo_apart_saved": "The screenshot was being closed, so the photo from the phone opened as a separate screenshot. File: {path}",
   "phone.photo_late": "The photo from the phone was received and opened in the editor.",
   "phone.received_open": "Photo received: {size}. Opening…",
   "phone.received_size": "Photos received: {count} ({size})",
@@ -132,5 +138,8 @@
   "phone.vpn_hint": "A VPN on the phone can block the connection.",
   "phone.wifi_hide": "Don’t show again",
   "phone.wifi_ok": "Got it, show the code",
-  "phone.wifi_text": "The phone and the computer must be on the same Wi-Fi network. Over mobile data the photo will not arrive."
+  "phone.wifi_text": "The phone and the computer must be on the same Wi-Fi network. Over mobile data the photo will not arrive.",
+  "phone.tile_title": "From phone",
+  "phone.tile_sub": "camera or picture",
+  "phone.tile_tip": "Take a photo or send a picture from your phone"
 }

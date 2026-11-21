@@ -236,6 +236,24 @@ def _draw(name: str, p: QPainter, c: str):
         p.setPen(_pen("#ffffff", 1.8))
         p.drawLine(QPointF(18, 14.2), QPointF(18, 19.8))
         p.drawLine(QPointF(15.2, 17), QPointF(20.8, 17))
+    elif name.startswith("form_"):   # 1.34: форма снимка: сам контур формы, скругления заметно разные
+        code = name[5:]
+        path = QPainterPath()
+        if code == "circle":
+            path.addEllipse(QRectF(4, 4, 16, 16))
+        elif code == "oval":
+            path.addEllipse(QRectF(2, 4.5, 20, 15))
+        else:
+            r = {"round1": 2.5, "round2": 5.0, "round3": 7.5}.get(code, 0.0)
+            path.addRoundedRect(QRectF(2, 4.5, 20, 15), r, r)
+        tint = QColor(c)
+        tint.setAlpha(45)          # лёгкая заливка: форма читается пятном, а не только линией
+        pen = _pen(c, 2.0)
+        if code == "rect":
+            pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)   # острые углы прямоугольника, иначе похож на малые скругления
+        p.setPen(pen)
+        p.setBrush(tint)
+        p.drawPath(path)
     elif name == "help":
         p.setPen(_pen(c, 2))
         p.setBrush(Qt.BrushStyle.NoBrush)
@@ -346,6 +364,19 @@ def _draw(name: str, p: QPainter, c: str):
         path.closeSubpath()
         p.drawPath(path)
         p.drawArc(QRectF(9.6, 18.6, 4.8, 4.2), 180 * 16, 180 * 16)
+    elif name == "phone":
+        # Телефон: корпус, динамик сверху, кнопка снизу и маленький объектив камеры (снять или отправить картинку)
+        p.setPen(_pen(c, 1.8))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(QRectF(6.5, 2, 11, 20), 2.4, 2.4)
+        p.drawLine(QPointF(10.5, 4.8), QPointF(13.5, 4.8))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(c))
+        p.drawEllipse(QPointF(12, 18.6), 1.2, 1.2)
+        p.setPen(_pen(c, 1.5))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(QRectF(8.8, 8.2, 6.4, 5.2), 1, 1)
+        p.drawEllipse(QPointF(12, 10.8), 1.4, 1.4)
     elif name == "save":
         p.setPen(_pen(c, 1.8))
         p.setBrush(Qt.BrushStyle.NoBrush)

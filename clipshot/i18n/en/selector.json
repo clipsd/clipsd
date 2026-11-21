@@ -5,7 +5,7 @@
   "selector.btn_full_shot": "Full-screen screenshot",
   "selector.btn_ocr": "Copy text",
   "selector.btn_record": "Record video",
-  "selector.btn_retake": "Select again",
+  "selector.btn_retake": "Another area",
   "selector.btn_save": "Save",
   "selector.btn_translate": "Translate selection",
   "selector.btn_translate_all": "Translate whole screen",
@@ -52,7 +52,7 @@
   "selector.win_minimized": "minimized",
   "selector.win_monitor": "Screen {n}",
   "selector.win_untitled": "Untitled",
-  "selector.win_chip": "Windows",
+  "selector.win_chip": "Open windows",
   "selector.win_loading": "Getting the list of windows…",
   "selector.win_need_update": "To see all windows, update the ClipSD extension for GNOME",
   "selector.win_need_install": "To see all windows, install the ClipSD extension for GNOME",
@@ -65,5 +65,9 @@
   "selector.win_offscreen": "This window is off the screen now",
   "selector.win_slow": "GNOME is answering slowly: not all windows are listed yet",
   "selector.win_failed": "Could not get the list of windows: select the window with the mouse",
-  "selector.win_visible_only": "The window is covered by others: only its visible part will be captured here"
+  "selector.win_visible_only": "The window is covered by others: only its visible part will be captured here",
+  "selector.sub_edit_tools": "arrows, text, blur",
+  "selector.saved": "Saved: {name}",
+  "selector.saved_already": "Already saved: {name}",
+  "selector.save_failed": "Could not save the screenshot"
 }

@@ -7,7 +7,7 @@
 
 from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QCursor, QFont, QGuiApplication, QPainter, QPixmap
-from PyQt6.QtWidgets import (QDialog, QFrame, QGraphicsDropShadowEffect, QHBoxLayout, QLabel, QLineEdit,
+from PyQt6.QtWidgets import (QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
                              QPushButton, QToolButton, QVBoxLayout, QWidget)
 
 from .i18n import tr
@@ -27,11 +27,11 @@ PALETTES = {   # цвета карточки: светлая как раньше
     False: dict(card="#ffffff", edge="#d9dee6", text=TEXT, muted=MUTED, line="#c8d0db", field="#ffffff",
                 soft="#f1f4f8", close_hover="#eef1f5", link=LINK, track="#e3e8ef", note_bg="#f5f6f8",
                 warn_bg="#fff5d6", warn_edge="#efd27e", warn_text="#4a3a06", accent=ACCENT,
-                handle="#b4bcc8", handle_hover="#8f99a8"),
+                handle="#b4bcc8", handle_hover="#8f99a8", danger="#b42318", danger_edge="#e3a49d", danger_soft="#fdeceb"),
     True: dict(card="#25282c", edge="#3a3f46", text="#f1f3f5", muted="#aab1ba", line="#4a5058", field="#1d2023",
                soft="#2f3338", close_hover="#2f3338", link=LINK_DARK, track="#3a3f46", note_bg="#2a2e33",
                warn_bg="#3a3016", warn_edge="#6b5619", warn_text="#f5e3b0", accent="#2d8ceb",
-               handle="#5b626b", handle_hover="#7d8691"),
+               handle="#5b626b", handle_hover="#7d8691", danger="#ff8a80", danger_edge="#7a3b38", danger_soft="#4a2224"),
 }
 
 
@@ -46,6 +46,8 @@ QCheckBox, QRadioButton {{ color: {c['text']}; background: transparent; }}
 QLabel#clipTitle {{ font-size: 17px; font-weight: bold; }}
 QLabel#clipSubtitle {{ color: {c['muted']}; font-size: 13px; }}
 QLabel#clipNote {{ color: {c['muted']}; font-size: 12px; }}
+QLabel#clipBody {{ color: {c['text']}; font-size: 15px; }}
+QLabel#clipHint {{ color: {c['muted']}; font-size: 13px; }}
 QLabel#clipFieldLabel {{ font-weight: bold; }}
 QLineEdit {{ padding: 8px 10px; border: 1px solid {c['line']}; border-radius: 8px; font-size: 14px; background: {c['field']};
              color: {c['text']}; }}
@@ -58,6 +60,9 @@ QPushButton#clipPrimary:disabled {{ background: {GREEN_DISABLED}; border-color: 
 QPushButton#clipSecondary {{ background: {c['card']}; color: {c['text']}; font-size: 14px; padding: 9px 16px;
                              border: 1px solid {c['line']}; border-radius: 8px; }}
 QPushButton#clipSecondary:hover {{ background: {c['soft']}; }}
+QPushButton#clipDanger {{ background: {c['card']}; color: {c['danger']}; font-size: 14px; font-weight: 600; padding: 9px 16px;
+                          border: 1px solid {c['danger_edge']}; border-radius: 8px; }}
+QPushButton#clipDanger:hover {{ background: {c['danger_soft']}; }}
 QPushButton#clipLink {{ background: transparent; color: {c['link']}; border: none; font-size: 13px; padding: 4px 2px;
                         text-align: left; }}
 QPushButton#clipLink:hover {{ text-decoration: underline; }}
@@ -148,11 +153,9 @@ class ClipDialog(QDialog):
         outer.setContentsMargins(*self.SHADOW_MARGINS)   # место под тень
         self.card = QFrame()
         self.card.setObjectName("clipCard")
-        shadow = QGraphicsDropShadowEffect(self.card)
-        shadow.setBlurRadius(32)
-        shadow.setOffset(0, 8)
-        shadow.setColor(QColor(0, 0, 0, 90))
-        self.card.setGraphicsEffect(shadow)
+        # Тень рисуется самим окном под карточкой (paintEvent), а не QGraphicsDropShadowEffect: эффект рисует карточку
+        # со всем текстом в промежуточную картинку, и на Windows с масштабом 125-150 % буквы выходят бледными и
+        # размытыми (замечание владельца 21.11.2026 к окну «Снимок не сохранён»). Так текст рисуется прямо в окно.
         self.card.setMinimumWidth(width)
         outer.addWidget(self.card)
         lay = QVBoxLayout(self.card)
@@ -288,6 +291,18 @@ class ClipDialog(QDialog):
     def showEvent(self, event):
         super().showEvent(event)
         track_frame_extents(self, self.frame_extents_margins)   # менеджеру окон: видимая часть без поля тени
+
+    SHADOW_LAYERS = 14   # мягкая тень вниз: слои от широкого прозрачного к узкому плотнее (вместо размытия 32 px)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(Qt.PenStyle.NoPen)
+        r = QRectF(self.card.geometry()).translated(0, 6)
+        for i in range(self.SHADOW_LAYERS, 0, -1):
+            p.setBrush(QColor(0, 0, 0, 4 if i > 5 else 8))
+            p.drawRoundedRect(r.adjusted(-i, -i, i, i), 14 + i, 14 + i)
+        p.end()
 
     def frame_extents_margins(self):
         """Поля под тень по фактическим отступам карточки от края окна: (слева, справа, сверху, снизу)."""

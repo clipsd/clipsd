@@ -2,6 +2,8 @@
   "phone.allow_again": "Yeniden izin ver",
   "phone.allow_done": "Tamam. Kodu telefonda yeniden açın.",
   "phone.allow_failed": "Windows kuralı değiştirilmedi: {error}",
+  "phone.allow_working": "Windows'un izin istemesi bekleniyor…",
+  "phone.allow_declined": "İzin verilmedi. “Yeniden izin ver”e tıklayın ve “Evet” deyin.",
   "phone.android17": "Android 17: tarayıcıya yerel ağa erişim izni verin. Ayarlar → Uygulamalar → tarayıcınız → İzinler → Yakındaki cihazlar → İzin ver.",
   "phone.bind_failed": "Bu bilgisayarda alım açılamadı. Ayrıntılar: {error}",
   "phone.cancel": "İptal",
@@ -104,7 +106,11 @@
   "phone.page_too_big": "Fotoğraf çok büyük. Yeniden çekin.",
   "phone.page_unsent": "Fotoğraf bilgisayara ulaşmadı. Tarayıcınız izin veriyorsa görüntüye basılı tutarak galeriye kaydedebilirsiniz.",
   "phone.page_used": "Bu kod başka bir telefonda zaten açık. Bilgisayarda yeni kod gösterin.",
+  "phone.page_zoom_close": "Kapat",
+  "phone.page_zoom_hint": "Yakından bakmak için dokunun",
   "phone.phone_done": "Alım telefondan kapatıldı. Daha fazla fotoğraf için yeni kod gösterin.",
+  "phone.photo_apart": "Ekran görüntüsü kapanıyordu, bu yüzden telefondaki fotoğraf ayrı olarak açıldı.",
+  "phone.photo_apart_saved": "Ekran görüntüsü kapanıyordu, bu yüzden telefondaki fotoğraf ayrı olarak açıldı. Dosya: {path}",
   "phone.photo_late": "Telefondaki fotoğraf alındı ve düzenleyicide açıldı.",
   "phone.received_open": "Fotoğraf alındı: {size}. Açılıyor…",
   "phone.received_size": "Alınan fotoğraf: {count} ({size})",
@@ -132,5 +138,8 @@
   "phone.vpn_hint": "Telefondaki VPN bağlantıyı engelleyebilir.",
   "phone.wifi_hide": "Bir daha gösterme",
   "phone.wifi_ok": "Anladım, kodu göster",
-  "phone.wifi_text": "Telefon ve bilgisayar aynı Wi-Fi ağına bağlı olmalı. Mobil veriyle fotoğraf ulaşmaz."
+  "phone.wifi_text": "Telefon ve bilgisayar aynı Wi-Fi ağına bağlı olmalı. Mobil veriyle fotoğraf ulaşmaz.",
+  "phone.tile_title": "Telefondan",
+  "phone.tile_sub": "kamera veya resim",
+  "phone.tile_tip": "Kamerayla çekin veya telefondan resim gönderin"
 }

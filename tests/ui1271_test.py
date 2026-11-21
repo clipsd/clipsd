@@ -380,7 +380,9 @@ def deepest(w, pt_in_shell):
 
 
 tb = ed.titlebar
-mid = shell.mapFromGlobal(tb.mapToGlobal(QPoint(tb.width() // 2, tb.height() // 2)))
+# 1.34: в шапке перед колокольчиком кнопка «С телефона»: свободное место шапки между названием и группой значков
+free_x = (tb.label.geometry().right() + tb.icons_widget.geometry().left()) // 2
+mid = shell.mapFromGlobal(tb.mapToGlobal(QPoint(free_x, tb.height() // 2)))
 w_mid = deepest(shell, mid)
 check(w_mid is not None and w_mid.cursor().shape() == Qt.CursorShape.SizeAllCursor, "середина шапки: курсор «перемещение»")
 for btn_w in (tb.close_button, tb.min_button):

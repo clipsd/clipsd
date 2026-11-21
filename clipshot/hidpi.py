@@ -22,6 +22,8 @@ import zlib
 from PyQt6.QtCore import QBuffer, QByteArray, QIODevice, QMimeData, QSize, Qt
 from PyQt6.QtGui import QGuiApplication, QImage
 
+from . import forma
+
 BASE_DPI = 96.0
 INCH_M = 0.0254
 HTML_LIMIT = 8 * 1024 * 1024   # base64 картинки больше 8 МБ: в буфер только сама картинка, без HTML
@@ -31,6 +33,9 @@ SIZE_SCREEN = "screen"   # как на экране, 100 %: уменьшено �
 SIZE_MODES = (SIZE_FULL, SIZE_SCREEN)
 
 _PNG_SIG = b"\x89PNG\r\n\x1a\n"
+# Формат буфера обмена Windows с именем «PNG» (его кладут и читают Chrome, Firefox, Office, Telegram): так Qt кладёт
+# байты под зарегистрированный формат, а не под имя image/png, которое в Windows никто не ищет
+WINDOWS_PNG = 'application/x-qt-windows-mime;value="PNG"'
 
 
 def ratio_of(image) -> float:
@@ -181,6 +186,8 @@ def save_image(image: QImage, path: str, config=None, quality: int = None) -> bo
         except OSError:
             return False
         return True
+    if path.lower().endswith(forma.NO_ALPHA_EXT) and forma.has_transparency(out):
+        out = forma.flatten(out, forma.background(config))   # 1.34: JPG без прозрачности, фон за формой белый
     return out.save(path, None, quality) if quality else out.save(path)
 
 
@@ -193,11 +200,18 @@ def clipboard_mime(image: QImage, config=None) -> QMimeData:
     """Данные для буфера обмена: картинка (PNG с плотностью) и, при масштабе экрана ≠ 100 %, HTML с размером в точках."""
     out = prepare(image, size_mode(config))
     mime = QMimeData()
-    # Qt сам отдаёт image/bmp, image/jpeg…; в Windows CF_DIB (плотность из картинки), PNG только у картинок с альфа-каналом
-    mime.setImageData(out)
     ratio = ratio_of(out)
     png = b""
-    if sys.platform != "win32":
+    if forma.has_transparency(out):
+        # 1.34, форма снимка: прозрачный PNG под именем, которое читают браузеры, мессенджеры и офис («PNG» в Windows,
+        # image/png в Linux), и картинка на белом фоне для остальных (CF_DIB без альфы: иначе углы чёрные)
+        mime.setImageData(forma.flatten(out, forma.background(config)))
+        png = png_bytes(out)
+        mime.setData(WINDOWS_PNG if sys.platform == "win32" else "image/png", QByteArray(png))
+    else:
+        # Qt сам отдаёт image/bmp, image/jpeg…; в Windows CF_DIB (плотность из картинки), PNG только у картинок с альфа-каналом
+        mime.setImageData(out)
+    if sys.platform != "win32" and not png:
         png = png_bytes(out)
         mime.setData("image/png", QByteArray(png))   # PNG с проверенным pHYs, а не перекодированный по запросу
     if is_scaled(ratio) and html_enabled(config):

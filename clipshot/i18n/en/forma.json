@@ -1,0 +1,19 @@
+{
+  "forma.circle": "Circle",
+  "forma.circle_move": "Move the circle with the mouse: drag the area around it",
+  "forma.hint_circle": "You can move the circle",
+  "forma.hint_circle_sub": "Drag the area around the circle with the mouse",
+  "forma.jpg_note": "JPG has no transparency: the background outside the shape will be white",
+  "forma.jpg_note_color": "JPG has no transparency: the background outside the shape will be {color}",
+  "forma.oval": "Oval",
+  "forma.radius": "Radius",
+  "forma.radius_tip": "Corner radius in screenshot pixels, from 0 to half of the shorter side.\nYou can also drag the handle on the top left corner of the screenshot",
+  "forma.rect": "Rectangle",
+  "forma.round_custom": "Rounded corners: radius {r} px",
+  "forma.round_l": "Rounded corners: large",
+  "forma.round_m": "Rounded corners: medium",
+  "forma.round_s": "Rounded corners: small",
+  "forma.tip_off": "Screenshot shape: rounded corners, oval, circle\nA click turns on “{name}”, the arrow next to it opens all shapes",
+  "forma.tip_on": "Screenshot shape · {name}\nA click returns to a rectangle, the arrow next to it opens all shapes",
+  "forma.title": "Screenshot shape"
+}

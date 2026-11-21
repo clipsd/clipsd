@@ -52,6 +52,8 @@
   "settings.nav_text": "Text and translation",
   "settings.nav_updates": "Updates",
   "settings.next_shot": "Takes effect for the next screenshot",
+  "settings.novoe_enabled": "Show what's new after an update",
+  "settings.novoe_enabled_tip": "After an update: a short window about what's new and a “New” mark on new buttons until you press them.",
   "settings.ocr_accurate": "More accurate: the image is enlarged before reading (slower)",
   "settings.ocr_auto": "App language and English ({langs})",
   "settings.ocr_en": "English only",

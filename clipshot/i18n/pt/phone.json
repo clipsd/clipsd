@@ -2,6 +2,8 @@
   "phone.allow_again": "Permitir de novo",
   "phone.allow_done": "Pronto. Abra o código no celular de novo.",
   "phone.allow_failed": "A regra do Windows não foi alterada: {error}",
+  "phone.allow_working": "Aguardando o pedido de permissão do Windows…",
+  "phone.allow_declined": "A permissão não foi dada. Clique em “Permitir de novo” e responda “Sim”.",
   "phone.android17": "Android 17: permita que o navegador acesse a rede local. Configurações → Apps → seu navegador → Permissões → Dispositivos próximos → Permitir.",
   "phone.bind_failed": "Não foi possível abrir a recepção neste computador. Detalhes: {error}",
   "phone.cancel": "Cancelar",
@@ -104,7 +106,11 @@
   "phone.page_too_big": "A foto é grande demais. Tire de novo.",
   "phone.page_unsent": "A foto não chegou ao computador. Se o navegador permitir, mantenha a imagem pressionada para salvá-la na galeria.",
   "phone.page_used": "Este código já está aberto em outro celular. Mostre um código novo no computador.",
+  "phone.page_zoom_close": "Fechar",
+  "phone.page_zoom_hint": "Toque para ver de perto",
   "phone.phone_done": "O recebimento foi encerrado pelo telefone. Para tirar mais fotos, mostre um novo código.",
+  "phone.photo_apart": "A captura estava sendo fechada, então a foto do celular foi aberta separadamente.",
+  "phone.photo_apart_saved": "A captura estava sendo fechada, então a foto do celular foi aberta separadamente. Arquivo: {path}",
   "phone.photo_late": "A foto do celular foi recebida e aberta no editor.",
   "phone.received_open": "Foto recebida: {size}. Abrindo…",
   "phone.received_size": "Fotos recebidas: {count} ({size})",
@@ -132,5 +138,8 @@
   "phone.vpn_hint": "Uma VPN no celular pode bloquear a conexão.",
   "phone.wifi_hide": "Não mostrar mais",
   "phone.wifi_ok": "Entendi, mostrar o código",
-  "phone.wifi_text": "O celular e o computador precisam estar conectados à mesma rede Wi-Fi. Pelos dados móveis a foto não chega."
+  "phone.wifi_text": "O celular e o computador precisam estar conectados à mesma rede Wi-Fi. Pelos dados móveis a foto não chega.",
+  "phone.tile_title": "Do celular",
+  "phone.tile_sub": "câmera ou imagem",
+  "phone.tile_tip": "Tire uma foto ou envie uma imagem do celular"
 }

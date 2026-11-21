@@ -315,7 +315,7 @@ if ocr.engine_name() == "tesseract":
     # второй кусок: тёмный фон
     sel2 = new_selector()
     sel2.enter_translate()
-    drag_on(sel2, QPoint(30, 290), QPoint(660, 370))
+    drag_on(sel2, QPoint(10, 290), QPoint(660, 370))   # 1.34: панель режима перевода шире (шесть плиток), x=30 уже на ней
     win2 = translate_ui._floating[-1]
     check(win2 is not win and wait(lambda: win2.tr_cards[0].state == "done"), "второй перевод, первое окошко осталось")
     dark = win2.tr_cards[0].blocks[0]

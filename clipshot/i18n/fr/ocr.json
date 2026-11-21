@@ -38,8 +38,13 @@
   "ocr.terminal_hint": "Ouvrez un terminal (Ctrl+Alt+T), collez la commande (Ctrl+Shift+V), appuyez sur Enter et saisissez votre mot de passe. Une fois l'installation terminée, relancez la reconnaissance ou la traduction.",
   "ocr.title": "Texte de l'image",
   "ocr.toast_copied": "Texte copié dans le presse-papiers",
+  "ocr.win_install_button": "Installer la reconnaissance",
+  "ocr.win_install_declined": "Installation annulée : l’autorisation d’administrateur n’a pas été donnée. Cliquez de nouveau et répondez « Oui ».",
+  "ocr.win_install_done": "Terminé : la reconnaissance est installée. Relancez la reconnaissance du texte.",
+  "ocr.win_install_failed": "Échec de l’installation ({error}). Installez-la manuellement en suivant les étapes ci-dessus.",
+  "ocr.win_install_started": "Installation en cours, 1-3 minutes. « Terminé » s’affichera ici à la fin.",
   "ocr.win_lang_guide_title": "Guide Microsoft : ajouter une langue dans Windows",
-  "ocr.win_lang_need": "Pour la reconnaissance de texte, Windows a besoin de la langue russe. Ouvrez « Paramètres → Heure et langue → Langue et région », cliquez sur « Ajouter une langue » et choisissez « Русский » : la reconnaissance de texte est installée avec elle. Autre solution : installer le programme gratuit Tesseract (second lien), ClipSD le trouvera tout seul.",
-  "ocr.win_lang_need_lang": "La reconnaissance de texte de Windows a besoin de la langue « {lang} ». Ouvrez « Paramètres → Heure et langue → Langue et région », cliquez sur « Ajouter une langue » et choisissez-la : la reconnaissance de texte s’installe avec elle. Autre possibilité : installer le programme gratuit Tesseract (deuxième lien), ClipSD le trouvera tout seul.",
+  "ocr.win_lang_need": "Windows n’a pas la reconnaissance du texte russe, les lettres russes sortent donc en lettres latines. Cliquez sur « Installer la reconnaissance » : Windows demandera l’autorisation, l’installation prend 1-3 minutes et nécessite Internet. Manuellement : « Paramètres → Heure et langue → Langue et région », cliquez sur « … » à côté de « Русский » → « Options linguistiques » et téléchargez « Reconnaissance optique de caractères ». Si le russe n’est pas dans la liste, d’abord « Ajouter une langue » → « Русский ». Autre solution : le programme gratuit Tesseract (second lien), ClipSD le trouvera tout seul.",
+  "ocr.win_lang_need_lang": "Windows n’a pas la reconnaissance de texte pour la langue « {lang} ». Cliquez sur « Installer la reconnaissance » : Windows demandera l’autorisation, l’installation prend 1-3 minutes et nécessite Internet. Manuellement : « Paramètres → Heure et langue → Langue et région », cliquez sur « … » à côté de cette langue → « Options linguistiques » et téléchargez « Reconnaissance optique de caractères ». Si la langue n’est pas dans la liste, d’abord « Ajouter une langue ». Autre solution : le programme gratuit Tesseract (second lien), ClipSD le trouvera tout seul.",
   "ocr.window_title": "texte de l'image"
 }

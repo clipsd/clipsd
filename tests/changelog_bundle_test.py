@@ -8,7 +8,8 @@
 - build_linux.sh и build.ps1 кладут CHANGELOG в программу (--add-data), stage_windows.py копирует папку в раскладку
   сборки Windows (только заметки .md);
 - в «замороженной» программе заметки находятся в sys._MEIPASS, даже если рядом с пакетом папки нет;
-- заметки выпусков 1.32.0, 1.32.1, 1.32.2 и 1.32.3 есть на 12 языках, без длинных тире;
+- заметки выпусков 1.32.0-1.34.0 есть на 12 языках, без длинных тире, с одинаковым числом пунктов;
+- в 1.34.0 все пункты 1.33.0 (кнопка окон под новым именем) и названия новых кнопок как в каталогах программы;
 - в 1.32.2 первый пункт говорит, что у зажатого окошка перевода крестик в углу, а кнопки появляются при наведении мыши;
 - в 1.32.3 названия кнопок взяты из каталогов программы на каждом языке («Копировать текст», «Повторить»,
   «Скопировать и закрыть», «Что нового», «Проверить обновления»).
@@ -74,7 +75,7 @@ finally:
     shutil.rmtree(tmp, ignore_errors=True)
 
 # --- заметки выпусков 1.32.0, 1.32.1, 1.32.2 и 1.32.3 ----------------------------------------------------------------
-for version in ("1.32.0", "1.32.1", "1.32.2", "1.32.3", "1.33.0"):
+for version in ("1.32.0", "1.32.1", "1.32.2", "1.32.3", "1.33.0", "1.34.0"):
     folder = ROOT / "CHANGELOG" / version
     missing = [lang for lang in LANGS if not (folder / f"{lang}.md").is_file()]
     check(not missing, f"CHANGELOG/{version}: 12 языков {missing or ''}")
@@ -116,7 +117,8 @@ for lang in LANGS:
 
 # 1.33.0: названия кнопок в заметках такие же, как в программе на этом языке
 BUTTONS_133 = (("editor", "editor.tr_copy"), ("editor", "editor.tr_seg_translation"), ("editor", "editor.tr_seg_original"),
-               ("updater", "updater.button.retry"), ("selector", "selector.win_chip"), ("selector", "selector.win_do_update"),
+               ("updater", "updater.button.retry"), ("selector", "selector.win_do_update"),
+               # selector.win_chip не сверяется: заметки 1.33.0 про чип «Окна», после 1.33.0 он «Открытые окна» (21.11.2026)
                ("phone", "phone.menu"), ("phone", "phone.full_size"), ("phone", "phone.fw_allow"))
 for lang in LANGS:
     path = ROOT / "CHANGELOG" / "1.33.0" / f"{lang}.md"
@@ -127,6 +129,32 @@ for lang in LANGS:
         if name not in text:
             missing.append(name)
     check(not missing, f"CHANGELOG/1.33.0/{lang}: названия кнопок как в программе {missing or ''}")
+
+# 1.34.0 (всё из 1.33.0, которая публично не выходила, и новое 1.34): названия кнопок как в программе на этом языке
+BUTTONS_134 = tuple(b for b in BUTTONS_133) + (
+    ("selector", "selector.win_chip"), ("phone", "phone.tile_title"), ("selector", "selector.btn_edit"),
+    ("selector", "selector.btn_copy"), ("selector", "selector.btn_save"), ("selector", "selector.btn_retake"),
+    ("editor", "editor.unsaved_title"), ("editor", "editor.unsaved_discard"), ("novoe", "novoe.menu"),
+    ("novoe", "novoe.badge"), ("settings", "settings.nav_updates"), ("forma", "forma.title"), ("editor", "editor.all_tools"),
+    ("editor", "editor.insert_title"))
+notes_133 = {lang: (ROOT / "CHANGELOG" / "1.33.0" / f"{lang}.md").read_text(encoding="utf-8") for lang in LANGS
+             if (ROOT / "CHANGELOG" / "1.33.0" / f"{lang}.md").is_file()}
+for lang in LANGS:
+    path = ROOT / "CHANGELOG" / "1.34.0" / f"{lang}.md"
+    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    missing = []
+    for catalog, key in BUTTONS_134:
+        name = json.loads((ROOT / "clipshot" / "i18n" / lang / f"{catalog}.json").read_text(encoding="utf-8"))[key]
+        if name not in text:
+            missing.append(name)
+    check(not missing, f"CHANGELOG/1.34.0/{lang}: названия кнопок как в программе {missing or ''}")
+    lines = [ln for ln in text.splitlines() if ln.startswith("- ")]
+    old = [ln for ln in notes_133.get(lang, "").splitlines() if ln.startswith("- ")]
+    chip = json.loads((ROOT / "clipshot" / "i18n" / lang / "selector.json").read_text(encoding="utf-8"))["selector.win_chip"]
+    # пункт про снимок окна: та же фраза, только кнопка под новым именем (текст после «▾» совпадает)
+    kept = sum(1 for ln in old if ln in lines or "▾" in ln and any(chip in x and x.split("▾", 1)[1] == ln.split("▾", 1)[1]
+                                                                   for x in lines))
+    check(old and kept == len(old) and len(lines) > len(old), f"CHANGELOG/1.34.0/{lang}: все пункты 1.33.0 на месте и есть новые ({kept}/{len(old)})")
 
 print(f"ИТОГ: провалено {len(failed)}")
 sys.exit(1 if failed else 0)

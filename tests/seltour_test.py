@@ -95,7 +95,7 @@ for W in (1280, 800):
     # подсветка: каждый шаг попадает в свои кнопки
     buttons = {b[0]: b[3] for b in sel._bar_layout()[0]}
     expect = {"area": [sel.kept], "copy": [buttons["copy"]], "edit": [buttons["edit"], sel.kept],
-              "manual": [buttons["manual"]], "top": [buttons[k] for k in ("record", "full", "ocr") if k in buttons],
+              "manual": [buttons["manual"]], "top": [buttons[k] for k in ("record", "full", "ocr", "phone") if k in buttons],
               "translate": [buttons[k] for k in ("translate", "translate_pick") if k in buttons],
               "lang": [sel.lang_rect, sel.gear_rect], "close": [sel.bar_close_rect]}
     area = sel.rect()

@@ -5,7 +5,7 @@
   "selector.btn_full_shot": "全屏截图",
   "selector.btn_ocr": "复制文字",
   "selector.btn_record": "录制视频",
-  "selector.btn_retake": "重新选择",
+  "selector.btn_retake": "换个区域",
   "selector.btn_save": "保存",
   "selector.btn_translate": "翻译所选内容",
   "selector.btn_translate_all": "翻译整个屏幕",
@@ -47,7 +47,7 @@
   "selector.trc_translation": "译文",
   "selector.trc_all": "整个屏幕",
   "selector.btn_window": "窗口截图",
-  "selector.win_chip": "窗口",
+  "selector.win_chip": "已打开的窗口",
   "selector.win_minimized": "已最小化",
   "selector.win_monitor": "屏幕 {n}",
   "selector.win_untitled": "无标题",
@@ -64,5 +64,9 @@
   "selector.win_offscreen": "此窗口现在在屏幕之外",
   "selector.win_slow": "GNOME 响应较慢：暂时看不到全部窗口",
   "selector.win_failed": "未能获取窗口列表：请用鼠标框选窗口",
-  "selector.win_visible_only": "此窗口被其他窗口遮住：这里只能截取可见部分"
+  "selector.win_visible_only": "此窗口被其他窗口遮住：这里只能截取可见部分",
+  "selector.sub_edit_tools": "箭头、文字、模糊",
+  "selector.saved": "已保存：{name}",
+  "selector.saved_already": "已经保存：{name}",
+  "selector.save_failed": "无法保存截图"
 }

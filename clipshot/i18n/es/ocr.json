@@ -38,8 +38,13 @@
   "ocr.terminal_hint": "Abra una terminal (Ctrl+Alt+T), pegue el comando (Ctrl+Shift+V), pulse Enter e introduzca su contraseña. Tras la instalación, repita el reconocimiento o la traducción.",
   "ocr.title": "Texto de la imagen",
   "ocr.toast_copied": "Texto copiado al portapapeles",
+  "ocr.win_install_button": "Instalar reconocimiento",
+  "ocr.win_install_declined": "Instalación cancelada: no se dio el permiso de administrador. Pulse el botón otra vez y responda «Sí».",
+  "ocr.win_install_done": "Listo: el reconocimiento está instalado. Vuelva a reconocer el texto.",
+  "ocr.win_install_failed": "No se pudo instalar ({error}). Instálelo a mano con los pasos de arriba.",
+  "ocr.win_install_started": "Instalando, 1-3 minutos. Al terminar aparecerá aquí «Listo».",
   "ocr.win_lang_guide_title": "Instrucciones de Microsoft: cómo añadir un idioma en Windows",
-  "ocr.win_lang_need": "Para reconocer texto en Windows hace falta el idioma ruso. Abra «Configuración → Hora e idioma → Idioma y región», pulse «Agregar un idioma» y elija «Русский» (ruso): con él se instala el reconocimiento de texto. Otra opción: instalar el programa gratuito Tesseract (segundo enlace); ClipSD lo encontrará solo.",
-  "ocr.win_lang_need_lang": "El reconocimiento de texto de Windows necesita el idioma «{lang}». Abra «Configuración → Hora e idioma → Idioma y región», pulse «Agregar un idioma» y elíjalo: con él se instala el reconocimiento de texto. Otra opción: instalar el programa gratuito Tesseract (segundo enlace), ClipSD lo encontrará solo.",
+  "ocr.win_lang_need": "Windows no tiene instalado el reconocimiento de texto en ruso, por eso las letras rusas salen como latinas. Pulse «Instalar reconocimiento»: Windows pedirá permiso; tarda 1-3 minutos y necesita internet. A mano: «Configuración → Hora e idioma → Idioma y región», pulse «…» junto a «Русский» → «Opciones de idioma» y descargue «Reconocimiento óptico de caracteres». Si el ruso no está en la lista, primero «Agregar un idioma» → «Русский». Otra opción: el programa gratuito Tesseract (segundo enlace); ClipSD lo encontrará solo.",
+  "ocr.win_lang_need_lang": "Windows no tiene instalado el reconocimiento de texto en «{lang}». Pulse «Instalar reconocimiento»: Windows pedirá permiso; tarda 1-3 minutos y necesita internet. A mano: «Configuración → Hora e idioma → Idioma y región», pulse «…» junto a ese idioma → «Opciones de idioma» y descargue «Reconocimiento óptico de caracteres». Si el idioma no está en la lista, primero «Agregar un idioma». Otra opción: el programa gratuito Tesseract (segundo enlace); ClipSD lo encontrará solo.",
   "ocr.window_title": "texto de la imagen"
 }

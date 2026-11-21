@@ -2,10 +2,10 @@
   "selector.all_monitors": "Todos los monitores",
   "selector.btn_copy": "Copiar y cerrar",
   "selector.btn_edit": "Editar",
-  "selector.btn_full_shot": "Captura de toda la pantalla",
+  "selector.btn_full_shot": "Pantalla completa",
   "selector.btn_ocr": "Copiar texto",
   "selector.btn_record": "Grabar vídeo",
-  "selector.btn_retake": "Volver a elegir",
+  "selector.btn_retake": "Otra zona",
   "selector.btn_save": "Guardar",
   "selector.btn_translate": "Traducir lo seleccionado",
   "selector.btn_translate_all": "Traducir toda la pantalla",
@@ -49,7 +49,7 @@
   "selector.trc_translation": "Traducción",
   "selector.trc_all": "Toda la pantalla",
   "selector.btn_window": "Captura de ventana",
-  "selector.win_chip": "Ventanas",
+  "selector.win_chip": "Ventanas abiertas",
   "selector.win_minimized": "minimizada",
   "selector.win_monitor": "Pantalla {n}",
   "selector.win_untitled": "Sin título",
@@ -66,5 +66,9 @@
   "selector.win_offscreen": "Esta ventana está fuera de la pantalla",
   "selector.win_slow": "GNOME responde despacio: aún no se ven todas las ventanas",
   "selector.win_failed": "No se obtuvo la lista de ventanas: seleccione la ventana con el ratón",
-  "selector.win_visible_only": "La ventana está tapada por otras: aquí solo se capturará la parte visible"
+  "selector.win_visible_only": "La ventana está tapada por otras: aquí solo se capturará la parte visible",
+  "selector.sub_edit_tools": "flechas, texto, desenfoque",
+  "selector.saved": "Guardado: {name}",
+  "selector.saved_already": "Ya guardado: {name}",
+  "selector.save_failed": "No se pudo guardar la captura"
 }

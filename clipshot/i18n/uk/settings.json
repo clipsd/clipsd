@@ -52,6 +52,8 @@
   "settings.nav_text": "Текст і переклад",
   "settings.nav_updates": "Оновлення",
   "settings.next_shot": "Діє для наступного знімка",
+  "settings.novoe_enabled": "Показувати новинки після оновлення",
+  "settings.novoe_enabled_tip": "Після оновлення: коротке вікно про нове й мітка «Нове» на нових кнопках, доки ви їх не натиснете.",
   "settings.ocr_accurate": "Точніше: картинка збільшується перед читанням (повільніше)",
   "settings.ocr_auto": "Мова програми та англійська ({langs})",
   "settings.ocr_en": "Лише англійська",

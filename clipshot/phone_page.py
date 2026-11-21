@@ -121,7 +121,7 @@ button,label{font:inherit}
 [data-state=ready] .phead{display:flex}
 .dotnow{width:1.6rem;height:1.6rem;font-size:.9rem;background:var(--dot-now)}
 .phead .stitle{margin:0;font-size:1rem}
-[data-state=ready] #preview{max-height:max(7rem,calc(100dvh - 28rem))}
+[data-state=ready] #preview{max-height:max(7rem,calc(100dvh - 29.3rem))}
 [data-state=ready] #readybar .btn{min-height:3rem}
 [data-state=ready] #readybar .btn.main{min-height:3.2rem}
 #track,#ptrack{height:.7rem;border-radius:.35rem;background:var(--track);overflow:hidden}
@@ -521,6 +521,188 @@ setInterval(ping,3000);
 })();
 """
 
+# ---------- the photo big, before it is sent (owner, 21.11.2026: "tap it, it opens big, zoom in, close with a cross") ----
+# Own code, no library, nothing from the network: the viewer shows the same blob: URL as the thumbnail (img-src blob:
+# of the page policy). A separate block of styles, markup and script so the rest of the page stays as it was.
+# Gestures: Pointer Events on a stage with touch-action:none (two fingers zoom around their middle, one finger moves
+# the enlarged photo, a double tap zooms to 2x or back, the wheel zooms on a computer); Safari's own gesture events
+# and touchmove are cancelled while the viewer is open, so the page itself never zooms. Closing: the cross, Esc, the
+# Back button of the phone (one history entry while open), and by itself when the page leaves "Photo is ready".
+# Less than 30 s of reception left: the amber line of the page ("Reception open for 0:25") is mirrored in the viewer.
+
+_VIEWER_STYLE = """
+#preview{cursor:zoom-in;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+#zoomhint{display:none;margin:.35rem 0 0;color:var(--muted);font-size:.85rem;text-align:center}
+[data-state=ready] #zoomhint{display:block}
+[data-state=ready] #zoomhint+#dims{margin-top:0}
+html.zoomopen,html.zoomopen body{overflow:hidden;overscroll-behavior:none}
+#zv{position:fixed;top:0;left:0;right:0;bottom:0;z-index:50;background:#000;touch-action:none;overscroll-behavior:contain;
+  -webkit-user-select:none;user-select:none}
+#zv[hidden],#zleft[hidden]{display:none}
+#zstage{position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;touch-action:none;cursor:grab}
+#zv[data-zoomed='1'] #zstage{cursor:move}
+#zimg{position:absolute;left:0;top:0;max-width:none;max-height:none;transform-origin:0 0;-webkit-touch-callout:none;
+  -webkit-user-drag:none;pointer-events:none}
+#zv.anim #zimg{transition:width .18s ease-out,height .18s ease-out,transform .18s ease-out}
+#zclose{position:absolute;z-index:2;top:calc(.7rem + env(safe-area-inset-top));right:calc(.7rem + env(safe-area-inset-right));
+  width:3rem;height:3rem;min-width:44px;min-height:44px;padding:0;border-radius:50%;cursor:pointer;
+  background:rgba(0,0,0,.62);border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.55),0 .15rem .6rem rgba(0,0,0,.45);
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation}
+#zclose::before,#zclose::after{content:"";position:absolute;left:50%;top:50%;width:1.35rem;height:max(2px,.17rem);
+  border-radius:1px;background:#fff;transform:translate(-50%,-50%) rotate(45deg)}
+#zclose::after{transform:translate(-50%,-50%) rotate(-45deg)}
+#zclose:active{background:rgba(0,0,0,.8)}
+#zclose:focus-visible{outline:3px solid #fff;outline-offset:3px}
+#zleft{position:absolute;z-index:2;left:0;right:0;bottom:calc(1rem + env(safe-area-inset-bottom));
+  margin:0 auto;width:max-content;max-width:calc(100% - 2rem);padding:.45rem .9rem;border-radius:.5rem;font-size:.95rem;font-weight:600;
+  text-align:center;color:#4a3a06;background:#fff5d6;border:1px solid #efd27e}
+@media (prefers-reduced-motion:reduce){#zv.anim #zimg{transition:none}}
+@media (forced-colors:active){#zclose{forced-color-adjust:none}}
+"""
+
+_VIEWER_SCRIPT = """
+(function(){
+var v=document.getElementById('zv'),stage=document.getElementById('zstage'),im=document.getElementById('zimg');
+var xb=document.getElementById('zclose'),zl=document.getElementById('zleft');
+var pv=document.getElementById('preview'),app=document.getElementById('app'),left=document.getElementById('left');
+if(!v||!pv)return;
+var open=false,pushed=false,backing=false,s=1,tx=0,ty=0,bw=1,bh=1,W=1,H=1,maxS=4,pts={},pinch=null,pan=null,tap=null,moved=false,anim=0;
+function rem(){return parseFloat(getComputedStyle(document.documentElement).fontSize)||16;}
+function n(){return Object.keys(pts).length;}
+function fit(){
+  W=stage.clientWidth||window.innerWidth;H=stage.clientHeight||window.innerHeight;
+  var nw=im.naturalWidth||1,nh=im.naturalHeight||1,k=Math.min(W/nw,H/nh);
+  bw=nw*k;bh=nh*k;
+  maxS=Math.max(4,Math.min(12,2*nw/bw));   /* enough to see the pixels of the photo, never endless */
+}
+function clamp(){
+  var sw=bw*s,sh=bh*s;
+  tx=sw<=W?(W-sw)/2:Math.min(0,Math.max(W-sw,tx));
+  ty=sh<=H?(H-sh)/2:Math.min(0,Math.max(H-sh,ty));
+}
+/* the size is set, not a scale transform: the browser draws the photo sharp at every zoom */
+function draw(){
+  clamp();
+  im.style.width=(bw*s)+'px';im.style.height=(bh*s)+'px';
+  im.style.transform='translate('+tx+'px,'+ty+'px)';
+  v.setAttribute('data-zoomed',s>1.01?'1':'0');
+  v.setAttribute('data-scale',s.toFixed(2));
+}
+function zoomAt(ns,cx,cy){
+  ns=Math.max(1,Math.min(maxS,ns));var k=ns/s;
+  tx=cx-(cx-tx)*k;ty=cy-(cy-ty)*k;s=ns;
+}
+function smooth(){v.classList.add('anim');clearTimeout(anim);anim=setTimeout(function(){v.classList.remove('anim');},220);}
+function P(e){var r=stage.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top};}
+function two(){
+  var k=Object.keys(pts),a=pts[k[0]],b=pts[k[1]];
+  return {d:Math.max(1,Math.sqrt((a.x-b.x)*(a.x-b.x)+(a.y-b.y)*(a.y-b.y))),x:(a.x+b.x)/2,y:(a.y+b.y)/2};
+}
+function mirror(){
+  var on=open&&left&&left.style.display==='block'&&left.classList.contains('amber')&&left.textContent;
+  zl.textContent=on?left.textContent:'';zl.hidden=!on;
+}
+function show(){
+  if(open||app.getAttribute('data-state')!=='ready'||!pv.getAttribute('src'))return;
+  open=true;s=1;tx=0;ty=0;pts={};pinch=pan=tap=null;
+  im.onload=function(){if(open){fit();draw();}};
+  im.src=pv.getAttribute('src');   /* the same local blob: URL as the thumbnail, nothing is loaded again */
+  v.hidden=false;document.documentElement.classList.add('zoomopen');guard(true);
+  try{history.pushState({clipsdZoom:1},'');pushed=true;}catch(e){pushed=false;}
+  if(im.complete&&im.naturalWidth){fit();draw();}
+  mirror();
+  try{xb.focus({preventScroll:true});}catch(e){xb.focus();}
+}
+function hide(fromBack){
+  if(!open)return;
+  open=false;v.hidden=true;document.documentElement.classList.remove('zoomopen');guard(false);
+  pts={};pinch=pan=tap=null;im.onload=null;im.removeAttribute('src');mirror();
+  if(pushed&&!fromBack){pushed=false;backing=true;try{history.back();}catch(e){backing=false;}}
+  pushed=false;
+  if(app.getAttribute('data-state')==='ready'){try{pv.focus({preventScroll:true});}catch(e){}}
+}
+pv.addEventListener('click',show);
+pv.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();show();}});
+xb.addEventListener('click',function(e){e.preventDefault();hide(false);});
+window.addEventListener('popstate',function(){if(backing){backing=false;return;}if(open){hide(true);}});
+try{if(history.state&&history.state.clipsdZoom){history.replaceState(null,'');}}catch(e){}
+document.addEventListener('keydown',function(e){
+  if(!open)return;
+  if(e.key==='Escape'){e.preventDefault();hide(false);}
+  else if(e.key==='+'||e.key==='='){zoomAt(s*1.5,W/2,H/2);smooth();draw();}
+  else if(e.key==='-'){zoomAt(s/1.5,W/2,H/2);smooth();draw();}
+});
+/* the page leaves "Photo is ready" (sent, reception closed, no connection): the viewer goes, the page shows why */
+if(window.MutationObserver){
+  new MutationObserver(function(){if(open&&app.getAttribute('data-state')!=='ready'){hide(false);}})
+    .observe(app,{attributes:true,attributeFilter:['data-state']});
+  if(left){new MutationObserver(mirror).observe(left,{attributes:true,childList:true,characterData:true,subtree:true});}
+}
+window.addEventListener('resize',function(){if(open){fit();s=1;draw();}});
+stage.addEventListener('pointerdown',function(e){
+  if(!open)return;
+  e.preventDefault();
+  try{stage.setPointerCapture(e.pointerId);}catch(err){}
+  pts[e.pointerId]=P(e);
+  var c=n();
+  if(c===1){var p=pts[e.pointerId];pan={x:p.x,y:p.y,tx:tx,ty:ty};moved=false;}
+  else if(c===2){var g=two();pinch={d:g.d,x:g.x,y:g.y,s:s,tx:tx,ty:ty};pan=null;moved=true;tap=null;}
+});
+stage.addEventListener('pointermove',function(e){
+  if(!open||!(e.pointerId in pts))return;
+  e.preventDefault();
+  var p=pts[e.pointerId]=P(e);
+  if(pinch&&n()>=2){
+    var g=two(),ns=Math.max(1,Math.min(maxS,pinch.s*g.d/pinch.d)),k=ns/pinch.s;
+    tx=g.x-(pinch.x-pinch.tx)*k;ty=g.y-(pinch.y-pinch.ty)*k;s=ns;draw();
+  }else if(pan){
+    var dx=p.x-pan.x,dy=p.y-pan.y;
+    if(Math.abs(dx)+Math.abs(dy)>rem()*.6){moved=true;}
+    if(moved){tx=pan.tx+dx;ty=pan.ty+dy;draw();}
+  }
+});
+function up(e){
+  if(!(e.pointerId in pts))return;
+  var p=P(e);delete pts[e.pointerId];
+  var c=n();
+  if(c<2){pinch=null;}
+  if(c===1){var k=Object.keys(pts)[0],q=pts[k];pan={x:q.x,y:q.y,tx:tx,ty:ty};return;}
+  if(c>0)return;
+  pan=null;
+  if(moved||e.type!=='pointerup'){tap=null;return;}
+  var now=Date.now();
+  if(tap&&now-tap.t<350&&Math.abs(p.x-tap.x)+Math.abs(p.y-tap.y)<rem()*2){
+    tap=null;
+    if(s>1.01){s=1;}else{zoomAt(2,p.x,p.y);}
+    smooth();draw();
+  }else{tap={t:now,x:p.x,y:p.y};}
+}
+stage.addEventListener('pointerup',up);
+stage.addEventListener('pointercancel',up);
+stage.addEventListener('wheel',function(e){
+  if(!open)return;
+  e.preventDefault();var p=P(e);zoomAt(s*Math.exp(-e.deltaY*0.0025),p.x,p.y);draw();
+},{passive:false});
+/* Safari zooms the whole page with its own gesture events and a double tap: not while the photo is open. The
+   listeners are there only while the viewer is open, so scrolling of the page is not slowed down otherwise. */
+function stop(e){e.preventDefault();}
+function guard(on){
+  var f=on?'addEventListener':'removeEventListener',o={passive:false};
+  ['gesturestart','gesturechange','gestureend','touchmove'].forEach(function(t){document[f](t,stop,o);});
+}
+stage.addEventListener('touchend',function(e){if(open){e.preventDefault();}},{passive:false});
+stage.addEventListener('dblclick',function(e){e.preventDefault();});
+})();
+"""
+
+
+def _viewer_markup(g) -> str:
+    """The viewer over the page: the photo, the cross (Close), the line with the time left. g: escaped text by key."""
+    return (f'<div id="zv" role="dialog" aria-modal="true" aria-label="{g("page_ready")}" hidden>'
+            '<div id="zstage"><img id="zimg" alt="" draggable="false"></div>'
+            f'<button id="zclose" type="button" aria-label="{g("page_zoom_close")}" title="{g("page_zoom_close")}"></button>'
+            '<p id="zleft" role="status" aria-live="polite" hidden></p></div>')
+
 
 def _e(text) -> str:
     return html.escape(str(text or ""), quote=True)
@@ -551,7 +733,7 @@ def render_page(texts: dict, lang: str, base: str, key: str, nonce: str, max_byt
         f'<meta name="theme-color" content="{THEME_LIGHT}" media="(prefers-color-scheme: light)">'
         f'<meta name="theme-color" content="{THEME_DARK}" media="(prefers-color-scheme: dark)">'
         f'<link rel="icon" type="image/png" href="{FAVICON_48}">'
-        f'<title>ClipSD</title><style nonce="{_e(nonce)}">{_STYLE}</style></head>'
+        f'<title>ClipSD</title><style nonce="{_e(nonce)}">{_STYLE}{_VIEWER_STYLE}</style></head>'
         '<body><main id="page"><div id="app" class="card" data-state="wait">'
         f'<header class="head"><img src="{LOGO_160}" alt="" width="48" height="48"><div><div class="name">{g("page_card_title")}</div>'
         f'<div id="intro" class="sub">{g("page_intro")}</div></div></header><div class="rule"></div>'
@@ -563,7 +745,8 @@ def render_page(texts: dict, lang: str, base: str, key: str, nonce: str, max_byt
         f'<div class="step" id="s1"><div class="dot" id="d1" aria-hidden="true"></div><div class="sb"><div class="stitle">{g("page_step1")}</div>'
         '<section id="procbar" aria-live="polite"><div class="spin" aria-hidden="true"></div>'
         '<div id="ptrack"><span id="pfill"></span></div></section>'
-        '<section id="view"><img id="preview" alt=""><p id="dims"></p></section>'
+        f'<section id="view"><img id="preview" alt="" role="button" tabindex="0" aria-label="{g("page_zoom_hint")}">'
+        f'<p id="zoomhint">{g("page_zoom_hint")}</p><p id="dims"></p></section>'
         f'<div id="startbar" class="bar">'
         f'<label id="shoot" class="btn main big" for="cam" role="button" tabindex="0">{g("page_shoot")}</label>'
         f'<button id="gal" class="btn" type="button">{g("page_choose")}</button>'
@@ -593,8 +776,9 @@ def render_page(texts: dict, lang: str, base: str, key: str, nonce: str, max_byt
         '<input id="cam" class="vh" type="file" accept="image/*" capture="environment" tabindex="-1">'
         '<input id="pick" class="vh" type="file" accept="image/*" tabindex="-1">'
         '</div></main>'
+        f'{_viewer_markup(g)}'
         f'<script type="application/json" id="cfg">{_json_for_script(cfg)}</script>'
-        f'<script nonce="{_e(nonce)}">{_SCRIPT}</script></body></html>'
+        f'<script nonce="{_e(nonce)}">{_SCRIPT}{_VIEWER_SCRIPT}</script></body></html>'
     )
 
 

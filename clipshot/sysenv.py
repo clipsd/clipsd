@@ -103,23 +103,137 @@ def open_url(url) -> bool:
 
 
 
-def run_elevated_self(arguments: list):
-    """Windows: start this program once more as administrator (one UAC prompt naming ClipSD, not a shell) with
-    the given arguments; it does one thing and exits. "Photo from phone" uses it for "Allow again"
-    (clipsd --allow-phone-firewall, phone.apply_windows_firewall). Returns (True, "") when Windows started it,
-    (False, reason) otherwise: the UAC prompt was refused, not Windows. The result itself is not awaited."""
-    if sys.platform != "win32":
-        return False, "not Windows"
+def _system_dir() -> str:
+    """Windows: system folder of programs that run natively in this process: System32 (GetSystemDirectoryW); a 32-bit
+    ClipSD on 64-bit Windows: Sysnative (the real System32, not SysWOW64). OSError when Windows does not answer."""
     import ctypes
-    import subprocess
-    if getattr(sys, "frozen", False):
-        program, args = sys.executable, list(arguments)
-    else:
-        program, args = sys.executable, ["-m", "clipshot"] + list(arguments)
+    import struct
+    buf = ctypes.create_unicode_buffer(32768)
+    if struct.calcsize("P") == 4:
+        n = ctypes.windll.kernel32.GetWindowsDirectoryW(buf, len(buf))
+        native = os.path.join(buf.value, "Sysnative") if n else ""
+        if native and os.path.isdir(native):
+            return native
+    n = ctypes.windll.kernel32.GetSystemDirectoryW(buf, len(buf))
+    if not n or n >= len(buf):
+        raise OSError("GetSystemDirectoryW failed")
+    return buf.value
+
+
+def system_program(*parts) -> str:
+    """Windows: full path of a Windows program in the system folder, e.g. system_program("netsh.exe") or
+    system_program("WindowsPowerShell", "v1.0", "powershell.exe"). Never a bare name: CreateProcess and ShellExecute
+    look for a bare name first in the folder of ClipSD, which a per-user install leaves writable for the user, so a
+    planted powershell.exe there would run (as administrator, behind a UAC prompt naming ClipSD: Б4 of the 1.34.1
+    review). OSError when the system folder is unknown."""
+    path = os.path.join(_system_dir(), *parts)
+    if not os.path.isabs(path):
+        raise OSError(f"not absolute: {path}")
+    return path
+
+
+def powershell_exe() -> str:
+    """Windows PowerShell 5.1 by full path (the OCR and the OCR language install use it)."""
+    return system_program("WindowsPowerShell", "v1.0", "powershell.exe")
+
+
+def encoded_command(script_text: str) -> str:
+    """Script text for powershell -EncodedCommand: base64 of UTF-16LE (no script file anyone could swap)."""
+    import base64
+    return base64.b64encode(script_text.encode("utf-16-le")).decode("ascii")
+
+
+PS_QUOTES = "'\u2018\u2019\u201a\u201b"   # PowerShell treats all of these as single quotes
+
+
+def ps_quote(value: str) -> str:
+    """A PowerShell single-quoted literal: nothing inside is expanded. ValueError for control characters and the
+    typographic single quotes (PowerShell ends a quoted string on them too); the ASCII quote is doubled."""
+    value = str(value)
+    if any(ord(c) < 32 or c in PS_QUOTES[1:] for c in value):
+        raise ValueError(f"unsafe for PowerShell: {value!r}")
+    return "'" + value.replace("'", "''") + "'"
+
+
+def elevated_powershell_parameters(script_text: str) -> str:
+    """Command line for an elevated Windows PowerShell (run_elevated_wait): the whole script in -EncodedCommand."""
+    return "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand " + encoded_command(script_text)
+
+
+ERROR_CANCELLED = 1223   # ShellExecuteEx: the person refused the UAC prompt
+
+
+def _shell_execute_info():
+    import ctypes
+    from ctypes import wintypes
+
+    class SHELLEXECUTEINFOW(ctypes.Structure):
+        _fields_ = [("cbSize", wintypes.DWORD), ("fMask", ctypes.c_ulong), ("hwnd", wintypes.HWND),
+                    ("lpVerb", wintypes.LPCWSTR), ("lpFile", wintypes.LPCWSTR), ("lpParameters", wintypes.LPCWSTR),
+                    ("lpDirectory", wintypes.LPCWSTR), ("nShow", ctypes.c_int), ("hInstApp", wintypes.HINSTANCE),
+                    ("lpIDList", ctypes.c_void_p), ("lpClass", wintypes.LPCWSTR), ("hkeyClass", wintypes.HKEY),
+                    ("dwHotKey", wintypes.DWORD), ("hIconOrMonitor", wintypes.HANDLE), ("hProcess", wintypes.HANDLE)]
+    return SHELLEXECUTEINFOW
+
+
+class _WinApi:
+    """The four calls of run_elevated_wait (tests replace this object)."""
+
+    def __init__(self):
+        import ctypes
+        from ctypes import wintypes
+        shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        self._execute = shell32.ShellExecuteExW
+        self._execute.argtypes = [ctypes.c_void_p]
+        self._execute.restype = wintypes.BOOL
+        self.WaitForSingleObject = kernel32.WaitForSingleObject
+        self.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        self.WaitForSingleObject.restype = wintypes.DWORD
+        self.GetExitCodeProcess = kernel32.GetExitCodeProcess
+        self.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+        self.GetExitCodeProcess.restype = wintypes.BOOL
+        self.CloseHandle = kernel32.CloseHandle
+        self.CloseHandle.argtypes = [wintypes.HANDLE]
+        self._ctypes = ctypes
+
+    def ShellExecuteExW(self, info_ref):
+        ok = self._execute(info_ref)
+        return ok, (0 if ok else self._ctypes.get_last_error())
+
+
+def run_elevated_wait(program: str, parameters: str, timeout_ms: int, api=None):
+    """Windows: start a program as administrator (UAC prompt), hidden, and wait for it: ShellExecuteExW with
+    SEE_MASK_NOCLOSEPROCESS, WaitForSingleObject, GetExitCodeProcess. Call it from a background thread.
+    The elevated program gets only its command line: nothing is read from or written to the user's folders.
+    Returns (exit code or None, reason, declined): declined is True when the UAC prompt was refused."""
+    import ctypes
+    from ctypes import wintypes
+    if api is None:
+        if sys.platform != "win32":
+            return None, "not Windows", False
+        api = _WinApi()
+        try:
+            ctypes.windll.ole32.CoInitializeEx(None, 0x2 | 0x4)   # ShellExecuteEx wants COM in its thread
+        except (AttributeError, OSError):
+            pass
+    if not os.path.isabs(program):
+        return None, f"not absolute: {program}", False
+    info = _shell_execute_info()()
+    info.cbSize = ctypes.sizeof(info)
+    info.fMask = 0x40 | 0x100   # SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC
+    info.lpVerb, info.lpFile, info.lpParameters, info.nShow = "runas", program, parameters, 0   # SW_HIDE
+    ok, error = api.ShellExecuteExW(ctypes.byref(info))
+    if not ok:
+        return None, f"ShellExecuteEx {error}", error == ERROR_CANCELLED
+    if not info.hProcess:
+        return None, "no process handle", False
     try:
-        rc = ctypes.windll.shell32.ShellExecuteW(None, "runas", program, subprocess.list2cmdline(args), None, 0)
-    except (AttributeError, OSError) as exc:
-        return False, str(exc)
-    if rc <= 32:   # ShellExecute: values up to 32 are errors (5: access denied, the UAC prompt was refused)
-        return False, f"ShellExecute {rc}"
-    return True, ""
+        if api.WaitForSingleObject(info.hProcess, timeout_ms) != 0:   # WAIT_OBJECT_0
+            return None, "timeout", False
+        code = wintypes.DWORD()
+        if not api.GetExitCodeProcess(info.hProcess, ctypes.byref(code)):
+            return None, "GetExitCodeProcess failed", False
+        return code.value, "", False
+    finally:
+        api.CloseHandle(info.hProcess)

@@ -51,8 +51,8 @@ NO_REPLY = ("org.freedesktop.DBus.Error.NoReply", "org.freedesktop.DBus.Error.Ti
 class WinInfo:
     id: str                 # идентификатор окна у источника (Mutter id, XID, HWND)
     title: str
-    app: str                # название программы
-    icon: str = ""          # имя значка темы (GNOME), путь к программе (Windows) или пусто
+    app: str                # название программы (GNOME), имя exe без расширения (Windows), WM_CLASS (X11)
+    icon: str = ""          # имя значка темы или путь к значку (GNOME, X11), путь к программе (Windows) или пусто
     rect: QRect = field(default_factory=QRect)   # видимая рамка окна без тени, глобальные точки Qt
     monitor: int = 0
     minimized: bool = False
@@ -60,6 +60,44 @@ class WinInfo:
     z: int = 0              # порядок наложения: больше = выше
     pid: int = 0
     source: str = ""        # gnome-ext | ewmh | win32
+    app_name: str = ""      # понятное имя программы для списка: описание exe (Windows), Name из .desktop (X11)
+
+
+def display_app(win: WinInfo) -> str:
+    """Имя программы, как его видит человек: app_name, иначе app (имя exe или WM_CLASS из строчных букв: с заглавной)."""
+    name = " ".join((win.app_name or win.app or "").split())
+    if name and name == name.lower():
+        name = name[:1].upper() + name[1:]
+    return name
+
+
+# Слова, которые есть в именах многих программ и сами программу не называют: по ним дубль не ищется
+_GENERIC_WORDS = {"microsoft", "windows", "google", "mozilla", "apple", "adobe", "corporation", "desktop", "app",
+                  "application", "client", "the", "for", "and", "pro", "beta", "x64", "x86", "64", "32", "bit"}
+APP_NAME_MAX = 28   # дальше имя программы обрезается («…»)
+
+
+def _words(text: str) -> list:
+    import re
+    return re.findall(r"\w+", text.casefold())
+
+
+def menu_app_name(title: str, app: str) -> str:
+    """Имя программы для строки списка окон или пусто, если оно уже есть в заголовке: «ClipSD - Google Chrome»
+    (Google Chrome), «Отчёт.docx - Word» (Microsoft Word: «Word» отдельным словом), «Telegram (3)» (Telegram
+    Desktop). Общие слова (Microsoft, Windows, Google, Desktop) за имя программы не считаются."""
+    app = " ".join((app or "").split())
+    if not app:
+        return ""
+    t, a = " ".join((title or "").split()).casefold(), app.casefold()
+    if a in t:
+        return ""
+    title_words = set(_words(t))
+    if any(len(w) >= 3 and w not in _GENERIC_WORDS and w in title_words for w in _words(a)):
+        return ""
+    if len(app) > APP_NAME_MAX:
+        app = app[:APP_NAME_MAX - 1].rstrip() + "…"
+    return app
 
 
 @dataclass
@@ -158,6 +196,91 @@ def ext_state_on_disk(state: str) -> str:
 
 # --- X11 и XWayland: EWMH -------------------------------------------------------
 
+_desktop_cache = {"key": None, "by_wmclass": {}, "by_id": {}}
+
+
+def _applications_dirs() -> list:
+    data_home = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
+    dirs = [data_home] + (os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":")
+    return [os.path.join(d, "applications") for d in dirs if d]
+
+
+def _read_desktop(path: str):
+    """Раздел [Desktop Entry] файла .desktop: {ключ: значение} или None (не программа, скрытый, не читается)."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            text = f.read(65536)
+    except OSError:
+        return None
+    entry, inside = {}, False
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("["):
+            if inside:
+                break
+            inside = line == "[Desktop Entry]"
+            continue
+        if inside and "=" in line and not line.startswith("#"):
+            k, _sep, v = line.partition("=")
+            entry.setdefault(k.strip(), v.strip())
+    if entry.get("Type", "Application") != "Application" or entry.get("Hidden", "").lower() == "true":
+        return None
+    return entry
+
+
+def _desktop_index():
+    """Файлы .desktop из папок XDG (свои раньше системных): по StartupWMClass и по имени файла. Перечитываются,
+    только если папки изменились (поставили или удалили программу)."""
+    dirs = []
+    for d in _applications_dirs():
+        try:
+            dirs.append((d, os.stat(d).st_mtime_ns))
+        except OSError:
+            continue
+    key = tuple(dirs)
+    if _desktop_cache["key"] == key:
+        return _desktop_cache["by_wmclass"], _desktop_cache["by_id"]
+    by_wmclass, by_id = {}, {}
+    for d, _m in dirs:
+        try:
+            names = sorted(n for n in os.listdir(d) if n.endswith(".desktop"))
+        except OSError:
+            continue
+        for n in names:
+            entry = _read_desktop(os.path.join(d, n))
+            if entry is None:
+                continue
+            wm = entry.get("StartupWMClass", "").casefold()
+            if wm:
+                by_wmclass.setdefault(wm, entry)
+            stem = n[:-len(".desktop")].casefold()
+            by_id.setdefault(stem, entry)
+            by_id.setdefault(stem.rsplit(".", 1)[-1], entry)   # org.gnome.Nautilus -> nautilus
+    _desktop_cache.update(key=key, by_wmclass=by_wmclass, by_id=by_id)
+    return by_wmclass, by_id
+
+
+def desktop_app(wm_class) -> tuple:
+    """(Имя программы на языке ClipSD, значок) по WM_CLASS (instance, class) из файла .desktop или ("", "")."""
+    try:
+        by_wmclass, by_id = _desktop_index()
+    except Exception:   # noqa: BLE001 — имя программы не должно мешать списку окон
+        return "", ""
+    names = [c.casefold() for c in (wm_class[1], wm_class[0]) if c]
+    entry = next((by_wmclass[c] for c in names if c in by_wmclass), None) or \
+        next((by_id[c] for c in names if c in by_id), None)
+    if entry is None:
+        return "", ""
+    try:
+        from .i18n import current
+        lang = current()
+    except Exception:   # noqa: BLE001
+        lang = ""
+    name = ""
+    if lang:
+        name = entry.get(f"Name[{lang}]") or next((v for k, v in entry.items() if k.startswith(f"Name[{lang}_")), "")
+    return (name or entry.get("Name", "")), entry.get("Icon", "")
+
 def from_ewmh(screens=None, display_factory=None):
     """Окна по EWMH. Под GNOME Wayland видны только окна XWayland (список неполный).
 
@@ -227,9 +350,11 @@ def from_ewmh(screens=None, display_factory=None):
             rect = QRect(round(x / dpr), round(y / dpr), max(1, round(width / dpr)), max(1, round(height / dpr)))
             centre = QPoint(rect.center())
             mon = next((i for i, s in enumerate(screens) if s.geometry().contains(centre)), 0)
+            app_name, icon = desktop_app(cls)
             out.append(WinInfo(id=str(xid), title=title, app=cls[1] or cls[0], rect=rect, monitor=mon,
                                minimized=hidden in state, focused=xid == active, z=z,
-                               pid=int(pid[0]) if pid is not None and len(pid) else 0, source="ewmh"))
+                               pid=int(pid[0]) if pid is not None and len(pid) else 0, source="ewmh",
+                               app_name=app_name, icon=icon or (cls[0] or cls[1] or "").casefold()))
         out.sort(key=lambda i: -i.z)
         return out
     finally:
@@ -268,11 +393,136 @@ def win32_records_to_list(records, screens, exclude=()) -> list:
         else:
             rect, mon = win_physical_to_qt(*rec["frame"], screens)
         exe = rec.get("exe") or ""
-        app = os.path.splitext(os.path.basename(exe.replace("\\", "/")))[0] if exe else ""
-        out.append(WinInfo(id=str(rec["hwnd"]), title=rec["title"], app=app, icon=exe, rect=rect, monitor=mon,
-                           minimized=bool(rec["iconic"]), focused=bool(rec.get("foreground")), z=n - i,
-                           pid=int(rec.get("pid") or 0), source="win32"))
+        shown = rec.get("app_exe", exe) or ""   # программа окна: у рамки магазинного приложения та, что внутри
+        if is_host_exe(shown):
+            shown = ""   # «Application Frame Host» человеку ничего не говорит: имя приложения уже в заголовке
+        out.append(WinInfo(id=str(rec["hwnd"]), title=rec["title"], app=exe_stem(shown), icon=shown, rect=rect,
+                           monitor=mon, minimized=bool(rec["iconic"]), focused=bool(rec.get("foreground")), z=n - i,
+                           pid=int(rec.get("pid") or 0), source="win32",
+                           app_name=(rec.get("desc") or "") if shown else ""))
     return out
+
+
+# Процессы-рамки магазинных приложений Windows (UWP): само приложение работает в другом процессе, его окно
+# Windows.UI.Core.CoreWindow лежит внутри рамки
+HOST_EXES = {"applicationframehost", "wwahost"}
+
+
+def exe_stem(path: str) -> str:
+    return os.path.splitext(os.path.basename((path or "").replace("\\", "/")))[0]
+
+
+def is_host_exe(path: str) -> bool:
+    return exe_stem(path).casefold() in HOST_EXES
+
+
+_desc_cache = {}
+FILE_VER_GET_LOCALISED = 0x01   # описание на языке Windows (у системных программ оно в файле .mui)
+
+
+def _version_api():
+    import ctypes
+    from ctypes import wintypes
+    v = ctypes.WinDLL("version")
+    LPCWSTR, DWORD, BOOL, UINT = wintypes.LPCWSTR, wintypes.DWORD, wintypes.BOOL, wintypes.UINT
+    v.GetFileVersionInfoSizeExW.restype = DWORD
+    v.GetFileVersionInfoSizeExW.argtypes = [DWORD, LPCWSTR, ctypes.POINTER(DWORD)]
+    v.GetFileVersionInfoExW.restype = BOOL
+    v.GetFileVersionInfoExW.argtypes = [DWORD, LPCWSTR, DWORD, DWORD, ctypes.c_void_p]
+    v.VerQueryValueW.restype = BOOL
+    v.VerQueryValueW.argtypes = [ctypes.c_void_p, LPCWSTR, ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(UINT)]
+    return v
+
+
+def _read_description(path: str, api) -> str:
+    import ctypes
+    from ctypes import wintypes
+    handle = wintypes.DWORD(0)
+    size = api.GetFileVersionInfoSizeExW(FILE_VER_GET_LOCALISED, path, ctypes.byref(handle))
+    if not size or size > (1 << 22):
+        return ""
+    buf = ctypes.create_string_buffer(size)
+    if not api.GetFileVersionInfoExW(FILE_VER_GET_LOCALISED, path, 0, size, buf):
+        return ""
+    ptr, n = ctypes.c_void_p(), wintypes.UINT(0)
+    pairs = []
+    if api.VerQueryValueW(buf, "\\VarFileInfo\\Translation", ctypes.byref(ptr), ctypes.byref(n)) \
+            and ptr.value and n.value >= 4:
+        arr = (ctypes.c_uint16 * (min(n.value, 64) // 2)).from_address(ptr.value)
+        pairs = [(arr[i], arr[i + 1]) for i in range(0, len(arr) - 1, 2)]
+    for lang, cp in pairs + [(0x0409, 0x04B0), (0x0409, 0x04E4), (0x0000, 0x04B0)]:
+        sub = f"\\StringFileInfo\\{lang:04X}{cp:04X}\\FileDescription"
+        ptr, n = ctypes.c_void_p(), wintypes.UINT(0)
+        if api.VerQueryValueW(buf, sub, ctypes.byref(ptr), ctypes.byref(n)) and ptr.value and n.value > 0:
+            text = " ".join(ctypes.wstring_at(ptr.value, min(n.value, 512)).split("\0", 1)[0].split())
+            if text:
+                return text
+    return ""
+
+
+# Типы дисков GetDriveTypeW. Описание и значок программы читаются в потоке интерфейса (при Alt+W и в меню окон):
+# только с дисков этого компьютера. Сетевой диск (подключённый Z: или путь \\сервер\папка) мог бы задержать окно
+# выделения, пока отвечает (или не отвечает) сервер (1.34.1, В2 проверки 1.34.0).
+DRIVE_REMOVABLE, DRIVE_FIXED, DRIVE_REMOTE, DRIVE_CDROM, DRIVE_RAMDISK = 2, 3, 4, 5, 6
+LOCAL_DRIVES = (DRIVE_REMOVABLE, DRIVE_FIXED, DRIVE_RAMDISK)
+DRIVE_CACHE_S = 60.0   # подключение диска меняется редко: тип запоминается на минуту
+_drive_cache = {}
+
+
+def _drive_type_win(root: str) -> int:
+    """GetDriveTypeW для корня «C:\\». Сам вызов к серверу не обращается: тип берётся из списка дисков Windows."""
+    import ctypes
+    from ctypes import wintypes
+    kernel32 = ctypes.WinDLL("kernel32")
+    fn = kernel32.GetDriveTypeW
+    fn.argtypes = [wintypes.LPCWSTR]
+    fn.restype = wintypes.UINT
+    return int(fn(root))
+
+
+def is_local_path(path: str, now: float = None) -> bool:
+    r"""Путь на диске этого компьютера (встроенный, съёмный, RAM-диск), а не сетевой. UNC (\\сервер\…, //…,
+    \\?\UNC\…), путь без буквы диска, сетевой и CD-диск, любая ошибка: False (покажется имя exe и буква)."""
+    import time
+    p = (path or "").replace("/", "\\")
+    if p.startswith("\\\\?\\") or p.startswith("\\\\.\\"):
+        p = p[4:]
+        if p[:4].upper() == "UNC\\":
+            return False
+    if len(p) < 3 or p[1] != ":" or p[2] != "\\" or not p[0].isalpha():
+        return False   # UNC и всё, где нет буквы диска
+    root = p[0].upper() + ":\\"
+    now = time.monotonic() if now is None else now
+    hit = _drive_cache.get(root)
+    if hit is not None and 0 <= now - hit[1] < DRIVE_CACHE_S:
+        return hit[0]
+    try:
+        local = _drive_type_win(root) in LOCAL_DRIVES
+    except Exception:   # noqa: BLE001 (не знаем, какой это диск: как сетевой)
+        local = False
+    _drive_cache[root] = (local, now)
+    return local
+
+
+def file_description(path: str, api=None) -> str:
+    """Описание файла программы Windows (FileDescription из ресурса версии: «Microsoft Word», «Проводник»,
+    «Google Chrome») или пусто. Запоминается по пути: при каждом Alt+W файлы заново не читаются.
+    api: подмена version.dll в тестах (GetFileVersionInfoSizeExW, GetFileVersionInfoExW, VerQueryValueW)."""
+    if not path:
+        return ""
+    key = path.casefold()
+    if key in _desc_cache:
+        return _desc_cache[key]
+    if not is_local_path(path):
+        return ""   # сетевой диск: не ждать сервер в потоке интерфейса (не запоминается: диск могут переподключить)
+    try:
+        desc = _read_description(path, api if api is not None else _version_api())
+    except Exception:   # noqa: BLE001 — нет ресурса версии, файл недоступен: покажется имя exe
+        desc = ""
+    if len(_desc_cache) > 512:
+        _desc_cache.clear()
+    _desc_cache[key] = desc
+    return desc
 
 
 def win_physical_to_qt(x, y, w, h, screens):
@@ -298,6 +548,8 @@ def _win32_libs():
     enum_proc = ctypes.WINFUNCTYPE(BOOL, HWND, wintypes.LPARAM)
     sig = {
         (user32, "EnumWindows"): (BOOL, [enum_proc, wintypes.LPARAM]),
+        (user32, "EnumChildWindows"): (BOOL, [HWND, enum_proc, wintypes.LPARAM]),
+        (user32, "GetClassNameW"): (INT, [HWND, wintypes.LPWSTR, INT]),
         (user32, "GetForegroundWindow"): (HWND, []),
         (user32, "GetWindowTextLengthW"): (INT, [HWND]),
         (user32, "GetWindowTextW"): (INT, [HWND, wintypes.LPWSTR, INT]),
@@ -340,13 +592,13 @@ def _win32_records():
     out = []
     for hwnd in hwnds:
         try:
-            out.append(_win32_record(hwnd, foreground, user32, dwm, kernel32))
+            out.append(_win32_record(hwnd, foreground, user32, dwm, kernel32, enum_proc))
         except Exception as exc:   # noqa: BLE001 — одно окно не прочиталось: список без него
             print(f"Окно Windows пропущено: {type(exc).__name__}", flush=True)
     return out
 
 
-def _win32_record(hwnd, foreground, user32, dwm, kernel32):
+def _win32_record(hwnd, foreground, user32, dwm, kernel32, enum_proc=None):
     import ctypes
     from ctypes import wintypes
     GWL_EXSTYLE, GW_OWNER, DWMWA_EXTENDED_FRAME_BOUNDS, DWMWA_CLOAKED = -20, 4, 9, 14
@@ -361,21 +613,51 @@ def _win32_record(hwnd, foreground, user32, dwm, kernel32):
         user32.GetWindowRect(hwnd, ctypes.byref(r))
     pid = wintypes.DWORD(0)
     user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-    exe = ""
-    hp = kernel32.OpenProcess(0x1000, False, pid.value)   # PROCESS_QUERY_LIMITED_INFORMATION
-    if hp:
+    exe = _process_exe(pid.value, kernel32)
+    app_exe = exe
+    if is_host_exe(exe):   # рамка магазинного приложения: программа та, чьё окно CoreWindow внутри
         try:
-            size = wintypes.DWORD(1024)
-            path = ctypes.create_unicode_buffer(1024)
-            if kernel32.QueryFullProcessImageNameW(hp, 0, path, ctypes.byref(size)):
-                exe = path.value
-        finally:
-            kernel32.CloseHandle(hp)
+            app_exe = _uwp_child_exe(hwnd, pid.value, user32, kernel32, enum_proc)
+        except Exception:   # noqa: BLE001 — не нашлась: имя приложения и так в заголовке
+            app_exe = ""
     return {"hwnd": int(hwnd or 0), "title": buf.value, "exe": exe, "pid": pid.value,
+            "app_exe": app_exe, "desc": file_description(app_exe) if app_exe and not is_host_exe(app_exe) else "",
             "visible": bool(user32.IsWindowVisible(hwnd)), "exstyle": user32.GetWindowLongPtrW(hwnd, GWL_EXSTYLE),
             "owner": bool(user32.GetWindow(hwnd, GW_OWNER)), "cloaked": bool(cloaked.value),
             "iconic": bool(user32.IsIconic(hwnd)), "foreground": hwnd == foreground,
             "frame": (r.left, r.top, r.right - r.left, r.bottom - r.top)}
+
+
+def _process_exe(pid, kernel32) -> str:
+    import ctypes
+    from ctypes import wintypes
+    hp = kernel32.OpenProcess(0x1000, False, pid)   # PROCESS_QUERY_LIMITED_INFORMATION
+    if not hp:
+        return ""
+    try:
+        size = wintypes.DWORD(1024)
+        path = ctypes.create_unicode_buffer(1024)
+        return path.value if kernel32.QueryFullProcessImageNameW(hp, 0, path, ctypes.byref(size)) else ""
+    finally:
+        kernel32.CloseHandle(hp)
+
+
+def _uwp_child_exe(hwnd, host_pid, user32, kernel32, enum_proc) -> str:
+    """Программа магазинного приложения в рамке ApplicationFrameHost: процесс дочернего окна
+    Windows.UI.Core.CoreWindow (у свёрнутого или приостановленного приложения его может не быть: тогда пусто)."""
+    import ctypes
+    from ctypes import wintypes
+    children = []
+    proc = enum_proc(lambda h, _l: children.append(h) or len(children) < 64)
+    user32.EnumChildWindows(hwnd, proc, 0)
+    name = ctypes.create_unicode_buffer(64)
+    for child in children:
+        if user32.GetClassNameW(child, name, 64) and name.value == "Windows.UI.Core.CoreWindow":
+            cpid = wintypes.DWORD(0)
+            user32.GetWindowThreadProcessId(child, ctypes.byref(cpid))
+            if cpid.value and cpid.value != host_pid:
+                return _process_exe(cpid.value, kernel32)
+    return ""
 
 
 def from_win32(exclude=(), screens=None):

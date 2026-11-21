@@ -5,7 +5,7 @@
   "selector.btn_full_shot": "Zrzut całego ekranu",
   "selector.btn_ocr": "Kopiuj tekst",
   "selector.btn_record": "Nagraj wideo",
-  "selector.btn_retake": "Zaznacz ponownie",
+  "selector.btn_retake": "Inny obszar",
   "selector.btn_save": "Zapisz",
   "selector.btn_translate": "Przetłumacz zaznaczenie",
   "selector.btn_translate_all": "Przetłumacz cały ekran",
@@ -50,7 +50,7 @@
   "selector.trc_translation": "Tłumaczenie",
   "selector.trc_all": "Cały ekran",
   "selector.btn_window": "Zrzut okna",
-  "selector.win_chip": "Okna",
+  "selector.win_chip": "Otwarte okna",
   "selector.win_minimized": "zminimalizowane",
   "selector.win_monitor": "Ekran {n}",
   "selector.win_untitled": "Bez tytułu",
@@ -67,5 +67,9 @@
   "selector.win_offscreen": "To okno jest teraz poza ekranem",
   "selector.win_slow": "GNOME odpowiada powoli: na razie nie widać wszystkich okien",
   "selector.win_failed": "Nie udało się pobrać listy okien: zaznacz okno myszą",
-  "selector.win_visible_only": "Okno jest zasłonięte przez inne: tutaj zostanie zrzucona tylko widoczna część"
+  "selector.win_visible_only": "Okno jest zasłonięte przez inne: tutaj zostanie zrzucona tylko widoczna część",
+  "selector.sub_edit_tools": "strzałki, tekst, rozmycie",
+  "selector.saved": "Zapisano: {name}",
+  "selector.saved_already": "Już zapisano: {name}",
+  "selector.save_failed": "Nie udało się zapisać zrzutu"
 }

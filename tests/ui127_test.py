@@ -310,6 +310,8 @@ expected += [["GroupButton", "group", "", t] for t in ("Стрелки и лин
              "Надписи: Текст (T)", "Рисование: Маркер (M)", "Скрыть и стереть: Размытие (B)", "Текст с картинки: Копировать текст (I)")]
 expected += [["QToolButton", "more", "Все инструменты", "Все инструменты по группам, с горячими клавишами"]]
 expected += [["BellButton", "bell", "", "Уведомления: новая версия, что нового, сообщения программы"]]   # 1.32: колокольчик
+expected += [["QToolButton", "phone", "С телефона", "С телефона · Снять камерой или отправить картинку с телефона"]]   # 1.34
+expected += [["FormButton", "group", "", "Форма снимка: скруглённые углы, овал, круг"]]   # 1.34: форма снимка
 check(sorted(now) == sorted(expected) and now[:2] == quick, f"кнопки панелей: {len(now)} шт., состав как в main, отмена и повтор первыми")
 if sorted(now) != sorted(expected):
     print("   лишние:", [x for x in now if x not in expected], "нет:", [x for x in expected if x not in now])

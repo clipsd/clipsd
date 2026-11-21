@@ -443,7 +443,7 @@ for dark in (False, True):
         check(r >= 4.5, f"{'тёмная' if dark else 'светлая'} тема: {name} {r:.1f}:1")
     check(ratio(p["text"], p["soft"]) >= 4.5, f"{'тёмная' if dark else 'светлая'} тема: кнопка под мышью")
 ed, c = editor(RED)
-wide, langs = [], set()
+wide, langs, cut = [], set(), []
 env_lang = os.environ.pop("CLIPSD_LANG", None)   # иначе язык из окружения важнее выбранного
 for lang in i18n.LANGUAGES:
     langs.add(i18n.set_language(lang))
@@ -452,6 +452,11 @@ for lang in i18n.LANGUAGES:
         h.show_kind(kind, QColor(RED))
         if h.sizeHint().width() > 640 or h.button.width() < h.button.fontMetrics().horizontalAdvance(h.button.text()):
             wide.append((lang, kind, h.sizeHint().width()))
+        for lbl in (h.title, h.sub):   # 1.34.1: длинная строка переносится по словам, но видна целиком
+            need = lbl.heightForWidth(lbl.width()) if lbl.wordWrap() else lbl.fontMetrics().height()
+            whole = lbl.height() >= need and (lbl.wordWrap() or lbl.width() >= lbl.fontMetrics().horizontalAdvance(lbl.text()))
+            if not whole or lbl.geometry().right() > h.width() or lbl.geometry().bottom() > h.height():
+                cut.append((lang, kind, lbl.text()))
     h.dismiss()
     h.deleteLater()
 if env_lang is not None:
@@ -459,6 +464,7 @@ if env_lang is not None:
 i18n.set_language("ru")
 check(langs == set(i18n.LANGUAGES), f"проверены все 12 языков: {sorted(langs)}")
 check(not wide, f"подсказка на 12 языках не шире 640 px, подпись кнопки целиком: {wide}")
+check(not cut, f"строки подсказки видны целиком (перенос по словам на узкой карточке): {cut[:3]}")
 done(ed)
 
 print(f"\n{'ВСЁ ХОРОШО' if not failures else 'ОШИБКИ: ' + str(len(failures))}")

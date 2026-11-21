@@ -1,0 +1,9 @@
+- The “New in version” window no longer appears over the selection window if you press Alt+W right after a screenshot: it shows up when you finish.
+- From phone. A photo that arrives while a screenshot is being closed (the “Screenshot not saved” question is open) is no longer lost: it opens as a separate screenshot. Every photo from the phone is saved to the screenshots folder at once (if auto-save is on), even when it went into an open screenshot.
+- Selection window. Pressing “Save” again for the same screenshot no longer creates identical files: you see “Already saved” and the file name. Holding Ctrl+S also saves only once.
+- Windows. The “Open windows ▾” list does not wait for network drives: a program on a network drive gets a letter instead of its icon.
+- The hint by the palette is no wider than before: a long line wraps to a second one.
+- The “From phone” button in the editor can be reached from the keyboard (Tab).
+- The “New in version” window changes language together with the program.
+- Fixes in the Ukrainian, Chinese, Spanish, English, Portuguese and Turkish translations.
+- Windows. Russian text from a picture no longer turns into Latin letters. If Windows has no recognition for Russian text, the program offers to install it with the “Install recognition” button.

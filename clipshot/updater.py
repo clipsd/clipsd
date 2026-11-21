@@ -1954,6 +1954,14 @@ class Updater(QObject):
         self._fail_attempt(record, reason)
         return "failed"
 
+    def _whats_new_after_update(self, notes: str) -> None:
+        """1.34: when this version has highlighted features (novoe.py), the program shows its "New in version" window
+        with the same "Update installed" line instead of "ClipSD updated"; otherwise the usual What's new window."""
+        show = getattr(self.ctx, "show_novoe_after_update", None)
+        if callable(show) and show(self.installed):
+            return
+        self.ui.whats_new(self.installed, notes)
+
     # previous attempt ------------------------------------------------------
     def check_previous_attempt(self) -> str:
         """At start (and 10 min after starting an install): result of the last attempt."""
@@ -1978,7 +1986,7 @@ class Updater(QObject):
             notifications.remember_whats_new(self.config, self.installed, record.get("notes"))
             self._save()
             notes = notes_in(record.get("notes"), i18n.current())
-            self._show_when_quiet(lambda: self.ui.whats_new(self.installed, notes))
+            self._show_when_quiet(lambda: self._whats_new_after_update(notes))
         elif state == "deferred":
             # the switch waits until the program can quit; at start nothing is open, so it goes now
             if not record.get("deferred"):

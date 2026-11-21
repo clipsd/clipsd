@@ -306,7 +306,10 @@ if not LINUX:
     skip("жизненный цикл обновления через clipsd-switch и SIGTERM")
     bad = [n for n, ok in checks if not ok]
     print("ИТОГ:", "все проверки пройдены" if not bad else f"провалено {len(bad)}")
-    sys.exit(1 if bad else 0)
+    # как в конце теста и как программа: без разбора обёрток Qt в Py_Exit (CI Windows 1.34.1: после «ИТОГ»
+    # нарушение доступа 0xC0000005 при завершении интерпретатора, «no Python frame»)
+    from clipshot.exitutil import quick_exit  # noqa: E402
+    quick_exit(1 if bad else 0)
 
 # --- the real program and the real switch helper -----------------------------------------------------
 ROOTS = Path(TMP) / "life"
@@ -360,6 +363,10 @@ t.start(100)
 (Path(sys.argv[1]) / "ready").write_text("1")
 rc = qapp.exec()
 (Path(sys.argv[1]) / "exit").write_text(f"{{rc}} {{a.quit_reason}}")
+# like the real program (__main__.py): without unwrapping the Qt wrappers in Py_Exit, which now and then ends
+# with code 139 after a correct exit (CI 1.34.0: «SIGTERM: выход через Qt с кодом 0» with the settings saved)
+from clipshot.exitutil import quick_exit
+quick_exit(rc)
 ''')
 env = {k: v for k, v in os.environ.items() if not k.startswith(("XDG_", "CLIPSD_", "DBUS_", "DISPLAY", "WAYLAND"))}
 env.update(HOME=str(HOME), PATH="/usr/bin:/bin", XDG_RUNTIME_DIR=str(RUNTIME), QT_QPA_PLATFORM="offscreen",
@@ -416,8 +423,10 @@ try:
     time.sleep(0.5)
     r = helper()
     check(f"помощник: без несохранённого -> ok, переключено (код {r.returncode})", r.returncode == 0)
-    check("программа вышла сама по quit-for-update", wait_for(lambda: proc.poll() is not None, 10)
-          and (work / "exit").read_text().split() == ["0", "update"])
+    gone = wait_for(lambda: proc.poll() is not None, 10)
+    said = (work / "exit").read_text() if (work / "exit").exists() else None
+    check(f"программа вышла сама по quit-for-update (код {proc.returncode}, exit {said!r})",
+          gone and proc.returncode == 0 and (said or "").split() == ["0", "update"])
     check("настройки сохранены при выходе", (work / "config.json").exists())
     check("current -> versions/1.30.1, update-result ok", os.readlink(APP / "current") == "versions/1.30.1"
           and result().get("result") == "ok")
@@ -433,8 +442,10 @@ proc, ready = start_program(work, SPARE_SCRIPT)
 try:
     check("программа для SIGTERM запущена", ready)
     proc.send_signal(signal.SIGTERM)
-    check("SIGTERM: выход через Qt с кодом 0", wait_for(lambda: proc.poll() is not None, 15) and proc.returncode == 0
-          and (work / "exit").read_text().split() == ["0", "signal"])
+    gone = wait_for(lambda: proc.poll() is not None, 15)
+    said = (work / "exit").read_text() if (work / "exit").exists() else None
+    check(f"SIGTERM: выход через Qt с кодом 0 (код {proc.returncode}, exit {said!r})",
+          gone and proc.returncode == 0 and (said or "").split() == ["0", "signal"])
     check("SIGTERM: настройки сохранены", (work / "config.json").exists())
 finally:
     if proc.poll() is None:

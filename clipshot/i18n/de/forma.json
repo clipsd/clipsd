@@ -1,0 +1,19 @@
+{
+  "forma.circle": "Kreis",
+  "forma.circle_move": "Den Kreis mit der Maus verschieben: an der Fläche um ihn herum ziehen",
+  "forma.hint_circle": "Der Kreis lässt sich verschieben",
+  "forma.hint_circle_sub": "Ziehen Sie mit der Maus an der Fläche um den Kreis",
+  "forma.jpg_note": "JPG kennt keine Transparenz: Außerhalb der Form wird der Hintergrund weiß",
+  "forma.jpg_note_color": "JPG kennt keine Transparenz: Außerhalb der Form wird der Hintergrund {color}",
+  "forma.oval": "Oval",
+  "forma.radius": "Radius",
+  "forma.radius_tip": "Eckenradius in Pixeln des Screenshots, von 0 bis zur Hälfte der kürzeren Seite.\nSie können auch den Griff an der oberen linken Ecke des Screenshots ziehen",
+  "forma.rect": "Rechteck",
+  "forma.round_custom": "Abgerundete Ecken: Radius {r} px",
+  "forma.round_l": "Abgerundete Ecken: groß",
+  "forma.round_m": "Abgerundete Ecken: mittel",
+  "forma.round_s": "Abgerundete Ecken: klein",
+  "forma.tip_off": "Form des Screenshots: abgerundete Ecken, Oval, Kreis\nEin Klick schaltet „{name}“ ein, der Pfeil daneben öffnet alle Formen",
+  "forma.tip_on": "Form des Screenshots · {name}\nEin Klick macht wieder ein Rechteck daraus, der Pfeil daneben öffnet alle Formen",
+  "forma.title": "Form des Screenshots"
+}

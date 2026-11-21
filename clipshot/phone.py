@@ -33,6 +33,7 @@ import os
 import secrets
 import shutil
 import socket
+import sys
 import threading
 import time
 import urllib.parse
@@ -976,27 +977,48 @@ def allow_outcome(code: int) -> str:
     return "declined" if code in PKEXEC_DECLINED else "failed"
 
 
-def windows_firewall_commands(program: str, ports=PREFERRED_PORTS) -> list:
-    """netsh commands for "Allow again" (run by an elevated `clipsd --allow-phone-firewall`): remove the inbound
-    rules Windows made for this program (a block rule wins over any allow rule, and Windows does not ask again
-    while it exists), then allow it on private networks only, from the local subnet only, on our ports only."""
+def windows_firewall_commands(program: str, ports=PREFERRED_PORTS, netsh: str = None) -> list:
+    """netsh commands for "Allow again": remove the inbound rules Windows made for this program (a block rule wins over
+    any allow rule, and Windows does not ask again while it exists), then allow it on private networks only, from the
+    local subnet only, on our ports only. netsh by full path from the system folder, never by name (Б4 of the 1.34.1
+    review: a bare name is looked up first in the folder of ClipSD, writable for the user)."""
+    if netsh is None:
+        if sys.platform == "win32":
+            from .sysenv import system_program
+            netsh = system_program("netsh.exe")
+        else:
+            netsh = "netsh"
     return [
-        ["netsh", "advfirewall", "firewall", "delete", "rule", "name=all", "dir=in", f"program={program}"],
-        ["netsh", "advfirewall", "firewall", "add", "rule", "name=ClipSD photo from phone", "dir=in", "action=allow",
+        [netsh, "advfirewall", "firewall", "delete", "rule", "name=all", "dir=in", f"program={program}"],
+        [netsh, "advfirewall", "firewall", "add", "rule", "name=ClipSD photo from phone", "dir=in", "action=allow",
          f"program={program}", "enable=yes", "profile=private", "protocol=TCP",
          f"localport={ports[0]}-{ports[-1]}", "remoteip=localsubnet"],
     ]
 
 
-def apply_windows_firewall(program: str, run=None) -> int:
-    """Body of `clipsd --allow-phone-firewall` (already elevated): the commands above, child processes through
-    sysenv.child_env. Returns the exit code of the last command (the delete may find nothing: that is fine)."""
-    import subprocess
-    from .sysenv import child_env
-    run = run or (lambda argv: subprocess.run(argv, env=child_env(), stdin=subprocess.DEVNULL,
-                                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).returncode)
-    rc = 0
-    for argv in windows_firewall_commands(program):
-        rc = run(argv)
-    return rc
+def firewall_program(program: str = None, executable: str = None) -> str:
+    """The program of the firewall rule: this very ClipSD (sys.executable), an absolute path to an existing file.
+    ValueError otherwise: the path goes into a command that runs as administrator."""
+    executable = executable or sys.executable
+    program = program or executable
+    if not os.path.isabs(program) or not os.path.isfile(program):
+        raise ValueError(f"not an existing absolute path: {program!r}")
+    if os.path.normcase(os.path.abspath(program)) != os.path.normcase(os.path.abspath(executable)):
+        raise ValueError(f"not this program: {program!r}")
+    return program
+
+
+def windows_firewall_script(program: str, netsh: str = None) -> str:
+    """PowerShell script of "Allow again": the two netsh commands, every argument a single-quoted literal
+    (sysenv.ps_quote), so nothing in the path is expanded. Exit code: that of the add command."""
+    from .sysenv import ps_quote
+    delete, add = windows_firewall_commands(program, netsh=netsh)
+    line = lambda argv: "& " + " ".join(ps_quote(a) for a in argv) + " | Out-Null"   # noqa: E731
+    return "\n".join(['$ProgressPreference = "SilentlyContinue"', line(delete), line(add), "exit $LASTEXITCODE"]) + "\n"
+
+
+def firewall_parameters(program: str = None, executable: str = None, netsh: str = None) -> str:
+    """Command line for the elevated PowerShell of "Allow again" (sysenv.run_elevated_wait); built in the normal
+    process, the elevated one reads nothing from the user's folders. ValueError for a wrong program path."""
+    from .sysenv import elevated_powershell_parameters
+    return elevated_powershell_parameters(windows_firewall_script(firewall_program(program, executable), netsh))

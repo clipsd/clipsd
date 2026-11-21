@@ -5,7 +5,7 @@
   "selector.btn_full_shot": "Ganzer Bildschirm",
   "selector.btn_ocr": "Text kopieren",
   "selector.btn_record": "Video aufnehmen",
-  "selector.btn_retake": "Neu auswählen",
+  "selector.btn_retake": "Anderer Bereich",
   "selector.btn_save": "Speichern",
   "selector.btn_translate": "Auswahl übersetzen",
   "selector.btn_translate_all": "Ganzen Bildschirm übersetzen",
@@ -52,7 +52,7 @@
   "selector.win_minimized": "minimiert",
   "selector.win_monitor": "Bildschirm {n}",
   "selector.win_untitled": "Ohne Titel",
-  "selector.win_chip": "Fenster",
+  "selector.win_chip": "Geöffnete Fenster",
   "selector.win_loading": "Fensterliste wird vorbereitet…",
   "selector.win_need_update": "Für alle Fenster die ClipSD-Erweiterung für GNOME aktualisieren",
   "selector.win_need_install": "Für alle Fenster die ClipSD-Erweiterung für GNOME installieren",
@@ -65,5 +65,9 @@
   "selector.win_offscreen": "Dieses Fenster liegt gerade außerhalb des Bildschirms",
   "selector.win_slow": "GNOME antwortet langsam: noch sind nicht alle Fenster sichtbar",
   "selector.win_failed": "Fensterliste nicht erhalten: Fenster mit der Maus auswählen",
-  "selector.win_visible_only": "Das Fenster ist verdeckt: hier wird nur der sichtbare Teil aufgenommen"
+  "selector.win_visible_only": "Das Fenster ist verdeckt: hier wird nur der sichtbare Teil aufgenommen",
+  "selector.sub_edit_tools": "Pfeile, Text, Unschärfe",
+  "selector.saved": "Gespeichert: {name}",
+  "selector.saved_already": "Bereits gespeichert: {name}",
+  "selector.save_failed": "Der Screenshot konnte nicht gespeichert werden"
 }

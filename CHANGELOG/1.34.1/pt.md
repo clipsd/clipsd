@@ -1,0 +1,9 @@
+- A janela «Novidades da versão» não aparece mais sobre a janela de seleção se você apertar Alt+W logo depois de uma captura: ela aparece quando você terminar.
+- Do celular. Uma foto que chega enquanto uma captura está sendo fechada (com a pergunta «Captura não salva» aberta) não se perde mais: ela abre como uma captura separada. Cada foto do celular é salva na hora na pasta de capturas (se o salvamento automático estiver ligado), mesmo quando foi para uma captura aberta.
+- Janela de seleção. Apertar «Salvar» de novo para a mesma captura não cria mais arquivos iguais: aparece «Já salvo» e o nome do arquivo. Segurar Ctrl+S também salva uma vez só.
+- Windows. A lista «Janelas abertas ▾» não espera unidades de rede: um programa numa unidade de rede mostra uma letra no lugar do ícone.
+- A dica ao lado da paleta não fica mais larga que antes: uma linha longa passa para a segunda.
+- O botão «Do celular» no editor pode ser alcançado pelo teclado (Tab).
+- A janela «Novidades da versão» muda de idioma junto com o programa.
+- Correções nas traduções para ucraniano, chinês, espanhol, inglês, português e turco.
+- Windows. O texto russo de uma imagem não vira mais letras latinas. Se o Windows não tiver reconhecimento de texto em russo, o programa oferece instalá-lo com o botão «Instalar reconhecimento».

@@ -1,0 +1,19 @@
+{
+  "forma.circle": "Cercle",
+  "forma.circle_move": "Déplacez le cercle à la souris : faites glisser la zone autour de lui",
+  "forma.hint_circle": "Vous pouvez déplacer le cercle",
+  "forma.hint_circle_sub": "Faites glisser à la souris la zone autour du cercle",
+  "forma.jpg_note": "Le JPG n’a pas de transparence : hors de la forme, le fond sera blanc",
+  "forma.jpg_note_color": "Le JPG n’a pas de transparence : hors de la forme, le fond sera {color}",
+  "forma.oval": "Ovale",
+  "forma.radius": "Rayon",
+  "forma.radius_tip": "Rayon des coins en pixels de la capture, de 0 à la moitié du côté le plus court.\nVous pouvez aussi faire glisser la poignée du coin supérieur gauche de la capture",
+  "forma.rect": "Rectangle",
+  "forma.round_custom": "Coins arrondis : rayon {r} px",
+  "forma.round_l": "Coins arrondis : grands",
+  "forma.round_m": "Coins arrondis : moyens",
+  "forma.round_s": "Coins arrondis : petits",
+  "forma.tip_off": "Forme de la capture : coins arrondis, ovale, cercle\nUn clic active « {name} », la flèche à côté ouvre toutes les formes",
+  "forma.tip_on": "Forme de la capture · {name}\nUn clic revient au rectangle, la flèche à côté ouvre toutes les formes",
+  "forma.title": "Forme de la capture"
+}

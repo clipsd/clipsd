@@ -127,8 +127,15 @@ class ClipMenuStyle(QProxyStyle):
         # недоступный пункт, который всё же надо прочитать (свёрнутое окно в списке окон): читаемый приглушённый цвет
         soft = not enabled and act is not None and bool(act.property("clipsd_soft"))
         painter.setPen(self.text if enabled else (self.note if soft else self.off))
-        painter.drawText(QRect(inner.left() + shift, rect.top(), inner.width() - shift, rect.height()),
-                         int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft), label)
+        # хвост пункта (имя программы в списке окон, « · Microsoft Word») приглушённым читаемым цветом
+        tail = act.property("clipsd_tail") if act is not None else None
+        head = label[:-len(tail)] if isinstance(tail, str) and tail and label.endswith(tail) else label
+        box = QRect(inner.left() + shift, rect.top(), inner.width() - shift, rect.height())
+        align = int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        painter.drawText(box, align, head)
+        if head != label:
+            painter.setPen(self.note if enabled or soft else self.off)
+            painter.drawText(box.adjusted(QFontMetrics(font).horizontalAdvance(head), 0, 0, 0), align, label[len(head):])
         if option.menuItemType == option.MenuItemType.SubMenu:
             painter.setPen(self.muted)
             painter.drawText(inner, int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight), "›")

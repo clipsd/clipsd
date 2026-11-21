@@ -1,0 +1,9 @@
+- La ventana «Novedades de la versión» ya no aparece sobre la ventana de selección si pulsa Alt+W justo después de una captura: aparece cuando termina.
+- Del teléfono. Una foto que llega mientras se cierra una captura (con la pregunta «Captura sin guardar» abierta) ya no se pierde: se abre como una captura aparte. Cada foto del teléfono se guarda enseguida en la carpeta de capturas (si el guardado automático está activado), aunque haya ido a una captura abierta.
+- Ventana de selección. Volver a pulsar «Guardar» para la misma captura ya no crea archivos iguales: verá «Ya guardado» y el nombre del archivo. Mantener Ctrl+S también guarda una sola vez.
+- Windows. La lista «Ventanas abiertas ▾» no espera a las unidades de red: un programa en una unidad de red muestra una letra en lugar de su icono.
+- La pista junto a la paleta ya no es más ancha que antes: una línea larga pasa a la segunda.
+- El botón «Del teléfono» del editor se alcanza con el teclado (Tab).
+- La ventana «Novedades de la versión» cambia de idioma junto con el programa.
+- Correcciones en las traducciones al ucraniano, chino, español, inglés, portugués y turco; el mosaico de la captura de pantalla completa se llama «Pantalla completa».
+- Windows. El texto ruso de una imagen ya no se convierte en letras latinas. Si Windows no tiene reconocimiento de texto ruso, el programa ofrece instalarlo con el botón «Instalar reconocimiento».

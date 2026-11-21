@@ -1,0 +1,19 @@
+{
+  "forma.circle": "Daire",
+  "forma.circle_move": "Daire fareyle taşınır: çevresindeki alanı sürükleyin",
+  "forma.hint_circle": "Daireyi taşıyabilirsiniz",
+  "forma.hint_circle_sub": "Dairenin çevresindeki alanı fareyle sürükleyin",
+  "forma.jpg_note": "JPG saydamlığı desteklemez: şeklin dışındaki arka plan beyaz olur",
+  "forma.jpg_note_color": "JPG saydamlığı desteklemez: şeklin dışındaki arka plan {color} olur",
+  "forma.oval": "Oval",
+  "forma.radius": "Yarıçap",
+  "forma.radius_tip": "Köşe yarıçapı, ekran görüntüsünün pikseli olarak, 0'dan kısa kenarın yarısına kadar.\nEkran görüntüsünün sol üst köşesindeki tutamacı da sürükleyebilirsiniz",
+  "forma.rect": "Dikdörtgen",
+  "forma.round_custom": "Yuvarlak köşeler: yarıçap {r} px",
+  "forma.round_l": "Yuvarlak köşeler: büyük",
+  "forma.round_m": "Yuvarlak köşeler: orta",
+  "forma.round_s": "Yuvarlak köşeler: küçük",
+  "forma.tip_off": "Ekran görüntüsünün şekli: yuvarlak köşeler, oval, daire\nTıklama “{name}” şeklini açar, yanındaki ok tüm şekilleri gösterir",
+  "forma.tip_on": "Ekran görüntüsünün şekli · {name}\nTıklama dikdörtgene döndürür, yanındaki ok tüm şekilleri gösterir",
+  "forma.title": "Ekran görüntüsünün şekli"
+}

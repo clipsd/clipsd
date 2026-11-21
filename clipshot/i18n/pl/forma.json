@@ -1,0 +1,19 @@
+{
+  "forma.circle": "Koło",
+  "forma.circle_move": "Koło przesuwa się myszą: przeciągnij obszar wokół niego",
+  "forma.hint_circle": "Koło można przesunąć",
+  "forma.hint_circle_sub": "Przeciągnij myszą obszar wokół koła",
+  "forma.jpg_note": "JPG nie ma przezroczystości: poza kształtem tło będzie białe",
+  "forma.jpg_note_color": "JPG nie ma przezroczystości: poza kształtem tło będzie w kolorze {color}",
+  "forma.oval": "Owal",
+  "forma.radius": "Promień",
+  "forma.radius_tip": "Promień rogów w pikselach zrzutu, od 0 do połowy krótszego boku.\nMożna też przeciągnąć uchwyt w lewym górnym rogu zrzutu",
+  "forma.rect": "Prostokąt",
+  "forma.round_custom": "Zaokrąglone rogi: promień {r} px",
+  "forma.round_l": "Zaokrąglone rogi: duże",
+  "forma.round_m": "Zaokrąglone rogi: średnie",
+  "forma.round_s": "Zaokrąglone rogi: małe",
+  "forma.tip_off": "Kształt zrzutu: zaokrąglone rogi, owal, koło\nKliknięcie włącza „{name}”, strzałka obok otwiera wszystkie kształty",
+  "forma.tip_on": "Kształt zrzutu · {name}\nKliknięcie przywraca prostokąt, strzałka obok otwiera wszystkie kształty",
+  "forma.title": "Kształt zrzutu"
+}

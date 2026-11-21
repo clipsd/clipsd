@@ -1,0 +1,19 @@
+{
+  "forma.circle": "Círculo",
+  "forma.circle_move": "O círculo se move com o mouse: arraste a área ao redor dele",
+  "forma.hint_circle": "Você pode mover o círculo",
+  "forma.hint_circle_sub": "Arraste com o mouse a área ao redor do círculo",
+  "forma.jpg_note": "JPG não tem transparência: fora da forma o fundo ficará branco",
+  "forma.jpg_note_color": "JPG não tem transparência: fora da forma o fundo ficará {color}",
+  "forma.oval": "Oval",
+  "forma.radius": "Raio",
+  "forma.radius_tip": "Raio dos cantos em pixels da captura, de 0 até metade do lado menor.\nVocê também pode arrastar a alça no canto superior esquerdo da captura",
+  "forma.rect": "Retângulo",
+  "forma.round_custom": "Cantos arredondados: raio {r} px",
+  "forma.round_l": "Cantos arredondados: grandes",
+  "forma.round_m": "Cantos arredondados: médios",
+  "forma.round_s": "Cantos arredondados: pequenos",
+  "forma.tip_off": "Forma da captura: cantos arredondados, oval, círculo\nUm clique ativa “{name}”, a seta ao lado abre todas as formas",
+  "forma.tip_on": "Forma da captura · {name}\nUm clique volta ao retângulo, a seta ao lado abre todas as formas",
+  "forma.title": "Forma da captura"
+}

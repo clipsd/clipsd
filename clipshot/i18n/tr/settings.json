@@ -52,6 +52,8 @@
   "settings.nav_text": "Metin ve çeviri",
   "settings.nav_updates": "Güncellemeler",
   "settings.next_shot": "Sonraki ekran görüntüsünden itibaren geçerli",
+  "settings.novoe_enabled": "Güncellemeden sonra yenilikleri göster",
+  "settings.novoe_enabled_tip": "Güncellemeden sonra: yenilikler hakkında kısa bir pencere ve siz basana kadar yeni düğmelerde “Yeni” etiketi.",
   "settings.ocr_accurate": "Daha doğru: görüntü okunmadan önce büyütülür (daha yavaş)",
   "settings.ocr_auto": "Program dili ve İngilizce ({langs})",
   "settings.ocr_en": "Yalnızca İngilizce",

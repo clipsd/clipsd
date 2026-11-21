@@ -2,6 +2,8 @@
   "phone.allow_again": "Autoriser à nouveau",
   "phone.allow_done": "C’est fait. Ouvrez à nouveau le code sur le téléphone.",
   "phone.allow_failed": "La règle Windows n’a pas été modifiée : {error}",
+  "phone.allow_working": "En attente de la demande d’autorisation de Windows…",
+  "phone.allow_declined": "Autorisation refusée. Cliquez sur « Autoriser à nouveau » et répondez « Oui ».",
   "phone.android17": "Android 17 : autorisez le navigateur à accéder au réseau local. Paramètres → Applications → votre navigateur → Autorisations → Appareils à proximité → Autoriser.",
   "phone.bind_failed": "Impossible d’ouvrir la réception sur cet ordinateur. Détails : {error}",
   "phone.cancel": "Annuler",
@@ -104,7 +106,11 @@
   "phone.page_too_big": "La photo est trop grande. Reprenez-la.",
   "phone.page_unsent": "La photo n’est pas arrivée sur l’ordinateur. Si votre navigateur le permet, appuyez longuement sur l’image pour l’enregistrer dans la galerie.",
   "phone.page_used": "Ce code est déjà ouvert sur un autre téléphone. Affichez un nouveau code sur l’ordinateur.",
+  "phone.page_zoom_close": "Fermer",
+  "phone.page_zoom_hint": "Touchez pour voir en détail",
   "phone.phone_done": "La réception a été fermée depuis le téléphone. Pour prendre d’autres photos, affichez un nouveau code.",
+  "phone.photo_apart": "La capture était en train de se fermer : la photo du téléphone a été ouverte à part.",
+  "phone.photo_apart_saved": "La capture était en train de se fermer : la photo du téléphone a été ouverte à part. Fichier : {path}",
   "phone.photo_late": "La photo du téléphone a été reçue et ouverte dans l’éditeur.",
   "phone.received_open": "Photo reçue : {size}. Ouverture…",
   "phone.received_size": "Photos reçues : {count} ({size})",
@@ -132,5 +138,8 @@
   "phone.vpn_hint": "Un VPN sur le téléphone peut bloquer la connexion.",
   "phone.wifi_hide": "Ne plus afficher",
   "phone.wifi_ok": "Compris, afficher le code",
-  "phone.wifi_text": "Le téléphone et l’ordinateur doivent être connectés au même réseau Wi-Fi. Par les données mobiles, la photo n’arrivera pas."
+  "phone.wifi_text": "Le téléphone et l’ordinateur doivent être connectés au même réseau Wi-Fi. Par les données mobiles, la photo n’arrivera pas.",
+  "phone.tile_title": "Du téléphone",
+  "phone.tile_sub": "photo ou image",
+  "phone.tile_tip": "Prenez une photo ou envoyez une image depuis le téléphone"
 }

@@ -20,7 +20,7 @@ import shutil
 import sys
 import weakref
 
-from PyQt6.QtCore import QObject, QProcess, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QObject, QProcess, Qt, QThread, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QGuiApplication, QImage, QPainter, QPixmap
 from PyQt6.QtWidgets import (QCheckBox, QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget)
 
@@ -42,6 +42,7 @@ PAGE_KEYS = ("page_title", "page_card_title", "page_step1", "page_step2", "page_
              "page_offer_title", "page_offer_text", "page_offer_send", "page_offer_delete", "page_saved",
              "page_offline_title", "page_offline_text", "page_expired_unsent", "page_unsent", "page_heic",
              "page_pcfail", "page_ask_title", "page_ask_text", "page_finish_without", "page_failed", "page_bad_type", "page_too_big", "page_used", "page_closed", "page_limit")
+PAGE_KEYS += ("page_zoom_hint", "page_zoom_close")   # the photo big before sending (owner, 21.11.2026)
 DOT = {"done": GREEN, "now": "#1660d0", "todo": "#5f6875"}   # white digit: 5.4:1, 5.8:1, 5.6:1
 
 EXTRA_STYLE = """
@@ -228,6 +229,15 @@ def _autosave_photo(ctx, image):
         return ctx.autosave(image)
 
 
+def _editor_closing(editor) -> bool:
+    """The snapshot is being closed: the question «Снимок не сохранён» is open over it, or the window is closing
+    (EditorWindow.closing, set in closeEvent)."""
+    try:
+        return bool(getattr(editor, "closing", False))
+    except RuntimeError:   # the window is already deleted
+        return True
+
+
 def deliver_photo(session, data):
     """A photo came (interface thread): it is saved and opened in an editor even when the window is gone; the phone is
     told only after that. The window, if it is still open, shows what came."""
@@ -249,11 +259,22 @@ def deliver_photo(session, data):
             win._recv_text(tr("phone.received_open", size=size))
         editors = getattr(ctx, "editors", [])
         target = session.target if session.target is not None and session.target in editors else None
+        apart = target is not None and _editor_closing(target)
+        if apart:
+            # 1.34.1 (Б2 проверки 1.34.0): над снимком открыт вопрос «Снимок не сохранён» (или он уже закрывается).
+            # Фото, положенное туда, ушло бы вместе со снимком после «Закрыть без сохранения», а телефон уже
+            # удалил свою копию. Фото открывается отдельным снимком, как без снимка-получателя.
+            target = None
         screen = (win._screen() if win is not None else None) or QGuiApplication.primaryScreen()
         scale = 1.0
         if screen is not None:   # the picture in points fits the screen with the panels: window by the picture
             area = screen.availableGeometry()
             scale = phone.editor_scale(image.width(), image.height(), area.width(), area.height())
+        # saved BEFORE the display scale is set: the setting "snapshot size: as on screen" shrinks by that scale,
+        # a photo must keep its pixels (full size when ticked, the screen size otherwise: the computer did that).
+        # 1.34.1 (Б2): also when it goes into an open snapshot: the person may still close that snapshot without
+        # saving, the phone has already deleted its copy
+        saved = _autosave_photo(ctx, image)
         if target is not None:
             image.setDevicePixelRatio(scale)
             target.canvas.insert_image(image)   # on top of that snapshot, like "Insert, from file"
@@ -263,9 +284,6 @@ def deliver_photo(session, data):
             from .selector import force_foreground
             force_foreground(target)
         else:
-            # saved BEFORE the display scale is set: the setting "snapshot size: as on screen" shrinks by that scale,
-            # a photo must keep its pixels (full size when ticked, the screen size otherwise: the computer did that)
-            saved = _autosave_photo(ctx, image)
             image.setDevicePixelRatio(scale)
             editor = ctx.open_editor(image, None)
             if editor is not None:
@@ -273,6 +291,9 @@ def deliver_photo(session, data):
                 editor.only_in_memory = not saved
                 editor.autosave_quality = PHOTO_QUALITY
                 editor.phone_photo = True   # saving and copying do not go through the screen scale
+            if apart:
+                session.notified = True   # this message already says where the photo is
+                _notify(ctx, tr("phone.photo_apart_saved", path=saved) if saved else tr("phone.photo_apart"))
     except Exception as exc:   # noqa: BLE001: a photo that came is never dropped silently
         ok = False
         _notify(ctx, tr("phone.recv_decode", n=count) + f" ({exc})")
@@ -1060,6 +1081,30 @@ class PhoneDialog(_FitMixin, ClipDialog):
         super().closeEvent(event)
 
 
+class FirewallJob(QThread):
+    """Windows, "Allow again": the UAC prompt and the elevated PowerShell (netsh by full path, the whole command in
+    -EncodedCommand), awaited in the background; ClipSD itself is not elevated. done(ok, reason, declined)."""
+    done = pyqtSignal(bool, str, bool)
+
+    def run(self):
+        from . import sysenv
+        try:
+            code, reason, declined = sysenv.run_elevated_wait(sysenv.powershell_exe(), phone.firewall_parameters(),
+                                                              120_000)
+        except (OSError, ValueError) as exc:
+            code, reason, declined = None, str(exc), False
+        self.done.emit(code == 0, reason or f"exit {code}", declined)
+
+
+_firewall_jobs = []   # live jobs: a QThread must not be deleted while it runs
+
+
+def _forget_firewall(job):
+    if job in _firewall_jobs:
+        _firewall_jobs.remove(job)
+    job.deleteLater()
+
+
 class TroubleDialog(_FitMixin, ClipDialog):
     """"The phone has not connected yet": VPN first (the most frequent reason), then Wi-Fi, then this computer."""
 
@@ -1196,10 +1241,27 @@ class TroubleDialog(_FitMixin, ClipDialog):
         self.status.setVisible(True)
 
     def allow_again(self):
-        from .sysenv import run_elevated_self
-        ok, error = run_elevated_self(["--allow-phone-firewall"])
-        self.status.setText(tr("phone.allow_done") if ok else tr("phone.allow_failed", error=error))
+        """Windows: the UAC prompt and the firewall rule in the background (FirewallJob); the window stays alive."""
+        job = FirewallJob()
+        _firewall_jobs.append(job)
+        job.done.connect(self._allow_again_done)   # a method of the window: Qt drops it if the window is deleted
+        job.finished.connect(lambda: _forget_firewall(job))
+        self.allow_btn.setEnabled(False)
+        self.status.setText(tr("phone.allow_working"))
         self.status.setVisible(True)
+        job.start()
+        return job
+
+    def _allow_again_done(self, ok: bool, error: str, declined: bool):
+        if self.closing:
+            return
+        try:
+            self.allow_btn.setEnabled(True)
+            self.status.setText(tr("phone.allow_done") if ok else tr("phone.allow_declined") if declined
+                                else tr("phone.allow_failed", error=error))
+            self.status.setVisible(True)
+        except RuntimeError:
+            pass
 
     def back_to_code(self):
         owner = self.owner

@@ -74,7 +74,8 @@ def _steps(ed):
 class Tour(QWidget):
     finished = pyqtSignal()
 
-    def __init__(self, editor, language: bool = True):
+    def __init__(self, editor, language: bool = True, steps_fn=None):
+        # steps_fn(editor, language) -> шаги в том же виде, что steps(): свой короткий курс (1.34, «Показать новое»)
         # 1.32: со своей шапкой окна знакомство затемняет всю карточку окна (колокольчик, «?» и глобус в шапке),
         # поля тени вокруг неё остаются прозрачными; с системным заголовком: содержимое окна
         host = getattr(editor, "shell", None) if getattr(editor, "titlebar", None) is not None else None
@@ -82,7 +83,8 @@ class Tour(QWidget):
         super().__init__(host)
         self.editor = editor
         self.with_language = language   # первый шаг: выбор языка (только самое первое знакомство)
-        self.steps = steps(editor, language)
+        self.steps_fn = steps_fn or steps
+        self.steps = self.steps_fn(editor, language)
         self.index = 0
         self.hole = QRect()
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
@@ -187,7 +189,7 @@ class Tour(QWidget):
     def retranslate(self):
         """Язык сменён: шаги собираются заново (у редактора новые панели), подписи кнопок на новом языке."""
         from . import language
-        self.steps = steps(self.editor, self.with_language)
+        self.steps = self.steps_fn(self.editor, self.with_language)
         self.skip.setText(tr("tour.skip"))
         self.back.setText(tr("tour.back"))
         self._fill_languages()

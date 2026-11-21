@@ -1,0 +1,19 @@
+{
+  "forma.circle": "Círculo",
+  "forma.circle_move": "El círculo se mueve con el ratón: arrastre la zona que lo rodea",
+  "forma.hint_circle": "Puede mover el círculo",
+  "forma.hint_circle_sub": "Arrastre con el ratón la zona alrededor del círculo",
+  "forma.jpg_note": "JPG no admite transparencia: fuera de la forma el fondo será blanco",
+  "forma.jpg_note_color": "JPG no admite transparencia: fuera de la forma el fondo será {color}",
+  "forma.oval": "Óvalo",
+  "forma.radius": "Radio",
+  "forma.radius_tip": "Radio de las esquinas en píxeles de la captura, de 0 a la mitad del lado más corto.\nTambién puede arrastrar el marcador de la esquina superior izquierda de la captura",
+  "forma.rect": "Rectángulo",
+  "forma.round_custom": "Esquinas redondeadas: radio {r} px",
+  "forma.round_l": "Esquinas redondeadas: grandes",
+  "forma.round_m": "Esquinas redondeadas: medianas",
+  "forma.round_s": "Esquinas redondeadas: pequeñas",
+  "forma.tip_off": "Forma de la captura: esquinas redondeadas, óvalo, círculo\nUn clic activa «{name}», la flecha de al lado abre todas las formas",
+  "forma.tip_on": "Forma de la captura · {name}\nUn clic vuelve al rectángulo, la flecha de al lado abre todas las formas",
+  "forma.title": "Forma de la captura"
+}

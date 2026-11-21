@@ -5,7 +5,7 @@
   "selector.btn_full_shot": "Captura da tela inteira",
   "selector.btn_ocr": "Copiar texto",
   "selector.btn_record": "Gravar vídeo",
-  "selector.btn_retake": "Refazer seleção",
+  "selector.btn_retake": "Outra área",
   "selector.btn_save": "Salvar",
   "selector.btn_translate": "Traduzir a seleção",
   "selector.btn_translate_all": "Traduzir a tela inteira",
@@ -49,7 +49,7 @@
   "selector.trc_translation": "Tradução",
   "selector.trc_all": "Tela inteira",
   "selector.btn_window": "Captura de janela",
-  "selector.win_chip": "Janelas",
+  "selector.win_chip": "Janelas abertas",
   "selector.win_minimized": "minimizada",
   "selector.win_monitor": "Tela {n}",
   "selector.win_untitled": "Sem título",
@@ -66,5 +66,9 @@
   "selector.win_offscreen": "Esta janela está fora da tela agora",
   "selector.win_slow": "O GNOME está respondendo devagar: ainda não aparecem todas as janelas",
   "selector.win_failed": "A lista de janelas não foi obtida: selecione a janela com o mouse",
-  "selector.win_visible_only": "A janela está coberta por outras: aqui só a parte visível será capturada"
+  "selector.win_visible_only": "A janela está coberta por outras: aqui só a parte visível será capturada",
+  "selector.sub_edit_tools": "setas, texto, desfoque",
+  "selector.saved": "Salvo: {name}",
+  "selector.saved_already": "Já salvo: {name}",
+  "selector.save_failed": "Não foi possível salvar a captura"
 }

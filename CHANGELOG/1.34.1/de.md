@@ -1,0 +1,9 @@
+- Das Fenster „Neu in Version“ erscheint nicht mehr über dem Auswahlfenster, wenn Sie gleich nach einem Screenshot Alt+W drücken: Es kommt, wenn Sie fertig sind.
+- Vom Smartphone. Ein Foto, das ankommt, während ein Screenshot geschlossen wird (die Frage „Screenshot nicht gespeichert“ ist offen), geht nicht mehr verloren: Es öffnet sich als eigener Screenshot. Jedes Foto vom Smartphone wird sofort im Screenshot-Ordner gespeichert (wenn automatisches Speichern an ist), auch wenn es in einen offenen Screenshot eingefügt wurde.
+- Auswahlfenster. Erneutes „Speichern“ desselben Screenshots erzeugt keine gleichen Dateien mehr: Sie sehen „Bereits gespeichert“ und den Dateinamen. Gehaltenes Strg+S speichert ebenfalls nur einmal.
+- Windows. Die Liste „Geöffnete Fenster ▾“ wartet nicht auf Netzlaufwerke: Ein Programm auf einem Netzlaufwerk bekommt statt des Symbols einen Buchstaben.
+- Der Hinweis an der Palette ist nicht breiter als früher: Eine lange Zeile wird umbrochen.
+- Die Schaltfläche „Vom Smartphone“ im Editor ist mit der Tastatur erreichbar (Tab).
+- Das Fenster „Neu in Version“ wechselt die Sprache zusammen mit dem Programm.
+- Korrekturen in der ukrainischen, chinesischen, spanischen, englischen, portugiesischen und türkischen Übersetzung.
+- Windows. Russischer Text aus einem Bild wird nicht mehr zu lateinischen Buchstaben. Fehlt in Windows die Erkennung für russischen Text, bietet das Programm an, sie mit der Schaltfläche „Erkennung installieren“ zu installieren.

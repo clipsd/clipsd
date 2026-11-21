@@ -35,7 +35,19 @@ with open(_cfg, "w", encoding="utf-8") as _f:
                             "logicalDpi": 96, "logicalBaseDpi": 96}]}, _f)
 os.environ["QT_QPA_PLATFORM"] = "offscreen:configfile=" + _cfg
 os.environ.setdefault("CLIPSD_LANG", "ru")
-os.environ.pop("DBUS_SESSION_BUS_ADDRESS", None)   # никакой настоящей шины сеанса
+# Никакой настоящей шины сеанса и никакого окружения сеанса человека. Убрать DBUS_SESSION_BUS_ADDRESS мало: тогда
+# QtDBus (libdbus) находит шину сам по $XDG_RUNTIME_DIR/bus и в сеансе человека подключается к его настоящей шине,
+# где есть GNOME Shell (так 21.11.2026 тест падал в окружении сеанса на ps-sd). Поэтому свои HOME, XDG_* и
+# XDG_RUNTIME_DIR, адрес шины, которой нет, и без признаков GNOME, Wayland и экрана.
+_iso = tempfile.mkdtemp(prefix="clipsd-okno-env-")
+for _key, _sub in (("HOME", "home"), ("XDG_CONFIG_HOME", "config"), ("XDG_DATA_HOME", "data"),
+                   ("XDG_CACHE_HOME", "cache"), ("XDG_STATE_HOME", "state"), ("XDG_RUNTIME_DIR", "run")):
+    os.makedirs(os.path.join(_iso, _sub), exist_ok=True)
+    os.environ[_key] = os.path.join(_iso, _sub)
+os.chmod(os.environ["XDG_RUNTIME_DIR"], 0o700)
+os.environ["DBUS_SESSION_BUS_ADDRESS"] = "unix:path=" + os.path.join(_iso, "run", "no-bus")
+for _key in ("XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE", "WAYLAND_DISPLAY", "DISPLAY"):
+    os.environ.pop(_key, None)
 
 from PyQt6.QtCore import QObject, QPoint, QRect, Qt, QTimer, pyqtSignal  # noqa: E402
 from PyQt6.QtGui import QColor, QPainter, QPixmap  # noqa: E402
@@ -57,6 +69,13 @@ def check(cond, msg):
     print(("OK   " if cond else "FAIL ") + msg)
     if not cond:
         failures.append(msg)
+
+
+def test_isolated_from_session():
+    """Тест не видит шину сеанса человека и его GNOME Shell (иначе проверки зависят от того, где его запустили)."""
+    from PyQt6.QtDBus import QDBusConnection
+    check(not QDBusConnection.sessionBus().isConnected() and windows.shell_owner() == "",
+          "шины сеанса нет: тест не зависит от настоящего GNOME Shell")
 
 
 def settle(n=4):
@@ -359,7 +378,8 @@ def test_chip_and_keyboard():
     check(menu is not None and menu.isVisible(), "клавиша W открывает список окон")
     rows = menu_rows(menu)
     titles = [r[0].split("\t")[0] for r in rows]
-    check(titles[:2] == ["Окно Б, тайное название письма", "Документ А"], f"окна сверху вниз ({titles})")
+    check(titles[:2] == ["Окно Б, тайное название письма · Почта", "Документ А · Редактор"],
+          f"окна сверху вниз, после заголовка имя программы ({titles})")
     check(rows[2][0].endswith("\t" + tr("selector.win_minimized")) and not rows[2][1],
           "свёрнутое окно в конце с пометкой «свёрнуто»")
     check(menu.activeAction() is not None and menu.activeAction().data() == "b" and sel.preview_win is not None
@@ -945,6 +965,13 @@ def test_app_flow():
     cards = []
     c._show_ext_card = lambda title, text, icon, secondary=None: cards.append((title, text, icon, secondary)) or "close"
     gnome_ext.update = lambda version="": (gnome_ext.INSTALLED, "")
+    # как в настоящем сеансе GNOME: Shell на шине есть, его имя запоминается до входа; окно «выйдите и войдите» то же
+    windows.shell_owner = lambda: ":1.7"
+    check(c.update_gnome_extension() == gnome_ext.INSTALLED and c.config.get("gnome_ext_relogin") == ":1.7"
+          and cards and cards[0][1] == tr("app.ext_relogin_text") and cards[0][3] == tr("app.ext_logout"),
+          "настоящий сеанс (Shell на шине): окно «выйдите и войдите», запомнено имя Shell")
+    cards.clear()
+    windows.shell_owner = lambda: ""   # Shell на шине не найден: запоминается просто «ждёт входа»
     check(c.update_gnome_extension() == gnome_ext.INSTALLED and c.config.get("gnome_ext_relogin") is True
           and cards and cards[0][1] == tr("app.ext_relogin_text") and cards[0][3] == tr("app.ext_logout"),
           "«Установить»: окно «выйдите из системы и войдите снова» с кнопкой «Выйти из системы…»")

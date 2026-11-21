@@ -52,6 +52,8 @@
   "settings.nav_text": "文字和翻译",
   "settings.nav_updates": "更新",
   "settings.next_shot": "对下一张截图生效",
+  "settings.novoe_enabled": "更新后显示新功能",
+  "settings.novoe_enabled_tip": "更新后：显示一个简短的新功能窗口，并在新按钮上加“新”标记，直到你按下它们。",
   "settings.ocr_accurate": "更准确：识别前先放大图片（较慢）",
   "settings.ocr_auto": "程序语言和英语（{langs}）",
   "settings.ocr_en": "仅英语",

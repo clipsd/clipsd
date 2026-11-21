@@ -5,7 +5,7 @@
   "selector.btn_full_shot": "Capturer tout l'écran",
   "selector.btn_ocr": "Copier le texte",
   "selector.btn_record": "Enregistrer une vidéo",
-  "selector.btn_retake": "Recommencer",
+  "selector.btn_retake": "Autre zone",
   "selector.btn_save": "Enregistrer",
   "selector.btn_translate": "Traduire la sélection",
   "selector.btn_translate_all": "Traduire tout l'écran",
@@ -49,7 +49,7 @@
   "selector.trc_translation": "Traduction",
   "selector.trc_all": "Tout l'écran",
   "selector.btn_window": "Capture de la fenêtre",
-  "selector.win_chip": "Fenêtres",
+  "selector.win_chip": "Fenêtres ouvertes",
   "selector.win_minimized": "réduite",
   "selector.win_monitor": "Écran {n}",
   "selector.win_untitled": "Sans titre",
@@ -66,5 +66,9 @@
   "selector.win_offscreen": "Cette fenêtre est hors de l’écran",
   "selector.win_slow": "GNOME répond lentement : toutes les fenêtres ne sont pas encore listées",
   "selector.win_failed": "Liste des fenêtres non obtenue : sélectionnez la fenêtre à la souris",
-  "selector.win_visible_only": "La fenêtre est cachée par d’autres : seule sa partie visible sera capturée ici"
+  "selector.win_visible_only": "La fenêtre est cachée par d’autres : seule sa partie visible sera capturée ici",
+  "selector.sub_edit_tools": "flèches, texte, flou",
+  "selector.saved": "Enregistré : {name}",
+  "selector.saved_already": "Déjà enregistré : {name}",
+  "selector.save_failed": "Impossible d'enregistrer la capture"
 }

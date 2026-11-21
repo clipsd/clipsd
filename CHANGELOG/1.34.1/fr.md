@@ -1,0 +1,9 @@
+- La fenêtre « Nouveautés de la version » ne s'affiche plus au-dessus de la fenêtre de sélection si vous appuyez sur Alt+W juste après une capture : elle apparaît quand vous avez fini.
+- Du téléphone. Une photo qui arrive pendant la fermeture d'une capture (la question « Capture non enregistrée » est ouverte) n'est plus perdue : elle s'ouvre comme une capture à part. Chaque photo du téléphone est enregistrée tout de suite dans le dossier des captures (si l'enregistrement automatique est activé), même quand elle a été placée dans une capture ouverte.
+- Fenêtre de sélection. Appuyer de nouveau sur « Enregistrer » pour la même capture ne crée plus de fichiers identiques : « Déjà enregistré » et le nom du fichier s'affichent. Ctrl+S maintenu n'enregistre aussi qu'une fois.
+- Windows. La liste « Fenêtres ouvertes ▾ » n'attend plus les lecteurs réseau : un programme sur un lecteur réseau a une lettre à la place de son icône.
+- L'indication près de la palette n'est plus plus large qu'avant : une longue ligne passe à la suivante.
+- Le bouton « Du téléphone » de l'éditeur est accessible au clavier (Tab).
+- La fenêtre « Nouveautés de la version » change de langue avec le programme.
+- Corrections dans les traductions ukrainienne, chinoise, espagnole, anglaise, portugaise et turque.
+- Windows. Le texte russe d'une image ne se transforme plus en lettres latines. Si Windows n'a pas la reconnaissance du texte russe, le programme propose de l'installer avec le bouton « Installer la reconnaissance ».

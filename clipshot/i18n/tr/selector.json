@@ -5,7 +5,7 @@
   "selector.btn_full_shot": "Tam ekran görüntüsü",
   "selector.btn_ocr": "Metni kopyala",
   "selector.btn_record": "Video kaydet",
-  "selector.btn_retake": "Yeniden seç",
+  "selector.btn_retake": "Başka alan",
   "selector.btn_save": "Kaydet",
   "selector.btn_translate": "Seçileni çevir",
   "selector.btn_translate_all": "Tüm ekranı çevir",
@@ -48,7 +48,7 @@
   "selector.trc_translation": "Çeviri",
   "selector.trc_all": "Tüm ekran",
   "selector.btn_window": "Pencere görüntüsü",
-  "selector.win_chip": "Pencereler",
+  "selector.win_chip": "Açık pencereler",
   "selector.win_minimized": "simge durumunda",
   "selector.win_monitor": "Ekran {n}",
   "selector.win_untitled": "Başlıksız",
@@ -65,5 +65,9 @@
   "selector.win_offscreen": "Bu pencere şu anda ekranın dışında",
   "selector.win_slow": "GNOME yavaş yanıt veriyor: henüz tüm pencereler görünmüyor",
   "selector.win_failed": "Pencere listesi alınamadı: pencereyi fareyle seçin",
-  "selector.win_visible_only": "Pencere başkalarının altında: burada yalnızca görünen kısmı alınacak"
+  "selector.win_visible_only": "Pencere başkalarının altında: burada yalnızca görünen kısmı alınacak",
+  "selector.sub_edit_tools": "oklar, metin, bulanıklık",
+  "selector.saved": "Kaydedildi: {name}",
+  "selector.saved_already": "Zaten kaydedildi: {name}",
+  "selector.save_failed": "Ekran görüntüsü kaydedilemedi"
 }

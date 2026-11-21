@@ -1,0 +1,19 @@
+{
+  "forma.circle": "Cerchio",
+  "forma.circle_move": "Il cerchio si sposta con il mouse: trascina l'area intorno",
+  "forma.hint_circle": "Puoi spostare il cerchio",
+  "forma.hint_circle_sub": "Trascina con il mouse l'area intorno al cerchio",
+  "forma.jpg_note": "Il JPG non ha trasparenza: fuori dalla forma lo sfondo sarà bianco",
+  "forma.jpg_note_color": "Il JPG non ha trasparenza: fuori dalla forma lo sfondo sarà {color}",
+  "forma.oval": "Ovale",
+  "forma.radius": "Raggio",
+  "forma.radius_tip": "Raggio degli angoli in pixel dello screenshot, da 0 a metà del lato più corto.\nPuoi anche trascinare la maniglia nell'angolo in alto a sinistra dello screenshot",
+  "forma.rect": "Rettangolo",
+  "forma.round_custom": "Angoli arrotondati: raggio {r} px",
+  "forma.round_l": "Angoli arrotondati: grandi",
+  "forma.round_m": "Angoli arrotondati: medi",
+  "forma.round_s": "Angoli arrotondati: piccoli",
+  "forma.tip_off": "Forma dello screenshot: angoli arrotondati, ovale, cerchio\nUn clic attiva «{name}», la freccia accanto apre tutte le forme",
+  "forma.tip_on": "Forma dello screenshot · {name}\nUn clic torna al rettangolo, la freccia accanto apre tutte le forme",
+  "forma.title": "Forma dello screenshot"
+}
