@@ -42,5 +42,18 @@
   "app.save_failed": "Impossible d'enregistrer la capture : {path}",
   "app.saved": "Capture enregistrée : {path}",
   "app.tray_click": "clic sur l'icône",
-  "app.tray_tip": "ClipSD : capturer une zone ({hotkey})"
+  "app.tray_tip": "ClipSD : capturer une zone ({hotkey})",
+  "app.ext_installed_title": "Extension ClipSD installée",
+  "app.ext_updated_title": "Extension ClipSD mise à jour",
+  "app.ext_relogin_text": "Pour que ClipSD voie toutes les fenêtres, déconnectez-vous une fois puis reconnectez-vous : c’est ainsi que GNOME charge l’extension. Enregistrez d’abord votre travail dans les programmes ouverts.",
+  "app.ext_logout": "Se déconnecter…",
+  "app.ext_foreign_title": "L’extension ClipSD a été installée à la main",
+  "app.ext_foreign_text": "Elle n’a pas été installée depuis ClipSD, par exemple depuis une copie de travail, donc ClipSD ne la modifie pas. Mettez-la à jour de la même façon qu’elle a été installée.",
+  "app.ext_failed_title": "L’extension n’a pas été mise à jour",
+  "app.ext_failed_text": "L’extension actuelle continue de fonctionner. Raison : {reason}",
+  "app.ext_no_source": "cette version de ClipSD ne contient pas les fichiers de l’extension",
+  "app.ext_userext_off_title": "Les extensions sont désactivées dans GNOME",
+  "app.ext_userext_off_text": "L’extension ClipSD n’a pas été mise à jour : toutes les extensions utilisateur sont désactivées dans GNOME, une nouvelle connexion ne changerait rien. Activez-les dans l’application Extensions (l’interrupteur en haut de la fenêtre) et cliquez de nouveau sur « Mettre à jour ».",
+  "app.ext_unsupported_title": "Cette version de GNOME n’est pas encore prise en charge",
+  "app.ext_unsupported_text": "L’extension ClipSD fonctionne avec GNOME 45-50, vous avez GNOME {version}. La liste des fenêtres sera incomplète, le reste fonctionne comme d’habitude."
 }

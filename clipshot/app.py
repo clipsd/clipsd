@@ -22,6 +22,7 @@ from .editor import OCR as OCR_TOOL, EditorWindow
 from .i18n import tr
 from .grab import DesktopGrabber, claim_shell_name, grab_qt, is_wayland, virtual_geometry
 from . import hidpi
+from . import neighbor
 from .ipc import QUIT_FOR_UPDATE, socket_path
 from .sysenv import child_env, open_url
 from .selector import RegionSelector
@@ -76,6 +77,8 @@ DEFAULTS = {
     "snapshot_size": "full",        # full: полное разрешение; screen: как на экране, 100% (уменьшено до размера в точках)
     "clip_html": hidpi.html_default(),   # в буфер вместе с картинкой HTML с размером в точках (при масштабе экрана ≠ 100%)
     "language": "auto",             # язык интерфейса: код (ru, en, de…) или auto = язык системы; см. language.config_choice
+    "phone_full_size": False,           # «Скриншот/фото с телефона»: сохранять фото в полном размере (выкл.: под экран компьютера)
+    "phone_wifi_note_hidden": False,   # «Фото с телефона»: напоминание «одна сеть Wi-Fi» больше не показывать
     "save_ask": True,               # True — Ctrl+S открывает окно выбора файла; False — сразу в save_dir            # [x, y, ш, в] прошлой области — предлагается при следующем снимке
 }
 
@@ -445,6 +448,11 @@ class Clipshot(QObject):
             self.save_config()
         except Exception as exc:   # noqa: BLE001 — выход не должен упасть из-за записи настроек
             print(f"Не удалось записать настройки при выходе: {exc}")
+        try:
+            from . import phone_ui
+            phone_ui.stop_all()   # приём фото с телефона закрывается вместе с программой
+        except Exception as exc:   # noqa: BLE001
+            print(f"Приём фото с телефона не закрыт: {exc}")
         if self.server is not None:
             # close() убирает файл канала по имени. Если на этом месте уже канал другой копии (Г6 проверки гонок),
             # его не трогать: процесс сейчас завершится, его соединения закроет система.
@@ -474,6 +482,10 @@ class Clipshot(QObject):
                 sock.flush()
                 if answer == "ok":
                     QTimer.singleShot(200, self.quit_for_update_now)
+            elif neighbor.is_probe(command):
+                # вторая копия (другая сборка: с сайта или из Store) спрашивает, какая сборка работает
+                sock.write(neighbor.reply_bytes())
+                sock.flush()
             elif command:
                 self.handle_command(command)
 
@@ -505,6 +517,7 @@ class Clipshot(QObject):
             (tr("app.menu_full"), lambda: self.capture_fullscreen(delay=250)),
             (tr("app.menu_record"), self.open_screen_recording),
             (tr("app.menu_open"), self.open_file),
+            (tr("phone.menu"), lambda: self.open_phone()),   # после 1.32: фото с телефона по QR-коду (phone_ui.py)
             (None, None),
             (tr("app.menu_folder"), self.open_folder),
             (tr("app.menu_settings"), lambda: self.open_settings()),
@@ -636,6 +649,7 @@ class Clipshot(QObject):
     def quit_blocker(self) -> str:
         """Почему программу нельзя закрыть сейчас без потери работы ("" = можно).
 
+        phone: открыто окно приёма «Скриншот/фото с телефона» (в том числе спрятанное после фото) или фото раскодируется;
         selector: открыто окно выделения (или вот-вот откроется: снимок запрошен); text: в редакторе набирается
         текст; unsaved: в редакторе есть пометки, которые не сохранены и не скопированы; dialog: открыто модальное
         окно (настройки и т.п.)."""
@@ -651,6 +665,9 @@ class Clipshot(QObject):
                 continue
             if getattr(canvas, "modified", False) or getattr(editor, "only_in_memory", False):
                 return "unsaved"
+        from . import phone_ui
+        if phone_ui.is_busy():
+            return "phone"   # the reception from the phone is open (or a photo is being opened): like an unsaved editor
         modal = QApplication.activeModalWidget()
         if modal is not None and not modal.property("clipsd_closable"):
             return "dialog"   # a message of the updater («Что нового», an error) is simply closed on quitting
@@ -829,6 +846,7 @@ class Clipshot(QObject):
             self.selector.ocr_enabled = self.config.get("ocr_enabled", True)
             self.selector.tr_cfg, self.selector.tr_save = self.config, self.save_config
             self.selector.lang_ctx = self
+            self._attach_windows(self.selector)
             self.selector.finished.connect(self._region_done)
             self.selector.start_selection()
             if translate:
@@ -842,6 +860,7 @@ class Clipshot(QObject):
         selector.ocr_enabled = self.config.get("ocr_enabled", True)
         selector.tr_cfg, selector.tr_save = self.config, self.save_config
         selector.lang_ctx = self
+        self._attach_windows(selector)
         selector.finished.connect(self._region_done)
         self.selector = selector
         if translate:
@@ -869,6 +888,81 @@ class Clipshot(QObject):
                     self._selector_tour(selector)
 
         QTimer.singleShot(OVERLAY_DELAY_MS, show_overlay)
+
+    def _attach_windows(self, selector):
+        """«Снимок окна» (1.33): список окон просится сейчас, в момент Alt+W, вместе с кадром стола, и приходит
+        сигналом (если дополнение GNOME медлит, сначала временный неполный, потом полный). Окно выделения уже закрыто
+        (Esc) или открыто другое: поздний ответ отбрасывается, объект списка удаляется (проверка 1.33, О-М4)."""
+        from . import windows
+        if not windows.supported():
+            return
+        selector.windows_state = "loading"
+        selector.window_ext_relogin = self._ext_relogin_pending()
+        lister = windows.WindowLister(self)
+        state = {"alive": True}
+
+        def ready(wl):
+            if wl.final:
+                state["alive"] = False
+                lister.deleteLater()
+            if wl.ext_state == windows.EXT_OK and self.config.pop("gnome_ext_relogin", None):
+                self.save_config()   # новое дополнение заработало после входа: напоминание больше не нужно
+            if self.selector is selector:
+                selector.window_grab = windows.WindowGrab if windows.can_grab(wl.source) else None
+                selector.set_windows(wl)
+
+        def closed(*_args):
+            if state["alive"]:
+                state["alive"] = False
+                lister.cancel()
+                lister.deleteLater()
+
+        lister.ready.connect(ready)
+        selector.finished.connect(closed)
+        lister.start()
+
+    def _ext_relogin_pending(self) -> bool:
+        """Дополнение обновлено кнопкой и ждёт выхода из системы и входа. Если вход уже был (у GNOME Shell другое имя
+        на шине), а дополнение всё равно не отвечает, напоминание снимается: снова видна кнопка «Обновить»."""
+        flag = self.config.get("gnome_ext_relogin")
+        if not flag:
+            return False
+        if isinstance(flag, str) and flag:
+            from . import windows
+            owner = windows.shell_owner()
+            if owner and owner != flag:
+                self.config.pop("gnome_ext_relogin", None)
+                self.save_config()
+                return False
+        return True
+
+    def update_gnome_extension(self):
+        """Кнопка «Обновить» («Установить») в списке окон: дополнение ClipSD ставится в папку пользователя (пароль
+        не нужен), потом честно говорится, что под Wayland GNOME подхватит его после выхода из сеанса и входа."""
+        from . import __version__, gnome_ext, windows
+        state, detail = gnome_ext.update(version=__version__)
+        if state in (gnome_ext.INSTALLED, gnome_ext.UPDATED):
+            self.config["gnome_ext_relogin"] = windows.shell_owner() or True
+            self.save_config()
+            title = "app.ext_installed_title" if state == gnome_ext.INSTALLED else "app.ext_updated_title"
+            if self._show_ext_card(tr(title), tr("app.ext_relogin_text"), "ok", tr("app.ext_logout")) == "secondary":
+                gnome_ext.log_out()
+        elif state == gnome_ext.FOREIGN:
+            self._show_ext_card(tr("app.ext_foreign_title"), tr("app.ext_foreign_text"), "info")
+        elif state == gnome_ext.USER_EXT_OFF:
+            self._show_ext_card(tr("app.ext_userext_off_title"), tr("app.ext_userext_off_text"), "info")
+        elif state == gnome_ext.UNSUPPORTED:
+            self._show_ext_card(tr("app.ext_unsupported_title"), tr("app.ext_unsupported_text", version=detail), "info")
+        else:
+            reason = tr("app.ext_no_source") if state == gnome_ext.NO_SOURCE else (detail or "?")
+            self._show_ext_card(tr("app.ext_failed_title"), tr("app.ext_failed_text", reason=reason), "error")
+        return state
+
+    def _show_ext_card(self, title, text, icon, secondary=None) -> str:
+        from .dialogs import MessageCard
+        box = MessageCard(None, title, text, icon, secondary=secondary)
+        box.exec()
+        return box.choice
 
     def _selector_tour(self, selector):
         """1.32: знакомство с окном выделения: при первом показе или по запросу из меню значка."""
@@ -983,6 +1077,11 @@ class Clipshot(QObject):
             updater.deferred_soon(1000)   # отложенное обновление может пойти сейчас (один общий таймер, Г4)
         self._note_activity()
         self.watch_rating_quiet()   # окно оценки не сразу, а после спокойной минуты (rating_quiet_poll)
+
+    def open_phone(self, target=None):
+        """«Фото с телефона»: окно с QR-кодом; фото открывается в редакторе (target: вставить в этот снимок)."""
+        from . import phone_ui
+        return phone_ui.open_phone(self, target)
 
     def open_file(self):
         path, _ = QFileDialog.getOpenFileName(None, tr("app.open_title"), os.path.expanduser("~"),
@@ -1184,25 +1283,26 @@ class Clipshot(QObject):
         reply = bus.call(msg, timeout=3000)
         return reply.type() == QDBusMessage.MessageType.ReplyMessage
 
-    def snapshot_path(self) -> str:
+    def snapshot_path(self, ext: str = None) -> str:
         import datetime
         folder = os.path.expanduser(self.config.get("auto_save_dir") or DEFAULTS["auto_save_dir"])
         os.makedirs(folder, exist_ok=True)
-        ext = "jpg" if self.config.get("save_format", "png") == "jpg" else "png"
+        ext = ext or ("jpg" if self.config.get("save_format", "png") == "jpg" else "png")
         stamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         # два снимка в одну секунду, в том числе в двух копиях программы: имя занимается сразу (Г9 проверки гонок)
         return hidpi.reserve_path(folder, f"Screenshot_{stamp}", ext)
 
-    def autosave(self, image: QImage):
-        """Каждый снимок сразу в папку для снимков (настройка auto_save). Путь файла или None."""
+    def autosave(self, image: QImage, ext: str = None, quality: int = None):
+        """Каждый снимок сразу в папку для снимков (настройка auto_save). Путь файла или None.
+        ext и quality: «Фото с телефона» сохраняет фото как JPEG (PNG с 12 Мп весит 8 МБ и пишется секунды)."""
         if not self.config.get("auto_save", True):
             return None
         try:
-            path = self.snapshot_path()
+            path = self.snapshot_path(ext) if ext else self.snapshot_path()
         except OSError as exc:
             print(f"Автосохранение: нет папки: {exc}")
             return None
-        if hidpi.save_image(image, path, self.config):
+        if hidpi.save_image(image, path, self.config, quality):
             return path
         hidpi.discard_reserved(path)
         print(f"Автосохранение не удалось: {path}")
@@ -1222,10 +1322,10 @@ class Clipshot(QObject):
             hidpi.discard_reserved(path)
             self.notify(tr("app.save_failed", path=path))
 
-    def copy_image(self, image: QImage):
+    def copy_image(self, image: QImage, config=None):
         """В буфер: PNG с плотностью экрана и, при масштабе ≠ 100%, HTML с размером в точках (настройки «Размер снимка»
         и «Вставлять в исходном размере»)."""
-        hidpi.copy_image(image, self.config)
+        hidpi.copy_image(image, config or self.config)
 
     def notify(self, text: str):
         print(text)
@@ -1323,16 +1423,26 @@ def install_translations(qapp):
 INSTANCE_WAIT_S = 15   # другая копия держит замок, но канал ещё не открыт: столько ждать, чтобы отдать ей команду
 
 
-def hand_over(server_name: str, command: str) -> bool:
-    """Передать команду запущенной копии. False: на канале никто не отвечает."""
+def hand_over(server_name: str, command: str, own_kind: str = "") -> bool:
+    """Передать команду запущенной копии. False: на канале никто не отвечает.
+    Без команды и с own_kind (Windows: сборка с сайта и из Store делят канал) спрашивает работающую копию, какая она,
+    и, если сборка другая, показывает сообщение «ClipSD уже работает», а не выходит молча (neighbor.py)."""
     sock = QLocalSocket()
     sock.connectToServer(server_name)
     if not sock.waitForConnected(300):
         return False
-    if command:
+    probe = bool(own_kind) and not command
+    if probe:
+        sock.write(neighbor.probe_command(own_kind).encode())
+    elif command:
         sock.write(command.encode())
-        sock.waitForBytesWritten(1000)
+    sock.waitForBytesWritten(1000)
+    reply = ""
+    if probe and sock.waitForReadyRead(neighbor.REPLY_WAIT_MS):
+        reply = bytes(sock.readAll()).decode(errors="replace")
     sock.disconnectFromServer()
+    if probe:
+        neighbor.report(own_kind, reply)
     return True
 
 
@@ -1352,7 +1462,12 @@ def main() -> int:
     group.add_argument("--quit", action="store_true", help=tr("app.cli_quit"))
     group.add_argument("--demo", action="store_true", help=tr("app.cli_demo"))
     group.add_argument("--selfcheck", nargs="?", const="-", metavar="REPORT", help=argparse.SUPPRESS)   # проверка сборки
+    # Windows, «Фото с телефона» → «Разрешить заново»: эта же программа от имени администратора меняет правило брандмауэра
+    group.add_argument("--allow-phone-firewall", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.allow_phone_firewall:
+        from . import phone
+        return phone.apply_windows_firewall(sys.executable) if sys.platform == "win32" else 2
     if args.selfcheck:   # как в 1.30: --selfcheck [ФАЙЛ] (без файла: в stdout)
         lines = i18n.selfcheck_lines()
         text = "\n".join(lines) + "\n"
@@ -1396,16 +1511,17 @@ def main() -> int:
     # откроется. Раньше две копии, запущенные почти одновременно, обе оставались работать.
     from .ipc import InstanceLock
     lock = InstanceLock(server_name)
+    own_kind = neighbor.own_kind() if neighbor.enabled() else ""   # сообщение «уже работает» только в Windows (две сборки)
     deadline = time.monotonic() + INSTANCE_WAIT_S
     while not lock.acquire():
-        if hand_over(server_name, command):
+        if hand_over(server_name, command, own_kind):
             return 0
         if time.monotonic() > deadline:
             print("ClipSD уже запущен, но не отвечает на команды", file=sys.stderr)
             return 1
         time.sleep(0.1)
     # Замок наш. Если ClipSD уже запущен (копия старой версии, без замка): передаём ему команду и выходим.
-    if hand_over(server_name, command):
+    if hand_over(server_name, command, own_kind):
         return 0
     if args.quit:
         return 0

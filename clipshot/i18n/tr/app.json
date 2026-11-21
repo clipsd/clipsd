@@ -42,5 +42,18 @@
   "app.save_failed": "Ekran görüntüsü kaydedilemedi: {path}",
   "app.saved": "Ekran görüntüsü kaydedildi: {path}",
   "app.tray_click": "simgeye tıklama",
-  "app.tray_tip": "ClipSD: alan yakala ({hotkey})"
+  "app.tray_tip": "ClipSD: alan yakala ({hotkey})",
+  "app.ext_installed_title": "ClipSD uzantısı kuruldu",
+  "app.ext_updated_title": "ClipSD uzantısı güncellendi",
+  "app.ext_relogin_text": "ClipSD’nin tüm pencereleri görmesi için bir kez oturumu kapatıp yeniden açın: GNOME uzantıyı böyle yükler. Önce açık programlardaki çalışmanızı kaydedin.",
+  "app.ext_logout": "Oturumu kapat…",
+  "app.ext_foreign_title": "ClipSD uzantısı elle kurulmuş",
+  "app.ext_foreign_text": "Uzantı ClipSD’den kurulmamış, örneğin bir çalışma kopyasından kurulmuş; bu yüzden ClipSD onu değiştirmez. Uzantıyı kurulduğu yolla güncelleyin.",
+  "app.ext_failed_title": "Uzantı güncellenmedi",
+  "app.ext_failed_text": "Mevcut uzantı çalışmaya devam ediyor. Neden: {reason}",
+  "app.ext_no_source": "bu ClipSD sürümünde uzantı dosyaları yok",
+  "app.ext_userext_off_title": "GNOME'da uzantılar kapalı",
+  "app.ext_userext_off_text": "ClipSD uzantısı güncellenmedi: GNOME'da tüm kullanıcı uzantıları kapalı, yeniden oturum açmak bir şey değiştirmezdi. Uzantılar uygulamasında açın (pencerenin üstündeki anahtar) ve “Güncelle”ye yeniden basın.",
+  "app.ext_unsupported_title": "Bu GNOME sürümü henüz desteklenmiyor",
+  "app.ext_unsupported_text": "ClipSD uzantısı GNOME 45-50'de çalışır, sizde GNOME {version} var. Pencere listesi eksik olacak, geri kalan her şey her zamanki gibi çalışır."
 }

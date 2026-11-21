@@ -42,5 +42,18 @@
   "app.save_failed": "Nie udało się zapisać zrzutu: {path}",
   "app.saved": "Zrzut zapisano: {path}",
   "app.tray_click": "kliknięcie ikony",
-  "app.tray_tip": "ClipSD: zrzut obszaru ({hotkey})"
+  "app.tray_tip": "ClipSD: zrzut obszaru ({hotkey})",
+  "app.ext_installed_title": "Rozszerzenie ClipSD zainstalowane",
+  "app.ext_updated_title": "Rozszerzenie ClipSD zaktualizowane",
+  "app.ext_relogin_text": "Aby ClipSD widział wszystkie okna, wyloguj się raz i zaloguj ponownie: tak GNOME wczytuje rozszerzenie. Przedtem zapisz pracę w otwartych programach.",
+  "app.ext_logout": "Wyloguj się…",
+  "app.ext_foreign_title": "Rozszerzenie ClipSD zainstalowano ręcznie",
+  "app.ext_foreign_text": "Nie zainstalowano go z ClipSD, na przykład z kopii roboczej, więc ClipSD go nie zmienia. Zaktualizuj je w ten sam sposób, w jaki zostało zainstalowane.",
+  "app.ext_failed_title": "Rozszerzenie nie zostało zaktualizowane",
+  "app.ext_failed_text": "Obecne rozszerzenie działa dalej. Powód: {reason}",
+  "app.ext_no_source": "ta wersja ClipSD nie zawiera plików rozszerzenia",
+  "app.ext_userext_off_title": "W GNOME wyłączono rozszerzenia",
+  "app.ext_userext_off_text": "Rozszerzenie ClipSD nie zostało zaktualizowane: w GNOME wyłączono wszystkie rozszerzenia użytkownika, a ponowne logowanie niczego by nie zmieniło. Włącz je w aplikacji Rozszerzenia (przełącznik u góry okna) i naciśnij „Aktualizuj” jeszcze raz.",
+  "app.ext_unsupported_title": "Ta wersja GNOME nie jest jeszcze obsługiwana",
+  "app.ext_unsupported_text": "Rozszerzenie ClipSD działa w GNOME 45-50, a masz GNOME {version}. Lista okien będzie niepełna, reszta działa jak zwykle."
 }

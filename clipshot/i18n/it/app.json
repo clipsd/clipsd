@@ -42,5 +42,18 @@
   "app.save_failed": "Impossibile salvare lo screenshot: {path}",
   "app.saved": "Screenshot salvato: {path}",
   "app.tray_click": "clic sull'icona",
-  "app.tray_tip": "ClipSD: cattura un'area ({hotkey})"
+  "app.tray_tip": "ClipSD: cattura un'area ({hotkey})",
+  "app.ext_installed_title": "Estensione ClipSD installata",
+  "app.ext_updated_title": "Estensione ClipSD aggiornata",
+  "app.ext_relogin_text": "Perché ClipSD veda tutte le finestre, esci una volta dalla sessione e rientra: così GNOME carica l’estensione. Prima salva il lavoro nei programmi aperti.",
+  "app.ext_logout": "Esci dalla sessione…",
+  "app.ext_foreign_title": "L’estensione ClipSD è stata installata a mano",
+  "app.ext_foreign_text": "Non è stata installata da ClipSD, per esempio da una copia di lavoro, quindi ClipSD non la modifica. Aggiornala nello stesso modo in cui è stata installata.",
+  "app.ext_failed_title": "L’estensione non è stata aggiornata",
+  "app.ext_failed_text": "L’estensione attuale continua a funzionare. Motivo: {reason}",
+  "app.ext_no_source": "questa versione di ClipSD non contiene i file dell’estensione",
+  "app.ext_userext_off_title": "In GNOME le estensioni sono disattivate",
+  "app.ext_userext_off_text": "L’estensione ClipSD non è stata aggiornata: in GNOME tutte le estensioni utente sono disattivate e rientrare nella sessione non cambierebbe nulla. Attivale nell’app Estensioni (l’interruttore in alto nella finestra) e premi di nuovo «Aggiorna».",
+  "app.ext_unsupported_title": "Questa versione di GNOME non è ancora supportata",
+  "app.ext_unsupported_text": "L’estensione ClipSD funziona con GNOME 45-50, tu hai GNOME {version}. L’elenco delle finestre sarà incompleto, il resto funziona come sempre."
 }

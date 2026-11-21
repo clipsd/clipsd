@@ -955,7 +955,7 @@ check(wait(lambda: ed.tr_layer.tr_cards and ed.tr_layer.tr_cards[0].state in ("d
 tst = lambda: ed.findChild(ocr.Toast, "clipsdToast")
 check(CountEngine.sent > 0 and not (tst() is not None and tst().isVisible() and "не нужен" in tst().text()) and ed.tr_layer.tr_cards[0].skipped == 0,
       f"болгарский снимок: в сервис ушло {CountEngine.sent} знаков, сообщения «Перевод не нужен» нет, пропущено 0")
-check(ed.mode_hint.text().startswith("Весь снимок переведён."), "пропущено 0: строка «Весь снимок переведён…» верна")
+check(ed.mode_hint.text().startswith("Переведено:") and "Оригинал" not in ed.mode_hint.text(), "пропущено 0: в строке только итог «Переведено: N абзацев» (1.32.4)")
 done(ed)
 
 # 2. Пропущенные абзацы: честное сообщение в обоих видах
@@ -1058,7 +1058,7 @@ check(len(started) == 1, f"повторные «Перевести всё» и S
 ocr.recognize_words = real_words
 check(wait(lambda: ed.tr_layer.tr_cards and ed.tr_layer.tr_cards[0].state == "done", 90), "перевод всего снимка готов")
 settle(3)
-check(ed.tr_message.text().startswith("Весь снимок переведён.") and "«Оригинал»" in ed.tr_message.text() and ed.tr_message.isVisibleTo(ed),
+check(ed.tr_message.text().startswith("Переведено:") and "Оригинал" not in ed.tr_message.text() and ed.tr_message.text() in ed.tr_icon_button.toolTip(),
       f"бирюзовая полоса внизу после готового перевода: «{ed.mode_hint.text()}»")
 calls_before = FakeEngine.calls
 ed.translate_all()
@@ -1087,7 +1087,7 @@ check(wait(lambda: fresh(before), 90) and not waitboxes(), "вид «Карто�
 win = fresh(before)[0]
 check(wait(lambda: win.tr_cards[0].state == "done") and win.tr_cards[0].full, "окошко перевода всего снимка готово")
 settle(3)
-check(ed.mode_hint.text().startswith("Весь снимок переведён."), "строка над панелью: «Весь снимок переведён…» (карточкой)")
+check(ed.mode_hint.text().startswith("Переведено:") and "Оригинал" not in ed.mode_hint.text(), "строка над панелью: итог «Переведено: N абзацев» (карточкой, 1.32.4)")
 calls_before = FakeEngine.calls
 ed.translate_all()
 settle(4)

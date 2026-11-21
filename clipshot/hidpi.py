@@ -168,7 +168,7 @@ def discard_reserved(path: str) -> None:
         pass
 
 
-def save_image(image: QImage, path: str, config=None) -> bool:
+def save_image(image: QImage, path: str, config=None, quality: int = None) -> bool:
     """Сохранить снимок в файл по настройке «Размер снимка». PNG — с плотностью pHYs, JPG — с плотностью JFIF."""
     out = prepare(image, size_mode(config))
     if path.lower().endswith(".png"):
@@ -181,7 +181,7 @@ def save_image(image: QImage, path: str, config=None) -> bool:
         except OSError:
             return False
         return True
-    return out.save(path)
+    return out.save(path, None, quality) if quality else out.save(path)
 
 
 def html_fragment(png: bytes, width: int, height: int) -> str:

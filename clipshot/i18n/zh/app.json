@@ -42,5 +42,18 @@
   "app.save_failed": "无法保存截图：{path}",
   "app.saved": "截图已保存：{path}",
   "app.tray_click": "单击图标",
-  "app.tray_tip": "ClipSD：区域截图（{hotkey}）"
+  "app.tray_tip": "ClipSD：区域截图（{hotkey}）",
+  "app.ext_installed_title": "ClipSD 扩展已安装",
+  "app.ext_updated_title": "ClipSD 扩展已更新",
+  "app.ext_relogin_text": "要让 ClipSD 看到全部窗口，请注销一次并重新登录：GNOME 会在登录时加载扩展。注销前请先保存打开的程序中的工作。",
+  "app.ext_logout": "注销…",
+  "app.ext_foreign_title": "ClipSD 扩展是手动安装的",
+  "app.ext_foreign_text": "该扩展不是通过 ClipSD 安装的（例如来自工作副本），因此 ClipSD 不会修改它。请用安装时的方式更新它。",
+  "app.ext_failed_title": "扩展未更新",
+  "app.ext_failed_text": "当前扩展仍在工作。原因：{reason}",
+  "app.ext_no_source": "此 ClipSD 版本中没有扩展文件",
+  "app.ext_userext_off_title": "GNOME 中的扩展已关闭",
+  "app.ext_userext_off_text": "ClipSD 扩展未更新：GNOME 中所有用户扩展都已关闭，重新登录也不会改变。请在“扩展”应用中打开它们（窗口顶部的开关），然后再点一次“更新”。",
+  "app.ext_unsupported_title": "暂不支持此 GNOME 版本",
+  "app.ext_unsupported_text": "ClipSD 扩展适用于 GNOME 45-50，您的版本是 GNOME {version}。窗口列表会不完整，其他功能照常工作。"
 }

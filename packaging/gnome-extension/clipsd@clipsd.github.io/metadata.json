@@ -4,5 +4,5 @@
   "description": "ClipSD hotkeys (area screenshot, full-screen screenshot) on every keyboard layout at once, e.g. Alt+W also works with a Cyrillic layout. Change the hotkeys in ClipSD settings. The \"Record video\" button opens the built-in GNOME screen recorder. (C) 2026 Sergey Dayneko, GPL-3.0-or-later",
   "shell-version": ["45", "46", "47", "48", "49", "50"],
   "settings-schema": "org.gnome.shell.extensions.clipsd",
-  "version": 2
+  "version": 3
 }

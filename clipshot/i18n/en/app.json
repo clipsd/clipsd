@@ -42,5 +42,18 @@
   "app.save_failed": "Could not save the screenshot: {path}",
   "app.saved": "Screenshot saved: {path}",
   "app.tray_click": "click the icon",
-  "app.tray_tip": "ClipSD: capture an area ({hotkey})"
+  "app.tray_tip": "ClipSD: capture an area ({hotkey})",
+  "app.ext_installed_title": "ClipSD extension installed",
+  "app.ext_updated_title": "ClipSD extension updated",
+  "app.ext_relogin_text": "For ClipSD to see all windows, log out once and log back in: this is how GNOME loads the extension. Save your work in open programs before you log out.",
+  "app.ext_logout": "Log out…",
+  "app.ext_foreign_title": "The ClipSD extension was installed by hand",
+  "app.ext_foreign_text": "It was not installed from ClipSD, for example from a working copy, so ClipSD does not change it. Update it the same way it was installed.",
+  "app.ext_failed_title": "The extension was not updated",
+  "app.ext_failed_text": "The current extension keeps working. Reason: {reason}",
+  "app.ext_no_source": "this ClipSD build has no extension files",
+  "app.ext_userext_off_title": "Extensions are turned off in GNOME",
+  "app.ext_userext_off_text": "The ClipSD extension was not updated: all user extensions are turned off in GNOME, so logging in again would change nothing. Turn them on in the Extensions app (the switch at the top of the window) and press “Update” again.",
+  "app.ext_unsupported_title": "This GNOME version is not supported yet",
+  "app.ext_unsupported_text": "The ClipSD extension works in GNOME 45-50, you have GNOME {version}. The window list will be incomplete, everything else works as usual."
 }

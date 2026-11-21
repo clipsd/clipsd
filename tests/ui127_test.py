@@ -426,9 +426,10 @@ settle()
 check(layer._tr_view(card) == "overlay" and not layer.floats, "«Поверх текста»: перевод лежит слоем на снимке, отдельных окон нет")
 check(card.chip.isNull() and not card.buttons,
       "1.29: плашка с кнопками на снимке не рисуется (в редакторе она закрывала текст), кнопки внизу окна")
-check(all(w.isVisibleTo(ed) for w in (ed.tr_lang_button, ed.tr_show_orig, ed.tr_view_card, ed.tr_copy_button, ed.tr_top))
+check(all(w.isVisibleTo(ed) for w in (ed.tr_lang_button, ed.tr_more_button, ed.tr_copy_button, ed.tr_top))
+      and (ed.tr_show_orig.isVisibleTo(ed) or ed.tr_seg_box.isHidden())   # узкое окно: «Перевод / Оригинал» в меню «⋯»
       and not ed.panel.isVisibleTo(ed) and not ed.bottom.isVisibleTo(ed),
-      "1.29: внизу язык, «Перевод/Оригинал», вид и «Скопировать перевод»; панель рисования и нижняя панель скрыты")
+      "1.32.4: в строке сверху язык, «Перевод/Оригинал», «⋯» и «Скопировать перевод»; панель рисования и нижняя панель скрыты")
 sizes = {b["px"] for b in card.blocks}
 check(len(sizes) <= 2 and max(sizes) >= 12, f"размер букв общий по правилу 1.26 (медиана, не ниже 12): {sizes}")
 # в сохранённый снимок перевод не попадает
@@ -448,14 +449,14 @@ check(teal_hits == 0 and all(card.content.contains(bl["draw"]) for bl in card.bl
       "обводка охватывает область вместе со строками перевода и не пересекает текст")
 # «Оригинал»: исходный текст временно виден (блоки не рисуются)
 ed.tr_show_orig.click()
-check(card.show_original and ed.tr_show_orig.isChecked(), "«Оригинал» (переключатель внизу) включает исходный текст")
+check(card.show_original and ed.tr_show_orig.isChecked(), "«Оригинал» (переключатель в строке сверху) включает исходный текст")
 ed.tr_show_tr.click()
 check(not card.show_original and ed.tr_show_tr.isChecked(), "«Перевод» возвращает перевод")
 # переключатель вида: подпись, запоминание, переезд в отдельное окошко
-check(ed.tr_view_overlay.isChecked() and not ed.tr_view_card.isChecked(), "в виде «Поверх текста» переключатель внизу показывает «Поверх текста»")
+check(ed.tr_view_overlay.isChecked() and not ed.tr_view_card.isChecked(), "в виде «Поверх текста» пункт меню «⋯» отмечен «Поверх текста»")
 n_saved = ctx.saved
 calls_before = FakeEngine.calls
-ed.tr_view_card.click()
+ed.tr_view_card.trigger()
 settle()
 check(ctx.config["translate_view"] == "card" and ctx.saved > n_saved, "переключатель вида запоминается в настройках (translate_view)")
 check(len(layer.floats) == 1 and not layer.tr_cards, "«Карточкой»: перевод ушёл в отдельное окошко, слоя нет")

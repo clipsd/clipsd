@@ -1,0 +1,5 @@
+{
+  "neighbor.title": "ClipSD zaten çalışıyor",
+  "neighbor.text_store": "ClipSD zaten çalışıyor (Microsoft Store sürümü). Simgesi saatin yanındadır; görünmüyorsa oku tıklayarak gizli simgeleri açın. İkinci kopya başlamaz: aynı anda yalnızca biri çalışabilir. web sitesi sürümünü çalıştırmak için önce bunu kapatın: simgeye sağ tıklayın, \"{quit}\".",
+  "neighbor.text_site": "ClipSD zaten çalışıyor (web sitesi sürümü). Simgesi saatin yanındadır; görünmüyorsa oku tıklayarak gizli simgeleri açın. İkinci kopya başlamaz: aynı anda yalnızca biri çalışabilir. Microsoft Store sürümünü çalıştırmak için önce bunu kapatın: simgeye sağ tıklayın, \"{quit}\"."
+}

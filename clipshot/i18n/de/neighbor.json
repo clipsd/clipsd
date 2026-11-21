@@ -1,0 +1,5 @@
+{
+  "neighbor.title": "ClipSD läuft bereits",
+  "neighbor.text_store": "ClipSD läuft bereits (Version aus dem Microsoft Store). Das Symbol befindet sich neben der Uhr; falls es fehlt, blenden Sie die ausgeblendeten Symbole mit dem Pfeil ein. Eine zweite Kopie startet nicht: Es kann nur eine laufen. Um die Version von der Website zu starten, beenden Sie zuerst diese: Rechtsklick auf das Symbol, „{quit}“.",
+  "neighbor.text_site": "ClipSD läuft bereits (Version von der Website). Das Symbol befindet sich neben der Uhr; falls es fehlt, blenden Sie die ausgeblendeten Symbole mit dem Pfeil ein. Eine zweite Kopie startet nicht: Es kann nur eine laufen. Um die Version aus dem Microsoft Store zu starten, beenden Sie zuerst diese: Rechtsklick auf das Symbol, „{quit}“."
+}

@@ -286,6 +286,16 @@ def _draw(name: str, p: QPainter, c: str):
         p.setPen(_pen(c, 1.8))
         p.drawLine(QPointF(18, 13), QPointF(18, 22))
         p.drawLine(QPointF(13.5, 17.5), QPointF(22.5, 17.5))
+    elif name == "window":
+        # Окно программы с полосой заголовка и уголками выделения вокруг: снимок одного окна (прототип dev/vybor-okna)
+        p.setPen(_pen(c, 1.8))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(QRectF(5, 6.5, 14, 11), 1.8, 1.8)
+        p.drawLine(QPointF(5, 9.8), QPointF(19, 9.8))
+        p.setPen(_pen(c, 1.6))
+        for x, y, dx, dy in ((2, 3, 1, 1), (22, 3, -1, 1), (2, 21, 1, -1), (22, 21, -1, -1)):
+            p.drawLine(QPointF(x, y), QPointF(x + 3.5 * dx, y))
+            p.drawLine(QPointF(x, y), QPointF(x, y + 3.5 * dy))
     elif name == "fullscreen":
         # Монитор с уголками по краям: снимок всего экрана
         p.setPen(_pen(c, 1.8))

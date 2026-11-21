@@ -1,0 +1,5 @@
+{
+  "neighbor.title": "ClipSD ya se está ejecutando",
+  "neighbor.text_store": "ClipSD ya se está ejecutando (versión de Microsoft Store). Su icono está junto al reloj; si no lo ve, despliegue los iconos ocultos con la flecha. Una segunda copia no se inicia: solo puede funcionar una. Para usar la versión del sitio web, cierre primero esta: clic derecho en el icono, «{quit}».",
+  "neighbor.text_site": "ClipSD ya se está ejecutando (versión del sitio web). Su icono está junto al reloj; si no lo ve, despliegue los iconos ocultos con la flecha. Una segunda copia no se inicia: solo puede funcionar una. Para usar la versión de Microsoft Store, cierre primero esta: clic derecho en el icono, «{quit}»."
+}

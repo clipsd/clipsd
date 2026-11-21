@@ -1,0 +1,5 @@
+{
+  "neighbor.title": "ClipSD 已在运行",
+  "neighbor.text_store": "ClipSD 已在运行（Microsoft Store 版本）。图标在时钟旁边；如果看不到，请点击箭头展开隐藏的图标。第二个副本不会启动：同一时间只能运行一个。要运行网站版本，请先关闭当前这个：右键单击图标，选择“{quit}”。",
+  "neighbor.text_site": "ClipSD 已在运行（网站版本）。图标在时钟旁边；如果看不到，请点击箭头展开隐藏的图标。第二个副本不会启动：同一时间只能运行一个。要运行Microsoft Store 版本，请先关闭当前这个：右键单击图标，选择“{quit}”。"
+}

@@ -26,7 +26,7 @@ os.environ["QT_QPA_PLATFORM"] = "offscreen:configfile=" + _cfg
 from PyQt6.QtCore import QPoint, QPointF, QRect, QRectF, Qt
 from PyQt6.QtGui import QColor, QFontMetrics, QGuiApplication, QImage, QPainter, QPixmap
 from PyQt6.QtTest import QTest
-from PyQt6.QtWidgets import QApplication, QMenu
+from PyQt6.QtWidgets import QApplication, QLabel, QMenu
 
 app = QApplication(sys.argv)
 import clipshot
@@ -722,7 +722,7 @@ def add_card(layer, texts, skipped=0, total=0, partial=False):
 ed, ctx = mk()
 ed.set_zoom(1.0)
 visible = lambda w: w.isVisibleTo(ed)
-check(visible(ed.panel) and visible(ed.bottom) and not visible(ed.tr_top) and not visible(ed.tr_bottom), "до перевода: обычный вид, строки перевода нет")
+check(visible(ed.panel) and visible(ed.bottom) and not visible(ed.tr_top) and not hasattr(ed, "tr_bottom"), "до перевода: обычный вид, строки перевода нет")
 ed.select_tool(TRANSLATE)
 settle()
 check(not visible(ed.panel) and not visible(ed.tool_strip) and not any(visible(b) for b in ed.color_buttons.values())
@@ -730,15 +730,17 @@ check(not visible(ed.panel) and not visible(ed.tool_strip) and not any(visible(b
       "перевод: скрыты инструменты рисования, палитра, толщина, отмена")
 check(not visible(ed.bottom) and not visible(ed.save_button) and not visible(ed.copy_button) and not visible(ed.zoom_label),
       "перевод: скрыты масштаб и кнопки «Сохранить», «Скопировать», «Скопировать и закрыть»")
-labels = [lb.text() for lb in ed.tr_top.findChildren(type(ed.tr_message))]
+labels = [lb.text() for lb in ed.tr_top.findChildren(QLabel)]
 check(visible(ed.tr_top) and "Перевод" in labels and ed.tr_done_button.text() == "Готово (Esc)" and visible(ed.tr_done_button),
       f"сверху строка «Перевод» и «Готово (Esc)» {labels}")
-check(visible(ed.tr_bottom) and ed.tr_bottom.objectName() == "trBottom", "внизу бирюзовая полоса")
-check(all(visible(w) for w in (ed.tr_message, ed.tr_lang_button, ed.tr_show_tr, ed.tr_show_orig, ed.tr_view_overlay, ed.tr_view_card, ed.tr_copy_button)),
-      "в полосе: сообщение, язык, «Перевод / Оригинал», «Поверх текста / Карточкой», «Скопировать перевод»")
+check(not hasattr(ed, "tr_bottom"), "1.32.4: нижней полосы перевода больше нет, всё в строке сверху")
+ed.resize(1100, ed.height())
+settle()
+check(all(visible(w) for w in (ed.tr_lang_button, ed.tr_show_tr, ed.tr_show_orig, ed.tr_more_button, ed.tr_copy_button)),
+      "в строке: язык, «Перевод / Оригинал», меню «⋯», «Скопировать перевод» (итог целиком или совсем)")
 check([ed.tr_show_tr.text(), ed.tr_show_orig.text(), ed.tr_view_overlay.text(), ed.tr_view_card.text()] == ["Перевод", "Оригинал", "Поверх текста", "Карточкой"]
-      and "Скопировать перевод" in ed.tr_copy_button.text(), "подписи переключателей")
-check(ed.tr_bottom.styleSheet() == "" and "#0b8f84" in ed.styleSheet(), "полоса бирюзовая (стиль окна)")
+      and "Скопировать перевод" in ed.tr_copy_button.text(), "подписи переключателей (вид в меню «⋯»)")
+check("#0b8f84" in ed.styleSheet() and ed.tr_top.objectName() == "trTop", "строка бирюзовая (стиль окна)")
 layer = ed.tr_layer
 card = add_card(layer, ["Дорогая госпожа Тейлор,"], skipped=2, total=3)
 layer.repaint()
@@ -754,7 +756,8 @@ for yy in range(0, 30):
 check(teal_chip == 0, "над переводом нет бирюзовой плашки с кнопками")
 ed._update_info()
 check(ed.tr_message.text() == "Переведено: 1 абзац. Уже на русском, оставлено как есть: 2", f"сообщение о пропуске: «{ed.tr_message.text()}»")
-check("→ Русский" in ed.tr_lang_button.text() or "Русский" in ed.tr_lang_button.text(), f"кнопка языка: «{ed.tr_lang_button.text()}»")
+check("→ Русский" in ed.tr_lang_button.text() or "Русский" in ed.tr_lang_button.text() or "→ RU" in ed.tr_lang_button.text(),
+      f"кнопка языка: «{ed.tr_lang_button.text()}» (в узком окне коротко «EN → RU», полное название в подсказке)")
 # склонения
 cases = [(1, 0, 0, False, "Переведено: 1 абзац"), (2, 0, 0, False, "Переведено: 2 абзаца"), (5, 0, 0, False, "Переведено: 5 абзацев"),
          (21, 0, 0, False, "Переведено: 21 абзац"), (22, 0, 0, False, "Переведено: 22 абзаца"), (11, 0, 0, False, "Переведено: 11 абзацев"),
@@ -772,11 +775,11 @@ ed.tr_show_orig.click()
 check(card.show_original and ed.tr_show_orig.isChecked() and not ed.tr_show_tr.isChecked(), "«Оригинал»: показан исходный текст у всех кусков")
 ed.tr_show_tr.click()
 check(not card.show_original and ed.tr_show_tr.isChecked(), "«Перевод»: снова перевод")
-ed.tr_view_card.click()
+ed.tr_view_card.trigger()
 settle()
 check(ctx.config["translate_view"] == "card" and len(layer.floats) == 1 and not layer.tr_cards and ed.tr_view_card.isChecked(),
       "«Карточкой»: кусок переехал в окошко, переключатель показывает выбор")
-ed.tr_view_overlay.click()
+ed.tr_view_overlay.trigger()
 settle()
 check(ctx.config["translate_view"] == "overlay" and len(layer.tr_cards) == 1 and not layer.floats and ed.tr_view_overlay.isChecked(),
       "«Поверх текста»: кусок вернулся на снимок")
@@ -786,10 +789,10 @@ check(QGuiApplication.clipboard().text() == "Дорогая госпожа Те�
 QTest.mouseClick(ed.tr_done_button, Qt.MouseButton.LeftButton)
 settle()
 check(ed.canvas.tool != TRANSLATE and visible(ed.panel) and visible(ed.bottom) and visible(ed.tool_strip) and visible(ed.zoom_label)
-      and not visible(ed.tr_top) and not visible(ed.tr_bottom), "«Готово (Esc)»: обычный вид вернулся")
+      and not visible(ed.tr_top), "«Готово (Esc)»: обычный вид вернулся")
 ed.select_tool(TRANSLATE)
 settle()
-check(not visible(ed.panel) and visible(ed.tr_bottom), "снова перевод: панели скрыты")
+check(not visible(ed.panel) and visible(ed.tr_top), "снова перевод: панели скрыты")
 ed.escape()
 settle()
 check(ed.canvas.tool != TRANSLATE and visible(ed.panel) and visible(ed.bottom) and not visible(ed.tr_top), "Esc: обычный вид вернулся")

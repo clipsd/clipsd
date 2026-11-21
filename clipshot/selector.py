@@ -168,6 +168,23 @@ class RegionSelector(TranslateMixin, QWidget):
         self.tour = None           # 1.32: идущее знакомство с окном выделения (SelectorTour)
         self.tour_force = False    # знакомство по запросу (пункт меню): показывать, даже если уже видели
         self._tour_demo = False    # рамка у знакомства показана для примера (своей области ещё нет)
+        # «Снимок окна» (утверждено владельцем 21.11.2026): чип «Окна ▾» в нижней строке панели и клавиша W.
+        # Список окон просится в момент Alt+W, вместе с кадром стола, и приходит сюда set_windows.
+        self.windows_state = None    # None: на этой системе списка нет (чипа нет); "loading"; "ready"
+        self.windows = []            # [windows.WinInfo] сверху вниз, глобальные точки
+        self.windows_complete = True  # False: видны только окна XWayland (дополнение GNOME старое или не стоит)
+        self.windows_ext = ""        # GNOME: ok, old (нет ListWindows), missing (дополнения нет), slow (не ответило вовремя)
+        self.windows_failed = False  # список не получен из-за ошибки (Windows): в меню понятная строка
+        self.window_ext_relogin = False   # дополнение уже обновлено кнопкой, ждёт выхода из сеанса и входа
+        self.window_grab = None      # фабрика(WinInfo) -> объект с сигналом done(QPixmap|None) и start(); None: не умеет
+        self.win_rect = QRect()      # чип «Окна ▾» левее чипа языка; пустой: чипа нет
+        self.win_menu = None         # открытый список окон
+        self.preview_win = None      # окно, чья рамка показана (строка списка под курсором)
+        self.picked_win = None       # выбранное окно: рамка стоит на нём
+        self._desktop_orig = None    # кадр стола до того, как в него вписано выбранное окно
+        self._lift = None            # идущий запрос содержимого выбранного окна
+        self._lift_pixmap = None     # содержимое пришло раньше кадра стола: впишется, когда кадр придёт
+        self._win_open_pending = False   # список попросили (W, чип), пока он ещё не пришёл
 
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -228,10 +245,14 @@ class RegionSelector(TranslateMixin, QWidget):
 
     def set_desktop(self, desktop: QPixmap):
         self.desktop = desktop
-        self.image = desktop.toImage()
+        self._desktop_orig = None
         self.ratio = desktop.devicePixelRatio()
+        if self._lift_pixmap is not None and self.picked_win is not None:
+            self._paint_lifted(self.picked_win, self._lift_pixmap)   # содержимое окна пришло раньше кадра
+        self.image = self.desktop.toImage()
         if self.pending is not None:
-            self._emit(self.pending)
+            if self._lift is None:
+                self._emit(self.pending)
         else:
             self._tr_pending()   # куски для перевода, выделенные до готовности снимка
             self.update()
@@ -353,6 +374,9 @@ class RegionSelector(TranslateMixin, QWidget):
             return
         sel = self.pending if self.pending is not None else self.selection()
 
+        if self.preview_win is not None and self.pending is None and self.start is None:
+            self._draw_window_preview(p)
+            return
         if self.full_mode and self.pending is None and self.start is None:
             self._draw_full_screen(p)
             return
@@ -643,7 +667,9 @@ class RegionSelector(TranslateMixin, QWidget):
         return None
 
     def select_monitor(self, sel):
-        """Режим «весь экран»: все мониторы (None) или один из них."""
+        """Режим «весь экран»: все мониторы (None) или один из них. Вписанное выбранное окно убирается: в снимке
+        экрана только то, что было на экране (проверка 1.33, В5)."""
+        self._unpick()
         mons = self._mon_list()
         if sel is None:
             self.kept = QRect(self.rect())
@@ -810,7 +836,7 @@ class RegionSelector(TranslateMixin, QWidget):
         """Раскладка панели при заданном месте (below, above, right, left, inside); self._bar_ok: место подошло."""
         self._bar_ok = True
         if self.kept is None and not self.translate_mode:
-            self.lang_rect = self.gear_rect = QRect()
+            self.lang_rect = self.gear_rect = self.win_rect = QRect()
             return [], QRect(), QRect()
         r = self.kept
         full = self.full_mode
@@ -868,16 +894,21 @@ class RegionSelector(TranslateMixin, QWidget):
         bold_small.setBold(True)
         fm_h = QFontMetrics(bold_small) if self.translate_mode else fm_s   # строка режима перевода жирная
         # чип языка справа в строке подсказки, левее размера «1040 × 600»; не помещается с названием: один глобус
-        lang_w, gear_w, dims_w, reserve = 0, 0, 0, 0
+        lang_w, gear_w, dims_w, reserve, win_w = 0, 0, 0, 0, 0
         if self.lang_ctx is not None:
             name = i18n.LANGUAGE_NAMES.get(i18n.current(), "")
             long_w = 8 + 14 + 5 + 21 + 5 + fm_s.horizontalAdvance(name + " ▾") + 8   # глобус, флаг, название
             if self.kept is not None and not full and lv["text"] and not self.translate_mode:
                 dims_w = fm_s.horizontalAdvance("0000 × 0000") + 8
+            # чип «Окна ▾» (21.11.2026): значок окна и подпись; места мало: один значок
+            win_long = 0
+            if self.windows_state is not None and not self.translate_mode and not full:
+                win_long = 8 + 14 + 5 + fm_s.horizontalAdvance(tr("selector.win_chip") + " ▾") + 8
+            win_short = 28 if win_long else 0
             lang_w, gear_w = long_w, 28
-            for cand in (long_w, 28):
-                lang_w = cand
-                reserve = cand + gear_w + 4 + dims_w + 6
+            for cand, wcand in ((long_w, win_long), (long_w, win_short), (28, win_short)):
+                lang_w, win_w = cand, wcand
+                reserve = cand + gear_w + 4 + dims_w + 6 + (wcand + 4 if wcand else 0)
                 if any(fm_h.horizontalAdvance(t) + 24 <= inner - reserve for t in variants):
                     break
         text_room = inner - reserve
@@ -965,7 +996,7 @@ class RegionSelector(TranslateMixin, QWidget):
         hint = QRect(x + bp, by + bh_btn + gap, inner, hint_h - 2)
         self.bar_hint_text = hint_text
         self.bar_hint_reserve = reserve
-        self.lang_rect = self.gear_rect = QRect()
+        self.lang_rect = self.gear_rect = self.win_rect = QRect()
         if lang_w:
             ch = self.BAR_CHIP_H
             if hint_lines > 1:
@@ -977,6 +1008,8 @@ class RegionSelector(TranslateMixin, QWidget):
             right = hint.right() - dims_w - (8 if self.translate_mode else 0)
             self.gear_rect = QRect(right - gear_w, cy, gear_w, ch)
             self.lang_rect = QRect(right - gear_w - 4 - lang_w, cy, lang_w, ch)
+            if win_w:
+                self.win_rect = QRect(self.lang_rect.left() - 4 - win_w, cy, win_w, ch)
         self.tr_ctl_rects = []
         if ctl_units:
             cur_x, cur_y = hint.left() + 8, hint.top() + hint_lines * fm_s.height() + 10
@@ -1092,6 +1125,8 @@ class RegionSelector(TranslateMixin, QWidget):
             return "lang"
         if buttons and not self.gear_rect.isEmpty() and self.gear_rect.contains(pos):
             return "settings"
+        if buttons and not self.win_rect.isEmpty() and self.win_rect.contains(pos):
+            return "window"
         for key, _text, _short, rect in buttons:
             if rect.contains(pos):
                 return key
@@ -1260,7 +1295,7 @@ class RegionSelector(TranslateMixin, QWidget):
             lines = 1 if fm_b.horizontalAdvance(self.bar_hint_text) + 24 <= hint.width() else 2
             text_h = lines * fm_b.height() + 8
             shown = self.BAR_TR_BLOCKED if self.hover_button in self.BAR_DISABLED_IN_TR else self.bar_hint_text
-            if self.hover_button in ("lang", "settings"):
+            if self.hover_button in ("lang", "settings", "window"):
                 shown = self._chip_tip(self.hover_button)
             p.drawText(QRect(hint.left() + 8, hint.top(), hint.width() - 16 - self.bar_hint_reserve, text_h), flags, shown)
             w_cur, card_cur, _d, orig_cur, view_cur = self._tr_ctl_state()
@@ -1282,14 +1317,15 @@ class RegionSelector(TranslateMixin, QWidget):
             text = self.bar_hint_text
             if self.hover_button in ("cancel", "corner"):
                 text = tr("selector.close_hint")
-            elif self.hover_button in ("lang", "settings"):
+            elif self.hover_button in ("lang", "settings", "window"):
                 text = self._chip_tip(self.hover_button)
             elif hovered_text:
                 text = hovered_text   # название и клавиши кнопки под курсором
             elif self.kept is not None and not self.full_mode and lv["text"]:
                 phys = self.to_physical(self.kept)
                 dims = f"{phys.width()} × {phys.height()}"
-                if fm_s.horizontalAdvance(text) + fm_s.horizontalAdvance(dims) + 24 + self.lang_rect.width() + self.gear_rect.width() + 4 <= hint.width():
+                if fm_s.horizontalAdvance(text) + fm_s.horizontalAdvance(dims) + 24 + self.lang_rect.width() + self.gear_rect.width() \
+                        + self.win_rect.width() + 4 <= hint.width():
                     p.drawText(hint, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, dims)
             p.drawText(hint.adjusted(0, 0, -self.bar_hint_reserve, 0), flags, text)
         self._draw_lang_chip(p, small_font)
@@ -1302,6 +1338,7 @@ class RegionSelector(TranslateMixin, QWidget):
         if self.lang_rect.isEmpty():
             return
         self._draw_gear(p)
+        self._draw_win_chip(p, font)
         rect = self.lang_rect
         hover = self.hover_button == "lang"
         p.save()
@@ -1325,7 +1362,31 @@ class RegionSelector(TranslateMixin, QWidget):
 
     @staticmethod
     def _chip_tip(key):
+        if key == "window":
+            return f"{tr('selector.btn_window')} (W)"
         return language.menu_title() if key == "lang" else tr("app.menu_settings").rstrip("…")
+
+    def _draw_win_chip(self, p: QPainter, font):
+        """Чип «Окна ▾»: тот же вид, что у чипа языка; значок окна цветом плитки «Снимок всего экрана»."""
+        from . import icons
+        rect = self.win_rect
+        if rect.isEmpty():
+            return
+        hover = self.hover_button == "window"
+        p.save()
+        p.setOpacity(1.0)
+        p.setBrush(QColor("#dbe6f7") if hover else QColor("#eceef2"))
+        p.setPen(QPen(QColor(ACCENT) if hover else QColor("#b8c0cc"), 1))
+        p.drawRoundedRect(QRectF(rect).adjusted(0.5, 0.5, -0.5, -0.5), 7, 7)
+        long_form = rect.width() > 30
+        ic = QRect(rect.left() + (8 if long_form else (rect.width() - 14) // 2), rect.center().y() - 7, 14, 14)
+        icons.icon("window", self.BAR_ICON_COLORS["full"]).paint(p, ic)
+        if long_form:
+            p.setFont(font)
+            p.setPen(QColor("#16181c"))
+            p.drawText(QRect(ic.right() + 6, rect.top(), rect.right() - ic.right() - 8, rect.height()),
+                       Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, tr("selector.win_chip") + " ▾")
+        p.restore()
 
     def _draw_gear(self, p: QPainter):
         """Шестерёнка «Настройки» рядом с чипом языка: тот же вид, один значок."""
@@ -1378,9 +1439,297 @@ class RegionSelector(TranslateMixin, QWidget):
         p.drawLine(QPointF(r.left() + m, r.top() + m), QPointF(r.right() - m, r.bottom() - m))
         p.drawLine(QPointF(r.right() - m, r.top() + m), QPointF(r.left() + m, r.bottom() - m))
 
+    # --- «Снимок окна» (утверждено владельцем 21.11.2026) ---------------------------
+
+    def _win_local(self, win) -> QRect:
+        """Рамка окна в координатах окна выделения, обрезанная его краями."""
+        return win.rect.translated(-self.origin).intersected(self.rect())
+
+    def set_windows(self, wl):
+        """Список окон пришёл (windows.WindowList). Окно выделения само в списке не нужно: на случай, если Shell
+        успел его увидеть, выбрасывается окно этой же программы, накрывающее почти весь стол."""
+        import os
+        if self._done:
+            return
+        own, area = os.getpid(), QRect(self.origin, self.size())
+        whole = area.width() * area.height() * 0.9
+
+        def ours(w):
+            r = w.rect.intersected(area)
+            return w.pid == own and r.width() * r.height() >= whole
+        self.windows = [w for w in wl.windows if not ours(w)]
+        self.windows_complete = wl.complete
+        self.windows_ext = wl.ext_state
+        self.windows_failed = wl.failed
+        self.windows_state = "ready"   # чип уже стоит с начала («loading»): панель не двигается, перетащенная остаётся
+        if self._win_open_pending:
+            busy = self.start is not None or self.translate_mode or self.pending is not None or self.tour is not None \
+                or self.bar_drag is not None or self.resize_edge is not None or self.move_from is not None
+            self._cancel_win_pending()
+            if not busy:   # человек тем временем начал другое действие: меню посреди него не открывается
+                self.open_window_list(keyboard=True)
+        self.update()
+
+    def _cancel_win_pending(self):
+        if self._win_open_pending:
+            self._win_open_pending = False
+            from . import hints
+            hints.hide_hint(self)
+
+    def _menu_note(self, menu, text):
+        """Строка-пояснение в меню: читаемая, но не пункт (клавиатура её пропускает)."""
+        act = menu.addAction(text)
+        act.setEnabled(False)
+        act.setProperty("clipsd_note", True)
+        return act
+
+    def _window_menu(self):
+        """Список окон: сверху вниз по наложению, по мониторам; свёрнутые в конце. Справа приглушённо: монитор (если
+        их несколько) или «свёрнуто». Наведение на строку показывает рамку окна на экране. Дополнение GNOME старое
+        или не стоит: сверху пояснение и пункт «Обновить» («Установить»), ниже неполный список окон XWayland."""
+        from PyQt6.QtGui import QIcon
+        from PyQt6.QtWidgets import QMenu
+        from . import icons
+        from .menus import style_menu
+        from .windows import EXT_MISSING, EXT_OLD, EXT_SLOW
+        menu = QMenu(self)
+        cfg = self.tr_cfg if isinstance(getattr(self, "tr_cfg", None), dict) else {}
+        style_menu(menu, cfg)
+        menu.setObjectName("clipsdWindowList")
+        if self.windows_ext in (EXT_OLD, EXT_MISSING):
+            if self.window_ext_relogin:
+                self._menu_note(menu, tr("selector.win_relogin"))
+            else:
+                old = self.windows_ext == EXT_OLD
+                self._menu_note(menu, tr("selector.win_need_update" if old else "selector.win_need_install"))
+                act = menu.addAction(QIcon(icons.icon("update", "#1e78ff")),
+                                     tr("selector.win_do_update" if old else "selector.win_do_install"))
+                act.setObjectName("clipsdUpdateExtension")
+                act.triggered.connect(self._update_extension)
+            menu.addSeparator()
+        elif self.windows_ext == EXT_SLOW:
+            self._menu_note(menu, tr("selector.win_slow"))   # Shell занят: список полный придёт позже
+            menu.addSeparator()
+        if self.windows_failed:
+            self._menu_note(menu, tr("selector.win_failed"))
+        wins = [w for w in self.windows if w.minimized or not self._win_local(w).isEmpty()]
+        shown = [w for w in wins if not w.minimized]
+        many = len({w.monitor for w in shown}) > 1
+        groups = [[w for w in shown if w.monitor == m] for m in sorted({w.monitor for w in shown})] if many else [shown]
+        groups.append([w for w in wins if w.minimized])
+        groups = [g for g in groups if g]
+        if not groups and not self.windows_failed:
+            self._menu_note(menu, tr("selector.win_empty"))
+        for gi, group in enumerate(groups):
+            if gi:
+                menu.addSeparator()
+            for w in group:
+                title = " ".join((w.title or tr("selector.win_untitled")).split())
+                if len(title) > 64:
+                    title = title[:63].rstrip() + "…"
+                right = tr("selector.win_minimized") if w.minimized else (
+                    tr("selector.win_monitor", n=w.monitor + 1) if many else "")
+                act = menu.addAction(QIcon(self._app_badge(w)), title.replace("&", "&&") + (f"\t{right}" if right else ""))
+                act.setData(w.id)
+                act.hovered.connect(lambda w=w: self._preview(w))
+                act.triggered.connect(lambda _c=False, w=w: self.pick_window(w))
+                # свёрнутое окно в списке видно с пометкой, но не выбирается: его содержимого нет ни у GNOME (скрытое
+                # окно рисуется чёрным), ни у Windows (PrintWindow), ни у X11; его надо сначала развернуть
+                act.setEnabled(not w.minimized)
+                act.setProperty("clipsd_soft", w.minimized)
+        menu.aboutToHide.connect(self._window_menu_closed)
+        return menu
+
+    def _window_menu_closed(self):
+        self.preview_win = None
+        menu, self.win_menu = self.win_menu, None
+        if menu is not None:
+            menu.deleteLater()
+        self.update()
+
+    @staticmethod
+    def _app_badge(win):
+        """Значок программы: значок темы (GNOME) или первая буква на сером квадрате (цвета чипа панели)."""
+        import os
+        from PyQt6.QtGui import QIcon
+        size = 40
+        if win.icon and win.source == "gnome-ext":   # имя значка темы или путь к файлу значка
+            themed = QIcon(win.icon) if os.path.isabs(win.icon) else QIcon.fromTheme(win.icon)
+            if not themed.isNull():
+                return themed.pixmap(size, size)
+        pm = QPixmap(size, size)
+        pm.fill(Qt.GlobalColor.transparent)
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        p.setPen(QPen(QColor("#b8c0cc"), 1.5))
+        p.setBrush(QColor("#eceef2"))
+        p.drawRoundedRect(QRectF(1, 1, size - 2, size - 2), 9, 9)
+        f = QFont()
+        f.setPixelSize(20)
+        f.setBold(True)
+        p.setFont(f)
+        p.setPen(QColor("#3c4350"))
+        letter = (win.app or win.title or "?").strip()[:1].upper()
+        p.drawText(QRect(0, 0, size, size), Qt.AlignmentFlag.AlignCenter, letter)
+        p.end()
+        return pm
+
+    def _preview(self, win):
+        self.preview_win = win if (win is not None and not win.minimized) else None
+        self.update()
+
+    def _window_menu_pos(self, menu) -> QPoint:
+        """Под чипом «Окна ▾» (у нижнего края экрана над ним), если панель видна; иначе вверху по центру монитора
+        под мышью."""
+        h, w = menu.sizeHint().height(), menu.sizeHint().width()
+        if not self.win_rect.isEmpty() and self.kept is not None:
+            below = self.mapToGlobal(self.win_rect.bottomLeft() + QPoint(0, 4))
+            screen = QGuiApplication.screenAt(below) or QGuiApplication.primaryScreen()
+            if below.y() + h <= screen.availableGeometry().bottom():
+                return below
+            above = self.mapToGlobal(self.win_rect.topLeft())
+            return QPoint(above.x(), above.y() - h - 4)
+        screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
+        g = screen.availableGeometry()
+        return QPoint(g.center().x() - w // 2, g.top() + 60)
+
+    def open_window_list(self, keyboard=False):
+        """Чип «Окна ▾» или клавиша W. Список ещё не пришёл: подсказка «готовится», меню откроется, когда придёт.
+        С клавиатуры сразу выделена первая строка (верхнее окно), стрелки и Enter, Esc закрывает только список."""
+        if self.windows_state is None or self.pending is not None or self.tour is not None or self._done:
+            return
+        if self.win_menu is not None:
+            return
+        if self.windows_state == "loading":
+            self._win_open_pending = True
+            from . import hints
+            hints.hint(self, tr("selector.win_loading"))
+            return
+        menu = self._window_menu()
+        menu.ensurePolished()
+        self.win_menu = menu
+        menu.popup(self._window_menu_pos(menu))
+        if keyboard:
+            first = next((a for a in menu.actions() if a.isEnabled() and not a.isSeparator() and a.data() is not None),
+                         None)
+            if first is not None:
+                menu.setActiveAction(first)
+        self.hover_button = None
+        self.update()
+
+    def _close_window_menu(self):
+        if self.win_menu is not None:
+            self.win_menu.close()
+
+    def _update_extension(self):
+        """«Обновить» («Установить») в списке окон: окно выделения закрывается без снимка (как шестерёнка),
+        программа ставит дополнение и объясняет, что дальше."""
+        ctx = self.lang_ctx
+        self._finish(None)
+        if ctx is not None and hasattr(ctx, "update_gnome_extension"):
+            QTimer.singleShot(0, ctx.update_gnome_extension)
+
+    def pick_window(self, win):
+        """Рамка встаёт ровно на выбранное окно; панель как обычно (Enter, Ctrl+Enter, кнопки). При выходе рамка
+        запоминается как прошлая область: следующий снимок начнётся с того же места. Окно закрыто другими: его
+        собственное содержимое просится у источника и вписывается в замороженный кадр, настоящие окна не трогаются.
+        Свёрнутое окно не выбирается (содержимого нет): подсказка «разверните»."""
+        from . import hints
+        from .windows import is_covered
+        if self._done or self.pending is not None:
+            return
+        rect = self._win_local(win)
+        if win.minimized or rect.width() < 3 or rect.height() < 3:
+            hints.hint(self, tr("selector.win_min_failed" if win.minimized else "selector.win_offscreen"),
+                       tr("selector.win_min_failed_sub") if win.minimized else "")
+            return
+        self._unpick()
+        self.preview_win = None
+        self.picked_win = win
+        self.full_mode = False
+        self.bar_anchor = None
+        self.kept = rect
+        self._bar_forget()
+        self.hover_button = None
+        if is_covered(win, self.windows):
+            if self.window_grab is not None:
+                self._lift_start(win)
+            else:   # X11 и GNOME без нового дополнения: содержимое окна под другими взять неоткуда
+                hints.hint(self, tr("selector.win_visible_only"))
+        self.update()
+
+    def _unpick(self):
+        """Снять выбор окна: кадр без вписанного окна, поздний ответ с содержимым окна не нужен."""
+        self._lift = None
+        self._lift_pixmap = None
+        self.picked_win = None
+        if self._desktop_orig is not None:
+            self.desktop, self._desktop_orig = self._desktop_orig, None
+            self.image = self.desktop.toImage()
+
+    def _lift_start(self, win):
+        try:
+            job = self.window_grab(win)
+        except Exception:   # noqa: BLE001 — источник не смог даже начать: остаётся кадр как есть
+            job = None
+        if job is None:
+            self._lift_done(None, win, None)
+            return
+        self._lift = job
+        job.done.connect(lambda pm, job=job, win=win: self._lift_done(job, win, pm))
+        job.start()
+
+    def _lift_done(self, job, win, pixmap):
+        """Содержимое выбранного окна пришло (или нет). Ответ на прежний выбор отбрасывается."""
+        from . import hints
+        if self._done or (job is not None and job is not self._lift) or self.picked_win is not win:
+            return
+        self._lift = None
+        if pixmap is not None and not pixmap.isNull():
+            if self.desktop is None:
+                self._lift_pixmap = pixmap   # кадр стола ещё не пришёл: впишется в set_desktop
+            else:
+                self._paint_lifted(win, pixmap)
+                self.image = self.desktop.toImage()
+        else:
+            hints.hint(self, tr("selector.win_closed"))   # окно закрылось после Alt+W: снимается то, что было видно
+        if self.pending is not None and self.desktop is not None:
+            self._emit(self.pending)
+            return
+        self.update()
+
+    def _paint_lifted(self, win, pixmap):
+        """Вписать содержимое окна в замороженный кадр на место окна (как будто его подняли наверх)."""
+        base = self._desktop_orig if self._desktop_orig is not None else self.desktop
+        self._desktop_orig = base
+        out = QPixmap(base)
+        p = QPainter(out)
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        p.drawPixmap(QRectF(win.rect.translated(-self.origin)), pixmap, QRectF(pixmap.rect()))
+        p.end()
+        self.desktop = out
+        self._lift_pixmap = None
+
+    def _draw_window_preview(self, p: QPainter):
+        """Рамка окна под курсором списка: вокруг затемнено, само окно светлое, размер в пикселях."""
+        r = self._win_local(self.preview_win)
+        p.setClipRegion(QRegion(self.rect()).subtracted(QRegion(r)))
+        p.fillRect(self.rect(), DIM)
+        p.setClipping(False)
+        p.setPen(QPen(ACCENT, self.FRAME_W))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        fw = self.FRAME_W
+        p.drawRect(QRectF(r).adjusted(fw / 2, fw / 2, -fw / 2, -fw / 2))
+        if self.show_size:
+            phys = self.to_physical(r)
+            self._draw_label(p, tr("selector.size_label", w=phys.width(), h=phys.height()), r.topLeft(), above=True)
+        if self.kept is not None:
+            self._draw_action_bar(p)   # список открыт с панели: панель остаётся на месте
+
     def clear_kept(self):
         """«Выделить вручную»: прошлая рамка и панель исчезают, область выделяется мышью с нуля."""
         self.kept = None
+        self._unpick()
         self.full_mode = False
         self.bar_anchor = None
         self._bar_forget()
@@ -1391,7 +1740,9 @@ class RegionSelector(TranslateMixin, QWidget):
         self.update()
 
     def show_full_screen(self):
-        """Кнопка «Весь экран»: весь стол с рамкой по краю, надпись и кнопки в центре."""
+        """Кнопка «Весь экран»: весь стол с рамкой по краю, надпись и кнопки в центре. Вписанное выбранное окно
+        убирается: в снимке экрана только то, что было на экране (проверка 1.33, В5)."""
+        self._unpick()
         self.kept = QRect(self.rect())
         self.full_mode = True
         self.bar_anchor = None
@@ -1403,6 +1754,7 @@ class RegionSelector(TranslateMixin, QWidget):
 
     def enter_translate(self, hint=True):
         """Режим перевода: панель остаётся (плитка перевода подсвечена), внизу бирюзовая строка. Рамки нет."""
+        self._cancel_win_pending()   # список окон, попрошенный раньше, в режиме перевода не открывается
         if not self.translate_mode:
             self.tr_pieces = 0
             self.bar_anchor = None
@@ -1419,7 +1771,9 @@ class RegionSelector(TranslateMixin, QWidget):
             self._tr_spawn_floating(region)
 
     def start_translate_pick(self):
-        """Кнопка «Выделить и перевести» и Ctrl+P: режим перевода без перевода стоящей рамки; обведённое место переводится."""
+        """Кнопка «Выделить и перевести» и Ctrl+P: режим перевода без перевода стоящей рамки; обведённое место переводится.
+        Вписанное выбранное окно убирается: новое место переводится таким, каким было на экране."""
+        self._unpick()
         self.enter_translate()
 
     def _tr_after_spawn(self, spawned=True, full=False, win=None):
@@ -1571,6 +1925,7 @@ class RegionSelector(TranslateMixin, QWidget):
 
     def start_translate_all(self):
         """Кнопка «Перевести весь экран» и Ctrl+Shift+L: монитор переводится сразу, без выделения мышью."""
+        self._unpick()
         rect = self._tr_full_rect()
         self.enter_translate(hint=False)
         self.tr_translate_all(rect)
@@ -1597,6 +1952,9 @@ class RegionSelector(TranslateMixin, QWidget):
             return
         if action == "full":
             self.show_full_screen()
+            return
+        if action == "window":
+            self.open_window_list()
             return
         if action == "translate":
             self.start_translate()
@@ -1679,6 +2037,8 @@ class RegionSelector(TranslateMixin, QWidget):
             self.moved = False
         elif event.button() == Qt.MouseButton.LeftButton and self.full_mode:
             # Весь экран, но нажали мимо кнопок: выделяется обычная область
+            self._unpick()
+            self._cancel_win_pending()
             self.full_mode = False
             self.bar_anchor = None
             self._bar_forget()
@@ -1692,6 +2052,8 @@ class RegionSelector(TranslateMixin, QWidget):
             self.moved = False
         elif event.button() == Qt.MouseButton.LeftButton:
             self.kept = None
+            self._unpick()
+            self._cancel_win_pending()   # начато выделение мышью: попрошенный раньше список окон уже не нужен
             self._bar_forget()
             self.start = event.position().toPoint()
             self.cursor_pos = self.start
@@ -1802,6 +2164,22 @@ class RegionSelector(TranslateMixin, QWidget):
         except (AttributeError, TypeError):
             return False
 
+    @staticmethod
+    def _is_w_key(event) -> bool:
+        """Клавиша W без модификаторов на любой раскладке: по символу (w или «ц») и по физической клавише
+        (X11: код 25; Windows: виртуальный код 0x57)."""
+        if event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier
+                                | Qt.KeyboardModifier.MetaModifier):
+            return False
+        if event.key() == Qt.Key.Key_W or event.text().lower() in ("w", "ц"):
+            return True
+        try:
+            if sys.platform == "win32":
+                return event.nativeVirtualKey() == 0x57
+            return event.nativeScanCode() == 25
+        except (AttributeError, TypeError):
+            return False
+
     def keyPressEvent(self, event):
         if self.tour is not None:
             self.tour.key(event)   # пока идёт знакомство, горячие клавиши окна выделения ничего не снимают
@@ -1823,6 +2201,10 @@ class RegionSelector(TranslateMixin, QWidget):
                 self.start_translate_all()   # Ctrl+Shift+L: весь экран
             else:
                 self.start_translate()       # Ctrl+L: выделенное
+            return
+        if self._is_w_key(event) and self.windows_state is not None and self.pending is None and self.start is None \
+                and not self.translate_mode:
+            self.open_window_list(keyboard=True)   # W, как в окне снимков GNOME: список окон
             return
         if event.key() == Qt.Key.Key_Escape:
             self._finish(None)
@@ -1851,8 +2233,9 @@ class RegionSelector(TranslateMixin, QWidget):
     def _finish(self, sel):
         if self._done:
             return
-        if sel is not None and self.desktop is None:
-            self.pending = sel  # дождаться снимка (set_desktop) и тогда вырезать
+        if sel is not None and (self.desktop is None or self._lift is not None):
+            # дождаться снимка (set_desktop) или содержимого выбранного окна (_lift_done) и тогда вырезать
+            self.pending = sel
             self.update()
             return
         self._emit(sel)
@@ -1861,6 +2244,8 @@ class RegionSelector(TranslateMixin, QWidget):
         if self._done:
             return
         self._done = True
+        self._lift = None   # поздний ответ с содержимым окна больше не нужен
+        self._close_window_menu()
         for w in list(getattr(self, "spawned", [])):   # окно выделения закрыто: окошкам возвращаются плашки
             try:
                 w.enable_chip()

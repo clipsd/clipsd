@@ -42,5 +42,18 @@
   "app.save_failed": "No se pudo guardar la captura: {path}",
   "app.saved": "Captura guardada: {path}",
   "app.tray_click": "clic en el icono",
-  "app.tray_tip": "ClipSD: capturar un área ({hotkey})"
+  "app.tray_tip": "ClipSD: capturar un área ({hotkey})",
+  "app.ext_installed_title": "Extensión ClipSD instalada",
+  "app.ext_updated_title": "Extensión ClipSD actualizada",
+  "app.ext_relogin_text": "Para que ClipSD vea todas las ventanas, cierre la sesión una vez y vuelva a entrar: así GNOME carga la extensión. Antes guarde su trabajo en los programas abiertos.",
+  "app.ext_logout": "Cerrar sesión…",
+  "app.ext_foreign_title": "La extensión ClipSD se instaló a mano",
+  "app.ext_foreign_text": "No se instaló desde ClipSD, por ejemplo desde una copia de trabajo, así que ClipSD no la cambia. Actualícela de la misma forma en que se instaló.",
+  "app.ext_failed_title": "La extensión no se actualizó",
+  "app.ext_failed_text": "La extensión actual sigue funcionando. Motivo: {reason}",
+  "app.ext_no_source": "esta versión de ClipSD no tiene los archivos de la extensión",
+  "app.ext_userext_off_title": "Las extensiones están desactivadas en GNOME",
+  "app.ext_userext_off_text": "La extensión ClipSD no se actualizó: en GNOME están desactivadas todas las extensiones de usuario y volver a entrar no cambiaría nada. Actívelas en la aplicación Extensiones (el interruptor arriba de la ventana) y pulse «Actualizar» otra vez.",
+  "app.ext_unsupported_title": "Esta versión de GNOME aún no es compatible",
+  "app.ext_unsupported_text": "La extensión ClipSD funciona en GNOME 45-50, usted tiene GNOME {version}. La lista de ventanas estará incompleta, todo lo demás funciona como siempre."
 }

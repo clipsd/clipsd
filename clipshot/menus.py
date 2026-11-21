@@ -29,6 +29,7 @@ class ClipMenuStyle(QProxyStyle):
         self.muted = QColor(tokens["text_dim"]) if dark else QColor("#8a93a0")
         self.hover = QColor(accent.red(), accent.green(), accent.blue(), 70 if dark else 38)
         self.off = QColor("#6a6a6a") if dark else QColor("#b6bdc8")
+        self.note = QColor("#aab1ba") if dark else QColor("#5a6270")   # пояснение в меню: 4,5:1 и выше в обеих темах
 
     @staticmethod
     def _font(base: QFont) -> QFont:
@@ -84,6 +85,16 @@ class ClipMenuStyle(QProxyStyle):
             painter.restore()
             return
         enabled = bool(option.state & QStyle.StateFlag.State_Enabled)
+        act = widget.actionAt(rect.center()) if widget is not None and hasattr(widget, "actionAt") else None
+        if act is not None and act.property("clipsd_note"):
+            # строка-пояснение (не пункт): читаемый приглушённый цвет, без подсветки, клавиатура её пропускает
+            painter.setFont(self._font(option.font))
+            painter.setPen(self.note)
+            label, _s = self._split(option.text)
+            painter.drawText(rect.adjusted(PAD_H, 0, -PAD_H, 0), int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft),
+                             label)
+            painter.restore()
+            return
         if (option.state & QStyle.StateFlag.State_Selected) and enabled:
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(self.hover)
@@ -113,14 +124,16 @@ class ClipMenuStyle(QProxyStyle):
                 painter.setBrush(Qt.BrushStyle.NoBrush)
                 painter.drawRoundedRect(QRectF(box).adjusted(-3, -3, 3, 3), 5, 5)
             shift = 52 + (4 if wide else 0)
-        painter.setPen(self.text if enabled else self.off)
+        # недоступный пункт, который всё же надо прочитать (свёрнутое окно в списке окон): читаемый приглушённый цвет
+        soft = not enabled and act is not None and bool(act.property("clipsd_soft"))
+        painter.setPen(self.text if enabled else (self.note if soft else self.off))
         painter.drawText(QRect(inner.left() + shift, rect.top(), inner.width() - shift, rect.height()),
                          int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft), label)
         if option.menuItemType == option.MenuItemType.SubMenu:
             painter.setPen(self.muted)
             painter.drawText(inner, int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight), "›")
         if shortcut:
-            painter.setPen(self.muted if enabled else self.off)
+            painter.setPen(self.muted if enabled else (self.note if soft else self.off))
             painter.drawText(inner, int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight), shortcut)
         painter.restore()
 

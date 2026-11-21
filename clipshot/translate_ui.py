@@ -72,6 +72,8 @@ class TranslateCard:
         self.view = None              # "overlay" (поверх текста) или "card" (карточкой); None: из настроек
         self.head_off = QPointF(0, 0) # «Поверх текста»: плашка с кнопками оттащена мышью
         self.chip = QRectF()          # «Поверх текста»: где плашка
+        self.req_lang = ""            # язык, на который ушёл запрос этого куска (пусто: кусок собран без запроса)
+        self.redo_lang = False        # язык сменили, пока шёл перевод: ответ на прежний язык не показывается, перевод заново
         self.full = False             # «Перевести весь экран (снимок)»: кусок это всё окно, ждать может долго
         self.job = None               # идущее распознавание и перевод (чтобы отменить по Esc)
         self.popup = None             # открытое окно «сколько хватит или отмена»
@@ -126,18 +128,25 @@ class TranslateCard:
         return self.help is not None and getattr(self.help, "service", None) == "mymemory_email"
 
 
-def fit_font(text: str, rect: QRectF, base_px: float):
-    """Шрифт, при котором текст с переносами помещается в рамку; не помещается даже мелким: рамка растёт вниз."""
+def _text_box(px: int, width: int, text: str) -> QRect:
+    """Сколько места занимает текст размером px с переносами по словам в строке шириной width. Слово длиннее строки
+    Qt не переносит: тогда ширина ответа больше width."""
     font = QFont()
+    font.setPixelSize(px)
+    return QFontMetrics(font).boundingRect(QRect(0, 0, width, 100000), Qt.TextFlag.TextWordWrap, text)
+
+
+def fit_font(text: str, rect: QRectF, base_px: float):
+    """Шрифт, при котором текст с переносами помещается в рамку и по высоте, и по ширине; не помещается даже мелким:
+    рамка растёт вниз, а если одно слово шире рамки, то и вправо. Раньше ширина не проверялась: слово перевода,
+    которое длиннее своей строки рамки, обрезалось при рисовании («команда» на месте «team» читалась «команд», 1.32.3)."""
     width = max(20, int(rect.width()))
     for px in range(max(9, int(base_px)), 8, -1):
-        font.setPixelSize(px)
-        need = QFontMetrics(font).boundingRect(QRect(0, 0, width, 100000), Qt.TextFlag.TextWordWrap, text).height()
-        if need <= rect.height() + 2:
+        box = _text_box(px, width, text)
+        if box.height() <= rect.height() + 2 and box.width() <= rect.width():
             return px, QRectF(rect)
-    font.setPixelSize(9)
-    need = QFontMetrics(font).boundingRect(QRect(0, 0, width, 100000), Qt.TextFlag.TextWordWrap, text).height()
-    return 9, QRectF(rect.x(), rect.y(), rect.width(), need + 4)
+    box = _text_box(9, width, text)
+    return 9, QRectF(rect.x(), rect.y(), max(rect.width(), box.width() + 2.0), box.height() + 4)
 
 
 def unify_sizes(blocks):
@@ -158,9 +167,11 @@ def unify_sizes(blocks):
             own, b["px"] = b["px"], shared
             font.setPixelSize(shared)
             d = b["draw"]
-            need = QFontMetrics(font).boundingRect(QRect(0, 0, max(20, int(d.width())), 100000),
-                                                   Qt.TextFlag.TextWordWrap, b["text"]).height()
-            if need > d.height() + 2 and d.height() < 1.6 * QFontMetrics(font).lineSpacing():
+            box = _text_box(shared, max(20, int(d.width())), b["text"])
+            need = box.height()
+            if box.width() > d.width() and shared > own:
+                b["px"] = own   # крупнее своего слово перевода вышло бы за рамку справа и обрезалось
+            elif need > d.height() + 2 and d.height() < 1.6 * QFontMetrics(font).lineSpacing():
                 b["px"] = own   # одна строка (вкладка, адрес): крупнее своей она ушла бы в столбик ниже рамки
             elif need > d.height() + 2:
                 b["draw"] = QRectF(d.x(), d.y(), d.width(), need + 4)
@@ -373,13 +384,32 @@ class TranslateMixin:
             self._tr_choose_lang(chosen.data(), card)
 
     def _tr_choose_lang(self, code: str, card=None):
+        if (self.tr_cfg.get("translate_to", "auto") or "auto") == code:
+            # тот же язык: лишний запрос и расход лимита не нужны; но кусок, устаревший после смены языка в другом редакторе,
+            # переводится заново (на кнопке язык уже стоит, а на куске прежний)
+            from . import translate
+            want = translate._norm(translate.target_lang(self.tr_cfg))
+            for c in ([card] if card is not None else list(self.tr_cards)):
+                if c is not None and c.req_lang and c.req_lang != want:
+                    if c.state in ("done", "error"):
+                        self._tr_redo(c)
+                    elif c.state == "busy":
+                        c.redo_lang = True
+            self.update()
+            return
         self.tr_cfg["translate_to"] = code
         if callable(self.tr_save):
             self.tr_save()
         for c in ([card] if card is not None else list(self.tr_cards)):
             if c is not None and c.state in ("done", "error"):
                 self._tr_redo(c)
+            elif c is not None and c.state == "busy":
+                c.redo_lang = True   # ответ придёт на прежний язык: по приходе перевод запустится заново на новом
         self.update()
+
+    def _tr_redo_allowed(self) -> bool:
+        """Можно ли запускать новый запрос после смены языка: слой редактора только пока режим перевода открыт."""
+        return True
 
     def _tr_redo(self, card):
         """Перевести кусок заново (другой язык или сервис)."""
@@ -445,6 +475,7 @@ class TranslateMixin:
                 self.tr_timer.start(80)
             return
         card.state = "busy"
+        card.req_lang = translate._norm(translate.target_lang(self.tr_cfg))   # на какой язык ушёл этот запрос
         if not self.tr_timer.isActive():
             self.tr_timer.start(80)
         confirm = (lambda need, left, job, c=card: self._tr_confirm(c, need, left, job)) if card.full else None
@@ -657,6 +688,15 @@ class TranslateMixin:
         if not self._tr_alive() or card not in self.tr_cards:
             return
         from . import translate
+        if card.redo_lang and error != translate.CANCELLED:
+            card.redo_lang = False   # 1.32.4: язык сменили во время запроса; ответ на прежний язык (и его ошибка) не показываются
+            if self._tr_redo_allowed():
+                self._tr_redo(card)
+            else:   # режим перевода уже закрыт (Esc): новый запрос не уходит, кусок убирается
+                self.tr_cards = [c for c in self.tr_cards if c is not card]
+            self.update()
+            self.tr_state_changed()
+            return
         card.skipped = getattr(results, "skipped", 0)
         card.total = getattr(results, "total", 0)
         if error == translate.CANCELLED:
@@ -718,6 +758,11 @@ class TranslateMixin:
         вместе с ней (в редакторе). Окно выделения и окошко перевода работают по рамке выделения и не меняются."""
         return content
 
+    def _tr_grow_selection(self, rect: QRect) -> QRect:
+        """Обведённый кусок перед распознаванием. Редактор дотягивает рамку до конца разрезанной ею строки
+        (TranslateLayer); окно выделения работает по рамке как есть."""
+        return rect
+
     # --- кнопки -------------------------------------------------------------------
 
     def _tr_copy(self, text: str, near: QRect = None, what=None):
@@ -765,6 +810,10 @@ class TranslateMixin:
                         return True
                     elif name == "lang":
                         self._tr_lang_menu(rect, card)
+                        return True
+                    elif name == "retry":
+                        if card.state == "error":   # второе нажатие до перерисовки запрос не дублирует
+                            self._tr_redo(card)
                         return True
                     elif name == "setup":
                         self._tr_open_setup()
@@ -888,6 +937,7 @@ class TranslateMixin:
             self.tr_start = self.tr_cur = None
             rect = QRect(a, b).normalized().intersected(self.rect())
             if rect.width() >= 8 and rect.height() >= 8:
+                rect = self._tr_grow_selection(rect)
                 if self.tr_floating:
                     self._tr_spawn_floating(rect)
                     return True
@@ -1014,7 +1064,7 @@ class TranslateMixin:
             elif card.help is not None and card.help.command:
                 items = [("command", tr("translate_ui.copy_command"), True)]
             else:
-                items = []
+                items = [("retry", tr("updater.button.retry"), True)]   # у обычной ошибки одно действие: повторить
             return tr("translate_ui.failed"), "", items
         return (tr("translate_ui.busy") if card.state == "busy" else tr("selector.preparing")), "", []
 
@@ -1148,9 +1198,11 @@ class TranslateMixin:
         else:
             # Слой на снимке: над областью, под ней, сбоку, внутри сверху или снизу; берётся место, где плашка
             # меньше всего закрывает перевод (при равенстве выигрывает более ранний вариант: над областью)
+            bnd = self._tr_bounds()
+
             def fit(r):
-                return QRectF(max(2.0, min(r.x(), self.width() - r.width() - 2)),
-                              max(2.0, min(r.y(), self.height() - r.height() - 2)), r.width(), r.height())
+                return QRectF(max(bnd.left() + 2, min(r.x(), bnd.right() - r.width() - 2)),
+                              max(bnd.top() + 2, min(r.y(), bnd.bottom() - r.height() - 2)), r.width(), r.height())
             text = [b["draw"].united(b["rect"]) for b in card.blocks]
 
             def covered(r):
@@ -1166,8 +1218,9 @@ class TranslateMixin:
             x, y = spot.x(), spot.y()
         if not self.tr_fill_card:
             x, y = x + card.head_off.x(), y + card.head_off.y()
-            x = max(2.0, min(x, self.width() - w - 2))
-            y = max(2.0, min(y, self.height() - h - 2))
+            bnd = self._tr_bounds()
+            x = max(bnd.left() + 2, min(x, bnd.right() - w - 2))
+            y = max(bnd.top() + 2, min(y, bnd.bottom() - h - 2))
         return QRectF(x, y, w, h)
 
     def _tr_paint_overlay(self, p: QPainter, card: TranslateCard):
@@ -1211,8 +1264,6 @@ class TranslateMixin:
             draw_spinner(p, QPointF(c.x(), c.y()), radius, self.tr_phase, TEAL)
             if card.full:
                 self._tr_busy_label(p, QPointF(c.x(), c.y() + radius + 12), self.tr_full_wait)
-        elif card.state == "error":
-            self._tr_notice(p, reg, self._tr_error_text(card))
         if not (self.tr_chip or card.state == "error"):   # ошибке нужны её кнопки («Подключить Google…»), остальным нет
             card.chip, card.handle, card.buttons = QRectF(), QRectF(), {}
             if getattr(self, "mini", False) or getattr(self, "crowded", False):
@@ -1227,6 +1278,9 @@ class TranslateMixin:
                 p.drawLine(QPointF(c.x() - 4, c.y() - 4), QPointF(c.x() + 4, c.y() + 4))
                 p.drawLine(QPointF(c.x() + 4, c.y() - 4), QPointF(c.x() - 4, c.y() + 4))
             return
+        if card.state == "error":
+            self._tr_paint_error_card(p, card, col)   # 1.32.4: одна карточка: заголовок, действия, объяснение
+            return
         chip = self._tr_chip_rect(card)
         card.chip = chip
         p.setPen(Qt.PenStyle.NoPen)
@@ -1237,6 +1291,43 @@ class TranslateMixin:
         p.setBrush(col["card"])
         p.drawRoundedRect(chip.adjusted(0.5, 0.5, -0.5, -0.5), 14, 14)
         self._tr_paint_head(p, card, chip, col)
+
+    def _tr_error_card_rect(self, card) -> tuple:
+        """Одна карточка ошибки поверх снимка: шапка с заголовком и действиями, под ней объяснение. Целиком в видимой части."""
+        text = self._tr_error_text(card)
+        note, text_h = self._tr_notice_box(QRectF(card.region), text)   # место и высота строк текста объяснения
+        bounds = self._tr_bounds()
+        w = min(max(note.width(), card.header_need, 260.0), max(120.0, bounds.width() - 8))
+        h = self.CHIP_H + text_h + 28
+        x = max(bounds.left() + 4, min(note.left(), bounds.right() - w - 4))
+        y = max(bounds.top() + 4, min(note.top(), bounds.bottom() - h - 4))
+        return QRectF(x, y, w, h), text, text_h
+
+    def _tr_paint_error_card(self, p: QPainter, card, col: dict):
+        self._tr_layout_overlay(card)
+        box, text, text_h = self._tr_error_card_rect(card)
+        card.chip = box
+        p.setPen(Qt.PenStyle.NoPen)
+        for i, alpha in ((8, 8), (5, 12), (2, 16)):
+            p.setBrush(QColor(8, 60, 55, alpha))
+            p.drawRoundedRect(box.adjusted(-i, -i + 4, i, i + 4), 14 + i, 14 + i)
+        p.setPen(QPen(col["border"], 1))
+        p.setBrush(col["card"])
+        p.drawRoundedRect(box.adjusted(0.5, 0.5, -0.5, -0.5), 14, 14)
+        self._tr_paint_head(p, card, box, col)
+        p.setPen(QPen(col["line"], 1))
+        p.drawLine(QPointF(box.left() + 1, box.top() + self.CHIP_H), QPointF(box.right() - 1, box.top() + self.CHIP_H))
+        circle = QRectF(box.left() + 14, box.top() + self.CHIP_H + 12, 26, 26)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#f59e0b"))
+        p.drawEllipse(circle)
+        p.setPen(QColor("#ffffff"))
+        p.setFont(self._chip_font(16))
+        p.drawText(circle, Qt.AlignmentFlag.AlignCenter, "!")
+        p.setPen(col["text"])
+        p.setFont(self._chip_font(13, bold=False))
+        p.drawText(QRectF(box.left() + 52, box.top() + self.CHIP_H + 12, box.width() - 66, text_h + 4),
+                   int(Qt.TextFlag.TextWordWrap) | int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop), text)
 
     def _tr_paint_card(self, p: QPainter, card: TranslateCard):
         if self._tr_view(card) == "overlay":
@@ -1380,7 +1471,9 @@ class TranslateMixin:
         sub = tr("translate_ui.esc_cancel")
         w = max(fm.horizontalAdvance(text), QFontMetrics(self._chip_font(12, bold=False)).horizontalAdvance(sub)) + 32
         box = QRectF(top_center.x() - w / 2, top_center.y() + 4, w, 50)
-        box.moveLeft(max(2.0, min(box.left(), self.width() - w - 2)))
+        bnd = self._tr_bounds()
+        box.moveLeft(max(bnd.left() + 2, min(box.left(), bnd.right() - w - 2)))
+        box.moveTop(max(bnd.top() + 2, min(box.top(), bnd.bottom() - box.height() - 2)))
         p.save()
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(32, 33, 36, 235))
@@ -1404,15 +1497,24 @@ class TranslateMixin:
             text += "\n" + card.help.command
         return text
 
+    def _tr_bounds(self) -> QRectF:
+        """Где карточки и плашки должны помещаться целиком: окно целиком (в слое редактора переопределено: видимая часть снимка)."""
+        return QRectF(0, 0, self.width(), self.height())
+
     def _tr_notice_box(self, reg: QRectF, text: str, window_width: int = None):
         """Место карточки сообщения (_tr_notice) в координатах окна и высота строк текста. Не меньше 220x56 точек: на
         маленьком куске она больше самого куска. window_width: прижать к правому краю окна такой ширины."""
         font = self._chip_font(13, bold=False)
-        width = int(max(220, min(reg.width() - 16, 560)))
+        bounds = self._tr_bounds()   # 1.32.4: карточка целиком в видимой части, а не по краю сдвинутого снимка
+        vis = QRectF(reg).intersected(bounds)
+        if vis.width() < 40 or vis.height() < 20:
+            vis = bounds
+        width = int(max(220, min(vis.width() - 16, 560)))
+        width = int(min(width, max(120.0, bounds.width() - 8)))
         br = QFontMetrics(font).boundingRect(QRect(0, 0, width - 64, 2000), Qt.TextFlag.TextWordWrap, text)
-        box = QRectF(reg.left() + 8, reg.top() + 8, width, max(br.height() + 24, 56))
-        if window_width is not None:
-            box.moveLeft(max(4.0, min(box.left(), window_width - box.width() - 4)))
+        box = QRectF(vis.left() + 8, vis.top() + 8, width, max(br.height() + 24, 56))
+        box.moveLeft(max(bounds.left() + 4, min(box.left(), bounds.right() - box.width() - 4)))
+        box.moveTop(max(bounds.top() + 4, min(box.top(), bounds.bottom() - box.height() - 4)))
         return box, br.height()
 
     def _tr_notice(self, p: QPainter, reg: QRectF, text: str):
@@ -1450,8 +1552,9 @@ class TranslateMixin:
         if wide:
             box.moveTop(reg.top() + 6)   # длинная инструкция: от верха карточки, под строкой кнопок
             box.moveLeft(reg.left() + 6)
-        box.moveLeft(max(4.0, min(box.left(), self.width() - box.width() - 4)))   # не уходить за край экрана
-        box.moveTop(max(34.0, min(box.top(), self.height() - box.height() - 4)))
+        bnd = self._tr_bounds()
+        box.moveLeft(max(bnd.left() + 4, min(box.left(), bnd.right() - box.width() - 4)))   # не уходить за край видимой части
+        box.moveTop(max(bnd.top() + 34, min(box.top(), bnd.bottom() - box.height() - 4)))
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(color)
         p.drawRoundedRect(box, 8, 8)
@@ -1554,6 +1657,14 @@ class TranslateLayer(TranslateMixin, QWidget):
         self.setGeometry(canvas.rect())
         self.activate(False)
 
+    def _tr_redo_allowed(self) -> bool:
+        return self.isVisible()   # режим закрыт (Esc или «Готово»): слой скрыт
+
+    def _tr_bounds(self) -> QRectF:
+        """Слой лежит на всём снимке, а окно показывает его часть: карточки и плашки прижимаются к видимой части."""
+        vis = self.visibleRegion().boundingRect()
+        return QRectF(vis) if not vis.isEmpty() else QRectF(self.rect())
+
     @property
     def tr_floating(self) -> bool:
         """Вид «Карточкой»: перевод уходит в отдельное окошко, его можно унести за пределы окна редактора."""
@@ -1654,7 +1765,19 @@ class TranslateLayer(TranslateMixin, QWidget):
         return cards
 
     def all_text(self) -> str:
-        return "\n\n".join(c.text() for c in self.all_cards() if c.state == "done" and c.text())
+        """Переведённое для копирования: всё, что видно как перевод текущего запроса (в том числе кусок или абзац, который
+        сервис перевёл на запасной язык, потому что текст уже на языке перевода). Не копируется ответ прежнего запроса:
+        кусок, ушедший на другой язык, чем выбран сейчас, пока он не переведён заново."""
+        from . import translate
+        want = translate._norm(translate.target_lang(self.tr_cfg))
+        parts = []
+        for c in self.all_cards():
+            if c.state != "done" or (c.req_lang and c.req_lang != want):
+                continue
+            text = c.text()
+            if text:
+                parts.append(text)
+        return "\n\n".join(parts)
 
     def stats(self):
         """(переведено абзацев, пропущено как русские, всего к переводу, обрезано лимитом) по готовым кускам."""
@@ -1747,8 +1870,12 @@ class TranslateLayer(TranslateMixin, QWidget):
         super()._tr_choose_lang(code, card)
         if card is None:
             for win in list(self.floats):
-                if not sip.isdeleted(win) and win.tr_cards and win.tr_cards[0].state in ("done", "error"):
+                if sip.isdeleted(win) or not win.tr_cards:
+                    continue
+                if win.tr_cards[0].state in ("done", "error"):
                     win._tr_redo(win.tr_cards[0])
+                elif win.tr_cards[0].state == "busy":
+                    win.tr_cards[0].redo_lang = True
         self.tr_state_changed()
 
     def adopt(self, win, card_src):
@@ -1760,6 +1887,7 @@ class TranslateLayer(TranslateMixin, QWidget):
         dy = src.y() - card_src.region.y()
         card.state, card.message, card.help = card_src.state, card_src.message, card_src.help
         card.show_original, card.px = card_src.show_original, card_src.px
+        card.req_lang = card_src.req_lang   # язык запроса переезжает вместе с куском (иначе копировался бы прежний перевод)
         for b in card_src.blocks:
             nb = dict(b)
             nb["rect"], nb["draw"] = QRectF(b["rect"]).translated(dx, dy), QRectF(b["draw"]).translated(dx, dy)
@@ -1893,6 +2021,95 @@ class TranslateLayer(TranslateMixin, QWidget):
             else:
                 out.setLeft(out.left() - grown)
         return out.intersected(QRectF(self.rect()))
+
+    def _tr_grow_selection(self, rect: QRect) -> QRect:
+        """Рамка выделения часто режет строку: верх рамки проходит по середине букв, край по середине слова.
+        Распознавание по такому обрезку давало мусор («SEs SEE = чи»), а разрезанная строка оставалась без перевода
+        (1.32.3: заголовок, по которому владелец провёл маркер, обведён от середины первой строки). Перед распознаванием
+        рамка поправляется по чистому снимку (без пометок): строка, от которой захвачена хотя бы треть, берётся целиком,
+        а тонкая полоска чужой строки у края в распознавание не идёт; слово, разрезанное боковым краем, дочитывается
+        до пробела (не дальше трёх высот букв). Край меняется, только если режет «чернила» (отличие от фона прямо по обе
+        стороны края); рамка по пустому месту остаётся как есть. Окно выделения экрана работает по рамке как раньше."""
+        image, k = self.canvas.base, self._tr_scale()
+        if image is None or image.isNull():
+            return rect
+        iw, ih = image.width(), image.height()
+        reg = self._tr_phys(QRectF(rect)).intersected(QRect(0, 0, iw, ih))
+        if reg.width() < 4 or reg.height() < 4:
+            return rect
+        bg = sample_colors(image, reg)[0]
+
+        def ink(x, y):
+            c = image.pixelColor(x, y)
+            return abs(c.red() - bg.red()) + abs(c.green() - bg.green()) + abs(c.blue() - bg.blue()) > 90
+
+        def row(y, a, b):
+            return 0 <= y < ih and any(ink(x, y) for x in range(a, b + 1, max(1, (b - a) // 1200)))
+
+        def col(x, a, b):
+            return 0 <= x < iw and any(ink(x, y) for y in range(a, b + 1, max(1, (b - a) // 600)))
+
+        def reach(has, limit, gap):
+            """Последний шаг с чернилами, если идти от края (пустых шагов подряд не больше gap); -1: чернил нет."""
+            last = -1
+            for d in range(max(0, limit)):
+                if has(d):
+                    last = d
+                elif d - last > gap:
+                    break
+            return last
+
+        pad = 2   # пикселя снимка за последними чернилами: буквы не касаются края куска
+        x1, x2, y1, y2 = reg.left(), reg.right(), reg.top(), reg.bottom()
+        least = max(4, round(8 * k))   # ниже этого кусок не сжимается
+        # сверху и снизу: строка, разрезанная по высоте. Захвачена хотя бы треть строки: рамка забирает её целиком;
+        # меньше (задет низ строки над абзацем или верх строки под ним): полоска не идёт в распознавание
+        if row(y1, x1, x2) and row(y1 - 1, x1, x2):
+            inside = reach(lambda d: row(y1 + d, x1, x2), y2 - y1 + 1, 2) + 1
+            out = reach(lambda d: row(y1 - 1 - d, x1, x2), 3 * inside + 2, 2) + 1
+            if out <= 2 * inside:
+                y1 = max(0, y1 - out - pad)
+            elif y2 - (y1 + inside) + 1 >= least:
+                y1 += inside
+        if row(y2, x1, x2) and row(y2 + 1, x1, x2):
+            inside = reach(lambda d: row(y2 - d, x1, x2), y2 - y1 + 1, 2) + 1
+            out = reach(lambda d: row(y2 + 1 + d, x1, x2), 3 * inside + 2, 2) + 1
+            if out <= 2 * inside:
+                y2 = min(ih - 1, y2 + out + pad)
+            elif (y2 - inside) - y1 + 1 >= least:
+                y2 -= inside
+
+        def glyph_height(xa, xb):
+            """Высота букв у края: самая длинная полоса рядов с чернилами (разрывы до 2 рядов) в полосе у края."""
+            best = run = gap = 0
+            for y in range(y1, y2 + 1):
+                if any(ink(x, y) for x in range(max(0, xa), min(iw - 1, xb) + 1)):
+                    run, gap = run + 1 + gap, 0
+                    best = max(best, run)
+                elif run:
+                    gap += 1
+                    if gap > 2:
+                        run = gap = 0
+            return best
+
+        band = max(3, round(12 * k))
+        # справа и слева: слово, разрезанное по ширине. Конец слова: пустой промежуток больше 0,4 высоты букв
+        # (между буквами меньше, пробел больше); лишнее слово лучше разрезанной буквы
+        if col(x2, y1, y2) and col(x2 + 1, y1, y2):
+            h = glyph_height(x2 - band, x2)
+            gap = max(2, round(h * 0.4))
+            out = reach(lambda d: col(x2 + 1 + d, y1, y2), 3 * h + gap, gap)
+            x2 = min(iw - 1, x2 + out + 1 + pad)
+        if col(x1, y1, y2) and col(x1 - 1, y1, y2):
+            h = glyph_height(x1, x1 + band)
+            gap = max(2, round(h * 0.4))
+            out = reach(lambda d: col(x1 - 1 - d, y1, y2), 3 * h + gap, gap)
+            x1 = max(0, x1 - (out + 1 + pad))
+        if (x1, x2, y1, y2) == (reg.left(), reg.right(), reg.top(), reg.bottom()):
+            return rect
+        left, top = math.floor(x1 / k), math.floor(y1 / k)
+        grown = QRect(left, top, math.ceil((x2 + 1) / k) - left, math.ceil((y2 + 1) / k) - top)
+        return grown.intersected(self.rect())
 
     def eventFilter(self, obj, event):
         from PyQt6.QtCore import QEvent
@@ -2331,6 +2548,7 @@ class FloatingTranslation(TranslateMixin, QWidget):
         dx, dy = card.region.x() - src.region.x(), card.region.y() - src.region.y()
         card.state, card.message, card.help = src.state, src.message, src.help
         card.show_original, card.px = src.show_original, src.px
+        card.req_lang = src.req_lang
         card.blocks = []
         for b in src.blocks:
             nb = dict(b)

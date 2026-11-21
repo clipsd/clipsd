@@ -1,0 +1,5 @@
+{
+  "neighbor.title": "ClipSD est déjà en cours d'exécution",
+  "neighbor.text_store": "ClipSD est déjà en cours d'exécution (version du Microsoft Store). Son icône se trouve près de l'horloge ; si elle n'est pas visible, déployez les icônes masquées avec la flèche. Une seconde copie ne démarre pas : une seule peut fonctionner. Pour lancer la version du site web, fermez d'abord celle-ci : clic droit sur l'icône, « {quit} ».",
+  "neighbor.text_site": "ClipSD est déjà en cours d'exécution (version du site web). Son icône se trouve près de l'horloge ; si elle n'est pas visible, déployez les icônes masquées avec la flèche. Une seconde copie ne démarre pas : une seule peut fonctionner. Pour lancer la version du Microsoft Store, fermez d'abord celle-ci : clic droit sur l'icône, « {quit} »."
+}

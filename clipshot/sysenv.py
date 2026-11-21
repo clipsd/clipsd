@@ -100,3 +100,26 @@ def open_url(url) -> bool:
             except OSError:
                 pass
     return QDesktopServices.openUrl(qurl)
+
+
+
+def run_elevated_self(arguments: list):
+    """Windows: start this program once more as administrator (one UAC prompt naming ClipSD, not a shell) with
+    the given arguments; it does one thing and exits. "Photo from phone" uses it for "Allow again"
+    (clipsd --allow-phone-firewall, phone.apply_windows_firewall). Returns (True, "") when Windows started it,
+    (False, reason) otherwise: the UAC prompt was refused, not Windows. The result itself is not awaited."""
+    if sys.platform != "win32":
+        return False, "not Windows"
+    import ctypes
+    import subprocess
+    if getattr(sys, "frozen", False):
+        program, args = sys.executable, list(arguments)
+    else:
+        program, args = sys.executable, ["-m", "clipshot"] + list(arguments)
+    try:
+        rc = ctypes.windll.shell32.ShellExecuteW(None, "runas", program, subprocess.list2cmdline(args), None, 0)
+    except (AttributeError, OSError) as exc:
+        return False, str(exc)
+    if rc <= 32:   # ShellExecute: values up to 32 are errors (5: access denied, the UAC prompt was refused)
+        return False, f"ShellExecute {rc}"
+    return True, ""

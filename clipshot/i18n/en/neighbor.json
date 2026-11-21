@@ -1,0 +1,5 @@
+{
+  "neighbor.title": "ClipSD is already running",
+  "neighbor.text_store": "ClipSD is already running (Microsoft Store version). Its icon is next to the clock; if you do not see it, expand the hidden icons with the arrow. A second copy does not start: only one can work at a time. To run the website version, close this one first: right-click the icon, \"{quit}\".",
+  "neighbor.text_site": "ClipSD is already running (website version). Its icon is next to the clock; if you do not see it, expand the hidden icons with the arrow. A second copy does not start: only one can work at a time. To run the Microsoft Store version, close this one first: right-click the icon, \"{quit}\"."
+}

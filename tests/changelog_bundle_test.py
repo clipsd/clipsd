@@ -74,7 +74,7 @@ finally:
     shutil.rmtree(tmp, ignore_errors=True)
 
 # --- заметки выпусков 1.32.0, 1.32.1, 1.32.2 и 1.32.3 ----------------------------------------------------------------
-for version in ("1.32.0", "1.32.1", "1.32.2", "1.32.3"):
+for version in ("1.32.0", "1.32.1", "1.32.2", "1.32.3", "1.33.0"):
     folder = ROOT / "CHANGELOG" / version
     missing = [lang for lang in LANGS if not (folder / f"{lang}.md").is_file()]
     check(not missing, f"CHANGELOG/{version}: 12 языков {missing or ''}")
@@ -113,6 +113,20 @@ for lang in LANGS:
         if name not in text:
             missing.append(name)
     check(not missing, f"CHANGELOG/1.32.3/{lang}: названия кнопок как в программе {missing or ''}")
+
+# 1.33.0: названия кнопок в заметках такие же, как в программе на этом языке
+BUTTONS_133 = (("editor", "editor.tr_copy"), ("editor", "editor.tr_seg_translation"), ("editor", "editor.tr_seg_original"),
+               ("updater", "updater.button.retry"), ("selector", "selector.win_chip"), ("selector", "selector.win_do_update"),
+               ("phone", "phone.menu"), ("phone", "phone.full_size"), ("phone", "phone.fw_allow"))
+for lang in LANGS:
+    path = ROOT / "CHANGELOG" / "1.33.0" / f"{lang}.md"
+    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    missing = []
+    for catalog, key in BUTTONS_133:
+        name = json.loads((ROOT / "clipshot" / "i18n" / lang / f"{catalog}.json").read_text(encoding="utf-8"))[key]
+        if name not in text:
+            missing.append(name)
+    check(not missing, f"CHANGELOG/1.33.0/{lang}: названия кнопок как в программе {missing or ''}")
 
 print(f"ИТОГ: провалено {len(failed)}")
 sys.exit(1 if failed else 0)

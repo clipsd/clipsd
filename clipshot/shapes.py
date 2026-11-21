@@ -24,6 +24,7 @@ CALLOUT_PAD = 8                       # поля текста внутри вы�
 PEN_WIDTHS = {1: 2, 2: 3, 3: 5, 4: 8, 5: 12}
 FONT_SIZES = {1: 14, 2: 18, 3: 24, 4: 32, 5: 44}
 NUMBER_RADII = {1: 11, 2: 14, 3: 18, 4: 23, 5: 30}
+NUMBER_HANDLE_GAP = 8   # ручка нетянутого номера стоит на столько дальше края кружка, чтобы не касаться цифры
 PIXELATE_BLOCK = 10
 
 
@@ -208,10 +209,21 @@ class Shape:
             r = self.rect()
             return [r.topLeft(), r.topRight(), r.bottomRight(), r.bottomLeft()]
         if self.kind == NUMBER:
-            return [self.points[-1]]   # конец выносной линии
+            return [self.number_handle()]   # конец выносной линии
         if self.kind == CALLOUT:
             return [self.points[0]]    # точка, на которую указывает сноска
         return []
+
+    def number_handle(self) -> QPointF:
+        """Ручка номера. Пока указатель не вытянут (конец внутри кружка или у его края), ручка стоит снаружи
+        кружка справа внизу, а не на центре: иначе квадратик закрывает цифру. Потянули указатель: ручка на его конце."""
+        r = NUMBER_RADII[self.size]
+        tail = self.points[-1]
+        d = tail - self.points[0]
+        if math.hypot(d.x(), d.y()) > r + NUMBER_HANDLE_GAP:
+            return tail
+        k = (r + NUMBER_HANDLE_GAP) * 0.7071
+        return self.points[0] + QPointF(k, k)
 
     def drag_handle(self, index: int, pos: QPointF, shift=False):
         if self.kind in LINE_KINDS:

@@ -42,5 +42,18 @@
   "app.save_failed": "Der Screenshot konnte nicht gespeichert werden: {path}",
   "app.saved": "Screenshot gespeichert: {path}",
   "app.tray_click": "Klick auf das Symbol",
-  "app.tray_tip": "ClipSD: Bereich aufnehmen ({hotkey})"
+  "app.tray_tip": "ClipSD: Bereich aufnehmen ({hotkey})",
+  "app.ext_installed_title": "ClipSD-Erweiterung installiert",
+  "app.ext_updated_title": "ClipSD-Erweiterung aktualisiert",
+  "app.ext_relogin_text": "Damit ClipSD alle Fenster sieht, einmal ab- und wieder anmelden: So lädt GNOME die Erweiterung. Speichern Sie vorher Ihre Arbeit in offenen Programmen.",
+  "app.ext_logout": "Abmelden…",
+  "app.ext_foreign_title": "Die ClipSD-Erweiterung wurde von Hand installiert",
+  "app.ext_foreign_text": "Sie wurde nicht aus ClipSD installiert, zum Beispiel aus einer Arbeitskopie, daher ändert ClipSD sie nicht. Aktualisieren Sie sie auf demselben Weg, auf dem sie installiert wurde.",
+  "app.ext_failed_title": "Die Erweiterung wurde nicht aktualisiert",
+  "app.ext_failed_text": "Die bisherige Erweiterung arbeitet weiter. Grund: {reason}",
+  "app.ext_no_source": "diese ClipSD-Version enthält keine Dateien der Erweiterung",
+  "app.ext_userext_off_title": "Erweiterungen sind in GNOME ausgeschaltet",
+  "app.ext_userext_off_text": "Die ClipSD-Erweiterung wurde nicht aktualisiert: In GNOME sind alle Benutzererweiterungen ausgeschaltet, eine neue Anmeldung würde nichts ändern. Schalten Sie sie in der App „Erweiterungen“ ein (Schalter oben im Fenster) und klicken Sie erneut auf „Aktualisieren“.",
+  "app.ext_unsupported_title": "Diese GNOME-Version wird noch nicht unterstützt",
+  "app.ext_unsupported_text": "Die ClipSD-Erweiterung läuft unter GNOME 45-50, Sie haben GNOME {version}. Die Fensterliste bleibt unvollständig, alles andere funktioniert wie gewohnt."
 }

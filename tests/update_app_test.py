@@ -441,4 +441,5 @@ finally:
         proc.kill()
 bad = [n for n, ok in checks if not ok]
 print("ИТОГ:", "все проверки пройдены" if not bad else f"провалено {len(bad)}")
-sys.exit(1 if bad else 0)
+from clipshot.exitutil import quick_exit  # noqa: E402  (без разбора обёрток Qt в Py_Exit: там изредка код 139)
+quick_exit(1 if bad else 0)

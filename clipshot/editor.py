@@ -9,7 +9,7 @@ import os
 import sys
 
 from PyQt6.QtCore import QEvent, QKeyCombination, QMimeData, QObject, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import (QColor, QContextMenuEvent, QDrag, QFont, QFontMetrics, QFontMetricsF, QPolygonF, QGuiApplication, QIcon, QImage, QKeySequence, QPainter, QPainterPath, QPen,
+from PyQt6.QtGui import (QAction, QActionGroup, QColor, QContextMenuEvent, QDrag, QFont, QFontMetrics, QFontMetricsF, QPolygonF, QGuiApplication, QIcon, QImage, QKeySequence, QPainter, QPainterPath, QPen,
                          QPixmap, QShortcut)
 from PyQt6.QtWidgets import (QAbstractButton, QAbstractSpinBox, QKeySequenceEdit, QLineEdit, QTextEdit,
                              QApplication, QButtonGroup, QColorDialog, QDialog, QFileDialog, QFrame, QGraphicsDropShadowEffect,
@@ -266,13 +266,20 @@ class Canvas(QWidget):
         else:
             self.color, self.pen_size, self.text_color = cur
 
+    def _number_continues(self) -> bool:
+        """Только что поставленный номер при включённом инструменте «Номер»: человек ставит ряд 1, 2, 3, и выбор цвета
+        означает «следующие номера этим цветом» (у каждого цвета свой счёт), а не «перекрасить последний номер»."""
+        return self.tool == NUMBER and self.selected is not None and self.selected is self.fresh and self.selected.kind == NUMBER
+
     def set_color(self, color) -> bool:
         """Вернёт True, если поменялся цвет следующих линий (его запоминают настройки). Выделен объект или
         правится готовый текст: меняется только он, вернёт False."""
-        if self.editing_object():
+        if self.editing_object() and not self._number_continues():
             if self.selected.color != QColor(color):
                 self.push_undo()
                 self.selected.color = QColor(color)
+                if self.selected.kind == NUMBER:
+                    self.renumber()     # номер перешёл в счёт нового цвета, у старого цвета закрыт пропуск
                 self.update()
             return False
         self.color = QColor(color)
@@ -328,10 +335,15 @@ class Canvas(QWidget):
             self.select(None)
 
     def renumber(self):
-        """Номера идут 1, 2, 3… без пропусков, в прежнем порядке."""
-        numbers = sorted((s for s in self.shapes if s.kind == NUMBER), key=lambda s: s.number)
-        for i, shape in enumerate(numbers, 1):
-            shape.number = i
+        """Номера идут 1, 2, 3… без пропусков, в прежнем порядке. У каждого цвета свой счёт."""
+        groups = {}
+        for s in self.shapes:
+            if s.kind == NUMBER:
+                groups.setdefault(s.color.rgba(), []).append(s)
+        for numbers in groups.values():
+            numbers.sort(key=lambda s: s.number)    # сортировка устойчивая: равные номера остаются в порядке постановки
+            for i, shape in enumerate(numbers, 1):
+                shape.number = i
         self.update()
 
     def insert_image(self, image: QImage, at: QPointF = None):
@@ -377,7 +389,7 @@ class Canvas(QWidget):
         dup = shape.copy()
         dup.translate(QPointF(15, 15))
         if dup.kind == NUMBER:
-            dup.number = self.next_number()
+            dup.number = self.next_number(dup.color)
         self.shapes.append(dup)
         self.select(dup)
 
@@ -417,8 +429,10 @@ class Canvas(QWidget):
             self.select(hit)
         self.context_requested.emit(hit, event.globalPos())
 
-    def next_number(self):
-        return 1 + max((s.number for s in self.shapes if s.kind == NUMBER), default=0)
+    def next_number(self, color=None):
+        """Следующий номер для цвета (по умолчанию текущий цвет линий): у каждого цвета свой счёт."""
+        key = QColor(self.color if color is None else color).rgba()
+        return 1 + max((s.number for s in self.shapes if s.kind == NUMBER and s.color.rgba() == key), default=0)
 
     def render(self) -> QImage:
         self.commit_text()
@@ -832,7 +846,7 @@ class Canvas(QWidget):
                     self.push_undo()
                     dup = hit.copy()
                     if dup.kind == NUMBER:
-                        dup.number = self.next_number()
+                        dup.number = self.next_number(dup.color)
                     self.shapes.append(dup)
                     self.select(dup)
                     self.move_pending = False
@@ -873,7 +887,7 @@ class Canvas(QWidget):
             filled = ctrl and self.tool in (RECT, ELLIPSE, FSHAPE)
             self.current = Shape(self.tool, self.color, self.pen_size, pos, filled)
             if self.tool == NUMBER:
-                self.current.number = self.next_number()
+                self.current.number = self.next_number(self.current.color)
                 self.current.text_color = QColor(self.text_color) if self.text_color is not None else None
         self.update()
 
@@ -1421,17 +1435,40 @@ QPushButton#textCopySel {{ min-height: 30px; padding: 0 14px; font-weight: bold;
     background: {P['win']}; border: 1px solid #7c3aed; }}
 QPushButton#textCopyAll {{ min-height: 30px; padding: 0 14px; font-weight: bold; color: white; background: #7c3aed; border: 1px solid #5b21b6; }}
 QPushButton#textCopyAll:hover {{ background: {G.VIOLET_HOVER}; }}
-#trBottom {{ background: {'#12302d' if dark else '#eaf7f5'}; border-top: 2px solid #0b8f84; }}
 QLabel#trMessage {{ color: {'#a7ece4' if dark else '#0b5f57'}; font-size: {font}px; background: transparent; }}
-QPushButton#trLang, QPushButton#trSegL, QPushButton#trSegR {{ min-height: 30px; padding: 0 12px; font-weight: bold;
+QPushButton#trLang, QPushButton#trSegL, QPushButton#trSegR, QPushButton#trMore, QPushButton#trCopy {{ min-height: 30px; padding: 0 12px; font-weight: bold;
     color: {'#a7ece4' if dark else '#0b5f57'}; background: {P['win']}; border: 1px solid #0b8f84; }}
+QPushButton#trMore {{ padding: 0 8px; min-width: 14px; }}
+QPushButton#trCopy:disabled {{ color: {info}; background: {P['s2']}; border: 1px solid {P['sep']}; }}
+QToolButton#trIcon {{ border: 2px solid transparent; border-radius: 6px; background: transparent; padding: 0px; }}
+QToolButton#trIcon:focus, QPushButton#trLang:focus, QPushButton#trSegL:focus, QPushButton#trSegR:focus, QPushButton#trMore:focus,
+QPushButton#trCopy:focus, QPushButton#modeDone[mode="translate"]:focus {{ border: 2px solid {P['acc']}; }}
+QPushButton#trLang:focus, QPushButton#trSegL:focus, QPushButton#trSegR:focus, QPushButton#trMore:focus, QPushButton#trCopy:focus {{ padding: 0 11px; }}
+QPushButton#trMore::menu-indicator {{ image: none; width: 0px; }}
 QPushButton#trSegL {{ border-top-right-radius: 0px; border-bottom-right-radius: 0px; }}
 QPushButton#trSegR {{ border-top-left-radius: 0px; border-bottom-left-radius: 0px; border-left: none; }}
 QPushButton#trSegL:checked, QPushButton#trSegR:checked {{ background: {G.TEAL_BUTTON}; color: white; }}
-QPushButton#trCopy {{ min-height: 30px; padding: 0 14px; font-weight: bold; color: white; background: {G.TEAL_BUTTON};
-    border: 1px solid {G.TEAL_BUTTON_BORDER}; }}
-QPushButton#trCopy:hover {{ background: {G.TEAL_BUTTON_HOVER}; }}
+QPushButton#trLang:hover, QPushButton#trMore:hover, QPushButton#trCopy:hover, QPushButton#trSegL:hover:!checked, QPushButton#trSegR:hover:!checked {{ background: {tr_hover}; }}
 """
+
+
+def layer_text(editor) -> str:
+    """Что сейчас можно скопировать из перевода (только готовое и на выбранном языке)."""
+    layer = getattr(editor, "tr_layer", None)
+    return layer.all_text() if layer is not None else ""
+
+
+class _ResizeWatch(QObject):
+    """Следит за шириной строки: вызывает подгонку ступеней, когда строку показали или изменили её размер."""
+
+    def __init__(self, target: QWidget, callback):
+        super().__init__(target)
+        self._callback = callback
+
+    def eventFilter(self, obj, event):
+        if event.type() in (QEvent.Type.Resize, QEvent.Type.Show):
+            self._callback()
+        return False
 
 
 class WinButton(QToolButton):
@@ -2786,8 +2823,6 @@ class EditorWindow(QMainWindow):
         self.tr_top = self._build_tr_top()
         layout.insertWidget(1, self.tr_top)
         layout.addWidget(self._build_bottom())
-        self.tr_bottom = self._build_tr_bottom()
-        layout.addWidget(self.tr_bottom)
         self.text_top, self.text_bottom = self._build_text_top(), self._build_text_bottom()
         layout.insertWidget(1, self.text_top)
         layout.addWidget(self.text_bottom)
@@ -2824,10 +2859,11 @@ class EditorWindow(QMainWindow):
         self._update_info()
         self.fit_size()
         self._sync_frame_extents()   # окно создано: свойство для менеджера ставится до первого показа
+        self._tr_tab_order()
 
     def _chrome_widgets(self):
         """Шапка и панели, за которые окно переносится (включая строки режимов)."""
-        return (self.titlebar, self.panel, self.bottom, self.info, self.mode_hint, self.tr_top, self.tr_bottom,
+        return (self.titlebar, self.panel, self.bottom, self.info, self.mode_hint, self.tr_top,
                 self.text_top, self.text_bottom, self.crop_top)
 
     def _set_drag_containers(self):
@@ -2936,6 +2972,7 @@ class EditorWindow(QMainWindow):
         menu.addAction(tr("editor.insert_clipboard")).triggered.connect(self.paste_image)
         menu.addAction(tr("editor.insert_file")).triggered.connect(self.insert_from_file)
         menu.addAction(tr("editor.insert_capture")).triggered.connect(self.insert_screenshot)
+        menu.addAction(tr("phone.insert_menu")).triggered.connect(self.insert_from_phone)   # после 1.32
         insert.setMenu(menu)
         self.insert_button = insert
         row1.addWidget(insert)
@@ -3130,12 +3167,273 @@ class EditorWindow(QMainWindow):
         return top, made
 
     def _build_tr_top(self) -> QWidget:
-        """Верхняя строка режима перевода: вместо инструментов рисования, палитры и толщины."""
+        """Верхняя строка режима перевода (1.32.4, решение владельца 21.11.2026): одна строка той же высоты, что у других
+        режимов. Слева значок, название и итог («Переведено: 2 абзаца», обрезается многоточием), справа язык, «Перевод /
+        Оригинал», меню «⋯» («Поверх текста / Карточкой»), «Скопировать перевод» и «Готово (Esc)». Нижней полосы нет.
+        Что не помещается, убирается ступенями в _fit_tr_top; язык, «Скопировать перевод» и «Готово» остаются всегда."""
         top, made = self._build_mode_top("translate", "translate", "#0d9488", tr("editor.tr_title"),
                                          tr("editor.tr_sub"),
                                          [("done", self.TR_DONE_LABEL, tr("editor.tr_back_tip"), self.exit_translate_mode, False)])
         self.tr_done_button = made["done"]
+        row = top.layout()
+        sub = top.findChild(QLabel, "trSub")   # итог: показывается целиком или не показывается (без многоточия), см. _fit_tr_top
+        self.tr_message = sub
+        old_icon = row.itemAt(0).widget()
+        mode_icon = icons.icon("translate", "#0d9488")
+        icon = QToolButton()   # значок режима; при ошибке перевода предупреждение, по нажатию полный текст ошибки
+        icon.setObjectName("trIcon")
+        icon.setAutoRaise(True)
+        icon.setIcon(mode_icon)
+        icon.setIconSize(QSize(24, 24))
+        icon.setFixedSize(30, 30)
+        icon.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        icon.setAccessibleName(tr("editor.tr_title"))
+        icon.clicked.connect(self._tr_icon_clicked)
+        row.replaceWidget(old_icon, icon)
+        old_icon.deleteLater()
+        self.tr_icon_button, self._tr_mode_icon, self._tr_warn_icon = icon, mode_icon, self._make_warn_icon()
+        self._tr_errors_text = ""
+        title_tip = tr("editor.tr_sub")   # «Инструменты рисования скрыты на время перевода»: подсказка у значка и названия
+        for w in (icon, row.itemAt(1).widget()):
+            w.setToolTip(title_tip)
+
+        lang = QPushButton()   # надпись «EN → RU ▾» или «Английский → Русский ▾» ставит _sync_tr_controls (translate не грузим заранее)
+        lang.setObjectName("trLang")
+        lang.setToolTip(tr("editor.tr_lang_tip"))
+        lang.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        lang.setAutoDefault(True)
+        lang.setCursor(Qt.CursorShape.PointingHandCursor)
+        lang.clicked.connect(self._tr_lang_menu)
+
+        box = QWidget()   # «Перевод / Оригинал» сегментами вплотную
+        lay = QHBoxLayout(box)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        a_btn, b_btn = QPushButton(tr("editor.tr_seg_translation")), QPushButton(tr("editor.tr_seg_original"))
+        a_btn.setObjectName("trSegL")
+        b_btn.setObjectName("trSegR")
+        for btn, tip in ((a_btn, tr("editor.tr_seg_translation_tip")), (b_btn, tr("editor.tr_seg_original_tip"))):
+            btn.setCheckable(True)
+            btn.setToolTip(tip)
+            btn.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+            btn.setAutoDefault(True)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            lay.addWidget(btn)   # без QButtonGroup: Tab должен заходить в обе кнопки; отметку ставит _sync_tr_controls
+        a_btn.setChecked(True)
+        a_btn.clicked.connect(lambda: self._tr_set_original(False))
+        b_btn.clicked.connect(lambda: self._tr_set_original(True))
+        self.tr_show_tr, self.tr_show_orig, self.tr_seg_box = a_btn, b_btn, box
+
+        more = QPushButton("⋯")   # редкое: «Поверх текста / Карточкой»; в узком окне сюда же «Перевод / Оригинал»
+        more.setObjectName("trMore")
+        more.setToolTip(tr("selector.trc_more"))
+        more.setAccessibleName(tr("editor.tr_more_a11y"))   # «Дополнительные действия перевода», а не «три точки»
+        more.setFixedWidth(48)
+        more.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        more.setAutoDefault(True)
+        more.setCursor(Qt.CursorShape.PointingHandCursor)
+        menu = QMenu(more)
+        style_menu(menu, self.ctx.config)
+        self.tr_view_group = QActionGroup(menu)
+        self.tr_view_overlay = self.tr_view_group.addAction(tr("editor.tr_view_overlay"))
+        self.tr_view_card = self.tr_view_group.addAction(tr("editor.tr_view_card"))
+        self.tr_menu_show_tr = QAction(tr("editor.tr_seg_translation"), menu)
+        self.tr_menu_show_orig = QAction(tr("editor.tr_seg_original"), menu)
+        self.tr_menu_orig_group = QActionGroup(menu)
+        for act, tip in ((self.tr_view_overlay, "editor.tr_view_overlay_tip"), (self.tr_view_card, "editor.tr_view_card_tip"),
+                         (self.tr_menu_show_tr, "editor.tr_seg_translation_tip"), (self.tr_menu_show_orig, "editor.tr_seg_original_tip")):
+            act.setCheckable(True)
+            act.setToolTip(tr(tip))
+        for act in (self.tr_menu_show_tr, self.tr_menu_show_orig):
+            self.tr_menu_orig_group.addAction(act)
+        self.tr_view_overlay.triggered.connect(lambda: self._tr_set_view("overlay"))
+        self.tr_view_card.triggered.connect(lambda: self._tr_set_view("card"))
+        self.tr_menu_show_tr.triggered.connect(lambda: self._tr_set_original(False))
+        self.tr_menu_show_orig.triggered.connect(lambda: self._tr_set_original(True))
+        for act in (self.tr_menu_show_tr, self.tr_menu_show_orig):
+            menu.addAction(act)
+        self.tr_menu_sep = menu.addSeparator()
+        menu.addAction(self.tr_view_overlay)
+        menu.addAction(self.tr_view_card)
+        menu.aboutToShow.connect(self._tr_more_fill)
+        more.setMenu(menu)
+        self.tr_more_button, self.tr_more_menu = more, menu
+
+        copy = QPushButton(icons.icon("copy", "#a7ece4" if theme(self.ctx.config).get("dark") else "#0b5f57"), "  " + tr("editor.tr_copy"))
+        copy.setObjectName("trCopy")
+        copy.setIconSize(QSize(18, 18))
+        copy.setToolTip(tr("editor.tr_copy"))
+        copy.setAccessibleName(tr("editor.tr_copy"))
+        copy.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        copy.setAutoDefault(True)
+        copy.setCursor(Qt.CursorShape.PointingHandCursor)
+        copy.clicked.connect(self._tr_copy_all)
+        self.tr_lang_button, self.tr_copy_button = lang, copy
+
+        at = row.indexOf(self.tr_done_button)
+        for w in (lang, box, more, copy):
+            row.insertWidget(at, w)
+            at += 1
+        done = self.tr_done_button
+        done.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        done.setAutoDefault(True)
+        sub.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)   # итог своей ширины, лишнее место промежутком
+        row.setStretchFactor(sub, 0)
+        row.insertStretch(row.indexOf(lang), 1)   # свободное место между группой «значок, название, итог» и кнопками справа
+        self._tr_chain = (icon, lang, a_btn, b_btn, more, copy, done)   # Tab идёт слева направо, как читается строка
+        top.installEventFilter(_ResizeWatch(top, self._fit_tr_top))
         return top
+
+    @staticmethod
+    def _make_warn_icon() -> QIcon:
+        """Значок предупреждения на месте значка режима: янтарный круг с «!» (как у карточки с ошибкой перевода)."""
+        pm = QPixmap(72, 72)
+        pm.fill(Qt.GlobalColor.transparent)
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#f59e0b"))
+        p.drawEllipse(QRectF(4, 4, 64, 64))
+        p.setPen(QColor("#ffffff"))
+        f = QFont()
+        f.setPixelSize(46)
+        f.setBold(True)
+        p.setFont(f)
+        p.drawText(QRectF(4, 4, 64, 64), Qt.AlignmentFlag.AlignCenter, "!")
+        p.end()
+        pm.setDevicePixelRatio(3)
+        return QIcon(pm)
+
+    def _tr_tab_order(self):
+        """Порядок Tab в строке перевода: слева направо. Ставится, когда строка уже в окне (до этого setTabOrder не действует)."""
+        chain = getattr(self, "_tr_chain", ())
+        for first, second in zip(chain, chain[1:]):
+            QWidget.setTabOrder(first, second)
+
+    def _tr_icon_focus(self):
+        """Карточка ошибки закрыта: фокус возвращается на значок, откуда её открыли."""
+        try:
+            if self.canvas.tool == TRANSLATE and self.tr_icon_button.isVisible():
+                self.activateWindow()
+                self.tr_icon_button.setFocus(Qt.FocusReason.OtherFocusReason)
+        except RuntimeError:
+            pass
+
+    def _tr_icon_clicked(self):
+        """Нажатие на значок: есть ошибка перевода: её полный текст в карточке сообщения (не только подсказкой)."""
+        text = getattr(self, "_tr_errors_text", "")
+        if not text:
+            return
+        from .dialogs import MessageCard
+        old = getattr(self, "_tr_error_card", None)
+        try:
+            if old is not None:
+                old.close()
+        except RuntimeError:
+            pass
+        card = MessageCard(self, tr("translate_ui.failed"), text, icon="warning", modal=False)
+        self._tr_error_card = card
+        card.finished.connect(lambda _r=0: self._tr_icon_focus())
+        card.show()
+
+    def _tr_more_fill(self):
+        """Меню «⋯»: «Перевод / Оригинал» в нём показаны только когда сегменты в строке свёрнуты из-за ширины."""
+        folded = self.tr_seg_box.isHidden()
+        for act in (self.tr_menu_show_tr, self.tr_menu_show_orig, self.tr_menu_sep):
+            act.setVisible(folded)
+
+    # Ступени строки перевода от полной к самой тесной; каждая следующая строго уже предыдущей, поэтому при изменении
+    # ширины на одну точку вид меняется не больше чем на ступень и не прыгает туда-обратно. Поля ступени:
+    # (полное название языка, «Перевод / Оригинал» в строке, название и итог обязательны). На ступенях без
+    # «обязательны» слово «Перевод» и итог показываются, когда после раскладки остальных кнопок остаётся место целиком.
+    TR_LEVELS = ((True, True, True, 8), (False, True, True, 8), (False, True, False, 8), (False, False, False, 8),
+                 (False, False, False, 4))   # последняя ступень: промежутки между кнопками уже (шрифты шире расчёта, окно 656)
+    TR_SAFE = 8          # запас ширины при выборе ступени: подписи у шрифтов вроде DejaVu выходят на 2-4 точки шире расчёта
+    TR_BACK_SLACK = 15   # обратно (шире) вид разворачивается с запасом 15 точек, как группы инструментов
+
+    def _fit_tr_top(self):
+        """Строка перевода по настоящим размерам текста, ничего не обрезается. Сначала всё на месте; тесно: язык до
+        «EN → RU», потом «Перевод / Оригинал» уходят в меню «⋯». Слово «Перевод» и итог показываются, пока целиком
+        влезают (итог целиком или совсем, без многоточия); полный итог всегда во всплывающей подсказке значка. Язык,
+        «Скопировать перевод» и «Готово (Esc)» остаются при любой ширине."""
+        top = getattr(self, "tr_top", None)
+        if top is None or getattr(self, "_tr_fit_busy", False) or getattr(self, "tr_lang_button", None) is None:
+            return
+        row = top.layout()
+        m = row.contentsMargins()
+        avail = top.width() - m.left() - m.right() - self.TR_SAFE   # запас на округление подписей у разных шрифтов
+        if avail <= 40:
+            return   # окно ещё не разложено
+        self._tr_fit_busy = True
+        try:
+            icon, title = self.tr_icon_button, row.itemAt(1).widget()
+            lang, seg, more, copy, done, sub = (self.tr_lang_button, self.tr_seg_box, self.tr_more_button,
+                                                self.tr_copy_button, self.tr_done_button, self.tr_message)
+            full_lang, short_lang = getattr(self, "_tr_lang_text", ("", ""))
+            copy_text = "  " + tr("editor.tr_copy")
+            status = sub.text()
+            sub.ensurePolished()
+            status_w = sub.fontMetrics().horizontalAdvance(status) + 4 if status else 0
+            title.ensurePolished()
+            title_w = max(title.sizeHint().width(), title.minimumSizeHint().width())
+
+            def width_of(level, show_title, show_msg):
+                full, show_seg, _req, gap = level
+                row.setSpacing(gap)
+                seg.setVisible(show_seg)
+                lang.setText(full_lang if full else short_lang)
+                copy.setText(copy_text)
+                widgets = [w for w in (icon, lang, seg, more, copy, done) if not w.isHidden()]
+                total = sum(max(w.sizeHint().width(), w.minimumSizeHint().width()) for w in widgets) + gap * (len(widgets) + 1)
+                if show_title:
+                    total += title_w + gap
+                if show_msg and status_w:
+                    total += status_w + gap
+                return total
+
+            def extras(level, slack_ok):
+                """Какие из «Перевод» и итога показать на ступени: обязательные всегда, остальные, если влезают целиком."""
+                req, gap = level[2], level[3]
+                if req:
+                    return True, bool(status_w)
+                was_t, was_m = getattr(self, "_tr_extras", (False, False))
+                base = width_of(level, False, False)
+                show_t = False
+                if base + title_w + gap + (self.TR_BACK_SLACK if not was_t and not slack_ok else 0) <= avail:
+                    show_t = True
+                show_m = False
+                t_w = (title_w + gap) if show_t else 0
+                if status_w and base + t_w + status_w + gap + (self.TR_BACK_SLACK if not was_m and not slack_ok else 0) <= avail:
+                    show_m = True
+                return show_t, show_m
+
+            cur = getattr(self, "_tr_level", None)
+            chosen = len(self.TR_LEVELS) - 1
+            for i, level in enumerate(self.TR_LEVELS):
+                slack = self.TR_BACK_SLACK if (cur is not None and i < cur) else 0
+                if level[2]:
+                    ok = width_of(level, True, True) + slack <= avail
+                else:
+                    ok = width_of(level, False, False) + slack <= avail
+                if ok:
+                    chosen = i
+                    break
+            level = self.TR_LEVELS[chosen]
+            show_t, show_m = extras(level, cur is None or chosen != cur)
+            width_of(level, show_t, show_m)
+            title.setVisible(show_t)
+            sub.setVisible(show_m and bool(status))
+            self._tr_extras = (show_t, show_m)
+            self._tr_level = chosen
+            self._tr_stage = level
+            lang.setToolTip(tr("editor.tr_lang_tip") + ("\n" + full_lang.replace(" ▾", "") if not level[0] and full_lang else ""))
+            lang.setAccessibleName(full_lang.replace(" ▾", ""))   # короткое «EN → RU» на экранном дикторе читается полным названием
+            lang.setAccessibleDescription(tr("editor.tr_lang_tip"))
+            fw = QApplication.focusWidget()
+            if fw is not None and fw is not top and top.isAncestorOf(fw) and fw.isHidden():
+                more.setFocus(Qt.FocusReason.TabFocusReason)   # то, на чём стоял фокус, свернулось: фокус на «⋯»
+        finally:
+            self._tr_fit_busy = False
 
     def _build_text_top(self) -> QWidget:
         top, made = self._build_mode_top("text", "ocr", "#7c3aed", tr("editor.mode_text_title"),
@@ -3189,69 +3487,6 @@ class EditorWindow(QMainWindow):
         bar.setVisible(False)
         return bar
 
-    def _build_tr_bottom(self) -> QWidget:
-        """Нижняя бирюзовая полоса: сообщение, язык, «Перевод / Оригинал», «Поверх текста / Карточкой», «Скопировать перевод»."""
-        bar = QWidget()
-        bar.setObjectName("trBottom")
-        bar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
-        col = QVBoxLayout(bar)
-        col.setContentsMargins(12, 8, 12, 10)
-        col.setSpacing(6)
-        self.tr_message = QLabel()
-        self.tr_message.setObjectName("trMessage")
-        self.tr_message.setWordWrap(True)
-        col.addWidget(self.tr_message)
-        row = QHBoxLayout()
-        row.setSpacing(10)
-        lang = QPushButton()   # надпись «На: язык ▾» ставит _sync_tr_controls при входе в режим перевода (translate не грузим заранее)
-        lang.setObjectName("trLang")
-        lang.setToolTip(tr("editor.tr_lang_tip"))
-        lang.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        lang.setCursor(Qt.CursorShape.PointingHandCursor)
-        lang.clicked.connect(self._tr_lang_menu)
-        row.addWidget(lang)
-
-        def segmented(first, second, on_first, tip1, tip2):
-            box = QWidget()
-            lay = QHBoxLayout(box)
-            lay.setContentsMargins(0, 0, 0, 0)
-            lay.setSpacing(0)
-            group = QButtonGroup(box)
-            a, b = QPushButton(first), QPushButton(second)
-            a.setObjectName("trSegL")
-            b.setObjectName("trSegR")
-            for btn, tip in ((a, tip1), (b, tip2)):
-                btn.setCheckable(True)
-                btn.setToolTip(tip)
-                btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-                btn.setCursor(Qt.CursorShape.PointingHandCursor)
-                group.addButton(btn)
-                lay.addWidget(btn)
-            a.setChecked(on_first)
-            b.setChecked(not on_first)
-            return box, a, b
-        box1, self.tr_show_tr, self.tr_show_orig = segmented(tr("editor.tr_seg_translation"), tr("editor.tr_seg_original"), True, tr("editor.tr_seg_translation_tip"), tr("editor.tr_seg_original_tip"))
-        box2, self.tr_view_overlay, self.tr_view_card = segmented(
-            tr("editor.tr_view_overlay"), tr("editor.tr_view_card"), True, tr("editor.tr_view_overlay_tip"), tr("editor.tr_view_card_tip"))
-        self.tr_show_tr.clicked.connect(lambda: self._tr_set_original(False))
-        self.tr_show_orig.clicked.connect(lambda: self._tr_set_original(True))
-        self.tr_view_overlay.clicked.connect(lambda: self._tr_set_view("overlay"))
-        self.tr_view_card.clicked.connect(lambda: self._tr_set_view("card"))
-        row.addWidget(box1)
-        row.addWidget(box2)
-        row.addStretch(1)
-        copy = QPushButton(icons.icon("copy", "#ffffff"), "  " + tr("editor.tr_copy"))
-        copy.setObjectName("trCopy")
-        copy.setIconSize(QSize(18, 18))
-        copy.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        copy.setCursor(Qt.CursorShape.PointingHandCursor)
-        copy.clicked.connect(self._tr_copy_all)
-        row.addWidget(copy)
-        self.tr_lang_button, self.tr_copy_button = lang, copy
-        col.addLayout(row)
-        bar.setVisible(False)
-        return bar
-
     def _tr_lang_menu(self):
         layer = getattr(self, "tr_layer", None)
         if layer is None:
@@ -3290,7 +3525,6 @@ class EditorWindow(QMainWindow):
         self.panel.setVisible(not (translate or text or crop))
         self.bottom.setVisible(not (translate or text))
         self.tr_top.setVisible(translate)
-        self.tr_bottom.setVisible(translate)
         self.text_top.setVisible(text)
         self.text_bottom.setVisible(text)
         self.crop_top.setVisible(crop)
@@ -3882,6 +4116,8 @@ class EditorWindow(QMainWindow):
             return c.color, c.eraser_size, c.text_color, None
         if c.editing_object():
             sh = c.selected
+            if c._number_continues():     # цвет выбирается для следующих номеров, размер и цвет цифры у этого
+                return c.color, sh.size, sh.text_color, sh
             return sh.color, sh.size, sh.text_color, sh
         return c.color, c.pen_size, c.text_color, None
 
@@ -3919,6 +4155,11 @@ class EditorWindow(QMainWindow):
                                               tr("editor.images_filter"))
         if path:
             self.canvas.insert_image(QImage(path))
+
+    def insert_from_phone(self):
+        """«Фото с телефона»: фото по QR-коду ложится поверх этого снимка, как «Из файла»."""
+        if hasattr(self.ctx, "open_phone"):
+            self.ctx.open_phone(self)
 
     def insert_screenshot(self):
         """Снять ещё одну область экрана и положить её поверх этого снимка."""
@@ -4672,7 +4913,12 @@ class EditorWindow(QMainWindow):
             self.show_toast(tr("editor.select_text_first"))
 
     def enter_pressed(self):
-        """Enter: если выделена рамка обрезки, применить её; иначе скопировать снимок."""
+        """Enter: если фокус на кнопке (строка перевода, Tab), Enter нажимает её; если выделена рамка обрезки, применить её;
+        иначе скопировать снимок."""
+        fw = QApplication.focusWidget()
+        if isinstance(fw, QAbstractButton) and fw.isVisible() and fw.isEnabled() and self.isAncestorOf(fw):
+            fw.click()
+            return
         if self.canvas.crop_pending:
             self.canvas.confirm_crop()
             self.exit_crop_mode()   # обрезали: режим обрезки завершён, вид и прежний инструмент возвращаются
@@ -4836,7 +5082,7 @@ class EditorWindow(QMainWindow):
         __init__; снимок, рисунки, отмена, инструмент и режим остаются (они живут в холсте)."""
         layout = self.content.layout()
         order = (("panel", self._build_panel), ("tr_top", self._build_tr_top), ("bottom", self._build_bottom),
-                 ("tr_bottom", self._build_tr_bottom), ("text_top", getattr(self, "_build_text_top", None)),
+                 ("text_top", getattr(self, "_build_text_top", None)),
                  ("text_bottom", getattr(self, "_build_text_bottom", None)),
                  ("crop_top", getattr(self, "_build_crop_top", None)))
         for attr, build in order:
@@ -4851,6 +5097,7 @@ class EditorWindow(QMainWindow):
             old.deleteLater()
             layout.insertWidget(i, new)
         self.setWindowTitle(tr("editor.window_title"))
+        self._tr_tab_order()
         self._redraw_demo()
         if self.titlebar is not None:
             self.titlebar.set_icons(self.top_icons)   # новая группа колокольчика, «?», шестерёнки и глобуса
@@ -4953,43 +5200,57 @@ class EditorWindow(QMainWindow):
 
     TR_ALL_HINTS = dynamic(lambda self: {"busy": tr("editor.tr_all_busy"), "done": tr("editor.tr_all_done")})
 
+    def _tr_error_list(self) -> list:
+        """Тексты ошибок перевода по кускам (по одному на кусок с ошибкой)."""
+        layer = getattr(self, "tr_layer", None)
+        if layer is None:
+            return []
+        return [tr("editor.tr_failed", error=c.message or tr("editor.tr_failed_fallback")) for c in layer.all_cards() if c.state == "error"]
+
     def _tr_message_text(self) -> str:
         """Сообщение бирюзовой полосы: что идёт, что переведено, сколько оставлено как есть (уже на русском)."""
         layer = getattr(self, "tr_layer", None)
         state = layer._tr_full_exists() if layer is not None else None
         if state == "busy":
             return self.TR_ALL_HINTS["busy"]
-        errors = [c for c in layer.all_cards() if c.state == "error"] if layer is not None else []
-        if errors:
-            return tr("editor.tr_failed", error=errors[-1].message or tr("editor.tr_failed_fallback"))
+        errors = self._tr_error_list()
         m, n, k, partial = layer.stats() if layer is not None else (0, 0, 0, False)
+        if errors and not (m or n or partial):
+            return errors[-1]   # переведено ничего: в строке сама ошибка (если помещается), поверх снимка карточка с ней
         if not (m or n or partial):
             return self.TR_ALL_HINTS["done"] if state == "done" else self.MODE_HINTS[TRANSLATE]
         from types import SimpleNamespace
         from .translate_ui import TranslateMixin
         text = TranslateMixin._tr_partial_text(SimpleNamespace(blocks=[0] * m, skipped=n, total=k, partial=partial))
-        if not (n or partial):
-            text = self.TR_ALL_HINTS["done"] if state == "done" else tr("editor.tr_partial_orig", text=text)
-        return text
+        return text   # 1.32.4: в строке только «Переведено: N абзацев»; про «Оригинал» говорят сами кнопки
 
     def _sync_tr_controls(self):
-        """Переключатели нижней полосы показывают то, что включено сейчас."""
+        """Язык, «Перевод / Оригинал» и «Поверх текста / Карточкой» в строке режима показывают то, что включено сейчас."""
         layer = getattr(self, "tr_layer", None)
         if layer is None:
             return
         from .translate import lang_name, target_lang
         cards = [c for c in layer.all_cards() if c.state == "done" and c.blocks]
-        src = ""
-        if cards:
-            src = lang_name(cards[-1].blocks[0]["src"]) if cards[-1].blocks[0]["src"] else ""
-        tgt = lang_name(target_lang(self.ctx.config))
-        self.tr_lang_button.setText(tr("editor.tr_lang_from_to", src=src, lang=tgt) if src else tr("editor.tr_lang_to", lang=tgt))
+        src_code = (cards[-1].blocks[0]["src"] or "") if cards else ""
+        src = lang_name(src_code) if src_code else ""
+        tgt_code = target_lang(self.ctx.config)
+        tgt = lang_name(tgt_code)
+
+        def short(code):
+            return (code or "").split("-")[0].split("_")[0][:2].upper()
+        full = tr("editor.tr_lang_from_to", src=src, lang=tgt) if src else tr("editor.tr_lang_to", lang=tgt)
+        compact = tr("editor.tr_lang_from_to", src=short(src_code), lang=short(tgt_code)) if src else tr("editor.tr_lang_to", lang=short(tgt_code))
+        self._tr_lang_text = (full, compact)
+        self.tr_lang_button.setText(full)
         orig = layer.showing_original()
         self.tr_show_orig.setChecked(orig)
         self.tr_show_tr.setChecked(not orig)
+        self.tr_menu_show_orig.setChecked(orig)
+        self.tr_menu_show_tr.setChecked(not orig)
         card_view = layer._tr_view_default() == "card"
         self.tr_view_card.setChecked(card_view)
         self.tr_view_overlay.setChecked(not card_view)
+        self._fit_tr_top()
 
     def _update_info(self):
         size = f"{self.canvas.base.width()} × {self.canvas.base.height()} px"
@@ -4997,12 +5258,21 @@ class EditorWindow(QMainWindow):
             self.crop_ok_button.setEnabled(self.canvas.crop_pending)   # «Обрезать» доступно, когда есть рамка
             self.crop_top.findChild(QLabel, "trSub").setText(
                 tr("editor.hint_crop_pending") if self.canvas.crop_pending else tr("editor.hint_crop"))
-        self.mode_hint.setVisible(False)   # 1.29.1: сообщения режимов живут в цветных полосах внизу (text_bottom, tr_bottom)
+        self.mode_hint.setVisible(False)   # 1.29.1: сообщения режимов живут в цветных полосах внизу (text_bottom; у перевода итог в строке сверху)
         if self.canvas.tool == TRANSLATE:
             self.info.setText(size)
             text = self._tr_message_text()
             self.mode_hint.setText(text)
             self.tr_message.setText(text)
+            errors = self._tr_error_list()
+            self._tr_errors_text = "\n\n".join(errors)
+            icon = self.tr_icon_button
+            icon.setIcon(self._tr_warn_icon if errors else self._tr_mode_icon)
+            icon.setAccessibleName(tr("translate_ui.failed") if errors else tr("editor.tr_title"))
+            has_text = bool(layer_text(self))
+            # полная неудача: копировать нечего, кнопка недоступна; частичная: копируются только актуальные части на выбранном языке
+            self.tr_copy_button.setEnabled(has_text or not errors)
+            self.tr_copy_button.setToolTip(tr("editor.tr_copy") if self.tr_copy_button.isEnabled() else tr("editor.tr_nothing_to_copy"))
             self._sync_tr_controls()
             try:
                 from . import translate
@@ -5010,6 +5280,12 @@ class EditorWindow(QMainWindow):
             except Exception:   # noqa: BLE001
                 usage = ""
             self.tr_message.setToolTip(tr("editor.tr_message_tip") + "\n" + usage)
+            tip = tr("editor.tr_sub") + "\n" + text   # полный итог: в подсказке значка, когда в строке он не помещается
+            if errors and text not in errors:
+                tip += "\n" + self._tr_errors_text
+            self.tr_icon_button.setToolTip(tip)
+            self.tr_icon_button.setAccessibleDescription(tip)   # экранный диктор читает итог и ошибку (объявлений в PyQt6 нет)
+            self.tr_top.findChild(QLabel, "trTitle").setToolTip(tip)
             self.info.setToolTip("")
             return
         if self.canvas.tool == OCR:
@@ -5191,11 +5467,25 @@ class EditorWindow(QMainWindow):
 
     # --- действия ------------------------------------------------------------
 
+    def _copy_image(self, image: QImage):
+        if getattr(self, "phone_photo", False):
+            self.ctx.copy_image(image, config=self.export_config())
+        else:
+            self.ctx.copy_image(image)
+
+    def export_config(self):
+        """Settings for saving and copying this picture. A photo from the phone is saved and copied with the pixels it
+        has: its display scale (the editor window fits the screen) must not shrink it by "Snapshot size: as on screen"."""
+        cfg = self.ctx.config
+        if getattr(self, "phone_photo", False):
+            cfg = dict(cfg, snapshot_size="full")
+        return cfg
+
     def _update_autosave(self, image: QImage):
         """Снимок уже сохранён автоматически: после правок файл обновляется готовой картинкой."""
         path = getattr(self, "autosave_path", None)
         if path and self.canvas.modified:
-            hidpi.save_image(image, path, self.ctx.config)
+            hidpi.save_image(image, path, self.export_config(), getattr(self, "autosave_quality", None))
 
     def copy_shortcut(self):
         """Ctrl+C: в режиме текста копирует выделенный текст, иначе снимок."""
@@ -5211,14 +5501,14 @@ class EditorWindow(QMainWindow):
     def copy_to_clipboard(self):
         """Скопировать снимок с пометками; окно остаётся открытым, всплывает сообщение."""
         image = self.canvas.render()
-        self.ctx.copy_image(image)
+        self._copy_image(image)
         self._update_autosave(image)
         self.exported = True          # без новых правок окно закроется без вопроса
         self.show_toast(tr("editor.copied_toast"))
 
     def copy_and_close(self):
         image = self.canvas.render()
-        self.ctx.copy_image(image)
+        self._copy_image(image)
         self._update_autosave(image)
         self.exported = True
         self.close()
@@ -5236,7 +5526,7 @@ class EditorWindow(QMainWindow):
         path = ask_save_path(self, self.ctx.config)
         if not path:
             return
-        if not hidpi.save_image(image, path, self.ctx.config):
+        if not hidpi.save_image(image, path, self.export_config()):
             hidpi.discard_reserved(path)
             from .dialogs import MessageCard
             card = MessageCard(self, tr("editor.error"), tr("editor.save_error", path=path), "error")

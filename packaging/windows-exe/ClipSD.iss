@@ -18,11 +18,13 @@
 
 #define AppName "ClipSD"
 #ifndef AppVersion
-  #define AppVersion "1.32.3"
+  #define AppVersion "1.33.0"
 #endif
 #define LauncherExe "ClipSD.exe"
 #define ProgramExe "ClipSD-app.exe"
 #define AppUserModelID "SergeyDayneko.ClipSD"
+; Package name of the Microsoft Store build (packaging/windows-store/store-identity.json, "name")
+#define StorePackageName "ClipSD.ClipSD"
 
 ; "What's new" page from CHANGELOG/<version>/<language>.md, prepared by stage_windows.py as whatsnew\<language>.txt
 #if FileExists(AddBackslash(SourcePath) + "..\whatsnew\en.txt")
@@ -105,6 +107,9 @@ en.UninstallName=Uninstall ClipSD
 en.RunDemo=Launch ClipSD and show the feature tour
 en.PurgeCheck=Also delete settings and logs (including ClipSD screenshots in the autosave folder)
 en.PurgeTitle=ClipSD uninstallation
+en.StoreInstalledNote=ClipSD from the Microsoft Store is already installed on this computer. A second copy is not needed: only one can run at a time, and both use the same settings.
+en.PurgeStoreWarn=ClipSD from the Microsoft Store is installed on this computer. Its settings are kept in the same folder as the settings of this version, so deleting them here deletes them there too.
+en.PurgeStoreConfirm=The settings are shared with ClipSD from the Microsoft Store: it loses them too. Delete them anyway?
 ru.TaskAutostart=Запускать ClipSD вместе с Windows
 ru.TaskDesktop=Значок на рабочем столе
 ru.TaskGroup=Дополнительно:
@@ -113,6 +118,9 @@ ru.UninstallName=Удалить ClipSD
 ru.RunDemo=Запустить ClipSD и показать знакомство с возможностями программы
 ru.PurgeCheck=Удалить также настройки и журналы (и снимки ClipSD в папке автосохранения)
 ru.PurgeTitle=Удаление ClipSD
+ru.StoreInstalledNote=На этом компьютере уже установлен ClipSD из Microsoft Store. Вторая копия не нужна: работать может только одна, а настройки у них общие.
+ru.PurgeStoreWarn=На этом компьютере установлен ClipSD из Microsoft Store. Его настройки лежат в той же папке, что и настройки этой версии: удалив их здесь, вы удалите их и там.
+ru.PurgeStoreConfirm=Настройки общие с ClipSD из Microsoft Store: он тоже их потеряет. Всё равно удалить?
 bg.TaskAutostart=Стартиране на ClipSD заедно с Windows
 bg.TaskDesktop=Икона на работния плот
 bg.TaskGroup=Допълнително:
@@ -121,6 +129,9 @@ bg.UninstallName=Деинсталиране на ClipSD
 bg.RunDemo=Стартиране на ClipSD и представяне на възможностите на програмата
 bg.PurgeCheck=Изтрий също настройките и дневниците (и снимките на ClipSD в папката за автоматично запазване)
 bg.PurgeTitle=Деинсталиране на ClipSD
+bg.StoreInstalledNote=На този компютър вече е инсталиран ClipSD от Microsoft Store. Второ копие не е нужно: може да работи само едно, а настройките им са общи.
+bg.PurgeStoreWarn=На този компютър е инсталиран ClipSD от Microsoft Store. Настройките му са в същата папка като настройките на тази версия: ако ги изтриете тук, ще изчезнат и там.
+bg.PurgeStoreConfirm=Настройките са общи с ClipSD от Microsoft Store: той също ще ги загуби. Да се изтрият ли въпреки това?
 uk.TaskAutostart=Запускати ClipSD разом з Windows
 uk.TaskDesktop=Значок на робочому столі
 uk.TaskGroup=Додатково:
@@ -129,6 +140,9 @@ uk.UninstallName=Видалити ClipSD
 uk.RunDemo=Запустити ClipSD і показати огляд можливостей програми
 uk.PurgeCheck=Видалити також налаштування та журнали (і знімки ClipSD у папці автозбереження)
 uk.PurgeTitle=Видалення ClipSD
+uk.StoreInstalledNote=На цьому комп'ютері вже встановлено ClipSD з Microsoft Store. Друга копія не потрібна: працювати може лише одна, а налаштування в них спільні.
+uk.PurgeStoreWarn=На цьому комп'ютері встановлено ClipSD з Microsoft Store. Його налаштування лежать у тій самій теці, що й налаштування цієї версії: видаливши їх тут, ви видалите їх і там.
+uk.PurgeStoreConfirm=Налаштування спільні з ClipSD з Microsoft Store: він теж їх втратить. Усе одно видалити?
 de.TaskAutostart=ClipSD mit Windows starten
 de.TaskDesktop=Desktopsymbol
 de.TaskGroup=Zusätzlich:
@@ -137,6 +151,9 @@ de.UninstallName=ClipSD deinstallieren
 de.RunDemo=ClipSD starten und die Einführung in die Funktionen anzeigen
 de.PurgeCheck=Auch Einstellungen und Protokolle löschen (und ClipSD-Screenshots im Ordner für automatisches Speichern)
 de.PurgeTitle=Deinstallation von ClipSD
+de.StoreInstalledNote=ClipSD aus dem Microsoft Store ist auf diesem Computer bereits installiert. Eine zweite Kopie ist nicht nötig: Es kann nur eine laufen, und beide nutzen dieselben Einstellungen.
+de.PurgeStoreWarn=ClipSD aus dem Microsoft Store ist auf diesem Computer installiert. Seine Einstellungen liegen im selben Ordner wie die Einstellungen dieser Version: Wenn Sie sie hier löschen, sind sie auch dort weg.
+de.PurgeStoreConfirm=Die Einstellungen werden mit ClipSD aus dem Microsoft Store geteilt: Es verliert sie ebenfalls. Trotzdem löschen?
 fr.TaskAutostart=Démarrer ClipSD avec Windows
 fr.TaskDesktop=Icône sur le bureau
 fr.TaskGroup=Options supplémentaires :
@@ -145,6 +162,9 @@ fr.UninstallName=Désinstaller ClipSD
 fr.RunDemo=Lancer ClipSD et afficher la visite guidée des fonctionnalités
 fr.PurgeCheck=Supprimer aussi les paramètres et les journaux (et les captures ClipSD du dossier d'enregistrement automatique)
 fr.PurgeTitle=Désinstallation de ClipSD
+fr.StoreInstalledNote=ClipSD du Microsoft Store est déjà installé sur cet ordinateur. Une seconde copie est inutile : une seule peut fonctionner, et les deux partagent les mêmes paramètres.
+fr.PurgeStoreWarn=ClipSD du Microsoft Store est installé sur cet ordinateur. Ses paramètres se trouvent dans le même dossier que ceux de cette version : les supprimer ici les supprime aussi là-bas.
+fr.PurgeStoreConfirm=Les paramètres sont partagés avec ClipSD du Microsoft Store : il les perdra aussi. Les supprimer quand même ?
 es.TaskAutostart=Iniciar ClipSD con Windows
 es.TaskDesktop=Icono en el escritorio
 es.TaskGroup=Opciones adicionales:
@@ -153,6 +173,9 @@ es.UninstallName=Desinstalar ClipSD
 es.RunDemo=Iniciar ClipSD y mostrar el recorrido
 es.PurgeCheck=Eliminar también la configuración y los registros (y las capturas de ClipSD de la carpeta de guardado automático)
 es.PurgeTitle=Desinstalación de ClipSD
+es.StoreInstalledNote=ClipSD de Microsoft Store ya está instalado en este equipo. No hace falta una segunda copia: solo puede funcionar una, y ambas comparten la configuración.
+es.PurgeStoreWarn=ClipSD de Microsoft Store está instalado en este equipo. Su configuración está en la misma carpeta que la de esta versión: si la elimina aquí, también se elimina allí.
+es.PurgeStoreConfirm=La configuración se comparte con ClipSD de Microsoft Store: también la perderá. ¿Eliminarla de todos modos?
 it.TaskAutostart=Avvia ClipSD all'avvio di Windows
 it.TaskDesktop=Icona sul desktop
 it.TaskGroup=Opzioni aggiuntive:
@@ -161,6 +184,9 @@ it.UninstallName=Disinstalla ClipSD
 it.RunDemo=Avvia ClipSD e mostra la presentazione
 it.PurgeCheck=Elimina anche impostazioni e registri (e gli screenshot di ClipSD nella cartella di salvataggio automatico)
 it.PurgeTitle=Disinstallazione di ClipSD
+it.StoreInstalledNote=ClipSD dal Microsoft Store è già installato su questo computer. Una seconda copia non serve: ne può funzionare solo una e le impostazioni sono condivise.
+it.PurgeStoreWarn=ClipSD dal Microsoft Store è installato su questo computer. Le sue impostazioni si trovano nella stessa cartella di quelle di questa versione: eliminarle qui le elimina anche lì.
+it.PurgeStoreConfirm=Le impostazioni sono condivise con ClipSD dal Microsoft Store: le perderà anche lui. Eliminarle comunque?
 pt.TaskAutostart=Iniciar o ClipSD com o Windows
 pt.TaskDesktop=Ícone na área de trabalho
 pt.TaskGroup=Opções adicionais:
@@ -169,6 +195,9 @@ pt.UninstallName=Desinstalar o ClipSD
 pt.RunDemo=Iniciar o ClipSD e mostrar o tour
 pt.PurgeCheck=Excluir também as configurações e os registros (e as capturas do ClipSD na pasta de salvamento automático)
 pt.PurgeTitle=Desinstalação do ClipSD
+pt.StoreInstalledNote=O ClipSD da Microsoft Store já está instalado neste computador. Uma segunda cópia não é necessária: só uma pode funcionar, e ambas usam as mesmas configurações.
+pt.PurgeStoreWarn=O ClipSD da Microsoft Store está instalado neste computador. Suas configurações ficam na mesma pasta das configurações desta versão: excluí-las aqui também as exclui lá.
+pt.PurgeStoreConfirm=As configurações são compartilhadas com o ClipSD da Microsoft Store: ele também as perderá. Excluir mesmo assim?
 pl.TaskAutostart=Uruchamiaj ClipSD razem z systemem Windows
 pl.TaskDesktop=Ikona na pulpicie
 pl.TaskGroup=Zadania dodatkowe:
@@ -177,6 +206,9 @@ pl.UninstallName=Odinstaluj ClipSD
 pl.RunDemo=Uruchom ClipSD i pokaż przewodnik
 pl.PurgeCheck=Usuń także ustawienia i dzienniki (oraz zrzuty ClipSD w folderze autozapisu)
 pl.PurgeTitle=Odinstalowanie ClipSD
+pl.StoreInstalledNote=ClipSD z Microsoft Store jest już zainstalowany na tym komputerze. Druga kopia nie jest potrzebna: może działać tylko jedna, a ustawienia są wspólne.
+pl.PurgeStoreWarn=ClipSD z Microsoft Store jest zainstalowany na tym komputerze. Jego ustawienia leżą w tym samym folderze co ustawienia tej wersji: usunięcie ich tutaj usunie je także tam.
+pl.PurgeStoreConfirm=Ustawienia są wspólne z ClipSD z Microsoft Store: on też je straci. Usunąć mimo to?
 tr.TaskAutostart=ClipSD'yi Windows ile başlat
 tr.TaskDesktop=Masaüstü simgesi
 tr.TaskGroup=Ek seçenekler:
@@ -185,6 +217,9 @@ tr.UninstallName=ClipSD'yi kaldır
 tr.RunDemo=ClipSD'yi başlat ve turu göster
 tr.PurgeCheck=Ayarları ve günlükleri de sil (ve otomatik kayıt klasöründeki ClipSD ekran görüntülerini)
 tr.PurgeTitle=ClipSD'yi kaldırma
+tr.StoreInstalledNote=Microsoft Store'daki ClipSD bu bilgisayarda zaten kurulu. İkinci bir kopyaya gerek yok: aynı anda yalnızca biri çalışabilir ve ayarları ortaktır.
+tr.PurgeStoreWarn=Microsoft Store'daki ClipSD bu bilgisayarda kurulu. Ayarları bu sürümün ayarlarıyla aynı klasörde durur: burada silerseniz orada da silinir.
+tr.PurgeStoreConfirm=Ayarlar Microsoft Store'daki ClipSD ile ortaktır: o da ayarlarını kaybeder. Yine de silinsin mi?
 zh.TaskAutostart=随 Windows 启动 ClipSD
 zh.TaskDesktop=桌面图标
 zh.TaskGroup=附加选项：
@@ -193,6 +228,9 @@ zh.UninstallName=卸载 ClipSD
 zh.RunDemo=启动 ClipSD 并显示导览
 zh.PurgeCheck=同时删除设置和日志（以及自动保存文件夹中 ClipSD 的截图）
 zh.PurgeTitle=卸载 ClipSD
+zh.StoreInstalledNote=此电脑上已安装来自 Microsoft Store 的 ClipSD。不需要第二个副本：同一时间只能运行一个，而且两者共用同一份设置。
+zh.PurgeStoreWarn=此电脑上已安装来自 Microsoft Store 的 ClipSD。它的设置与此版本的设置在同一个文件夹中：在这里删除，那边也会被删除。
+zh.PurgeStoreConfirm=这些设置与来自 Microsoft Store 的 ClipSD 共用：它也会丢失设置。仍要删除吗？
 
 [Tasks]
 Name: "autostart"; Description: "{cm:TaskAutostart}"; GroupDescription: "{cm:TaskGroup}"
@@ -248,9 +286,8 @@ Filename: "{app}\{#LauncherExe}"; Parameters: "--switch --no-start"; Check: IsSi
 ; Without the tick ClipSD still starts, without the introduction (see CurStepChanged, ssDone).
 Filename: "{app}\{#LauncherExe}"; Parameters: "{code:SwitchPrefix}--demo"; Description: "{cm:RunDemo}"; Flags: nowait postinstall skipifsilent; Check: not IsUpdateParam
 
-[UninstallRun]
-Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM {#LauncherExe}"; Flags: runhidden; RunOnceId: "StopClipSDLauncher"
-Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM {#ProgramExe}"; Flags: runhidden; RunOnceId: "StopClipSDApp"
+; No taskkill by image name here: it would also kill the same-named processes of the Microsoft Store copy.
+; Only the program of this folder is stopped, by its path: StopProcessesIn (CurUninstallStepChanged, usUninstall).
 
 [UninstallDelete]
 ; The autostart shortcut may also have been made by ClipSD itself (Settings -> autostart)
@@ -275,6 +312,8 @@ var
   DesktopBefore: Boolean;
   TasksPreset: Boolean;
   PurgeUser: Boolean;         { uninstall: delete settings and screenshots too }
+  StoreChecked: Boolean;      { StorePackageInstalled asked Windows already }
+  StoreFound: Boolean;
 
 function AppPath(const Rel: String): String;
 begin
@@ -344,14 +383,123 @@ begin
     Result := '';
 end;
 
+{ Sets a variable of this process: the child PowerShell inherits it. The folder is passed this way, never pasted into
+  the command text: PowerShell takes ' and also the typographic quotes U+2018 to U+201B as string delimiters, and a
+  path (D'Angelo, D’Angelo, spaces, Cyrillic) must stay a plain value. }
+function SetEnvironmentVariableW(Name, Value: String): Integer;
+  external 'SetEnvironmentVariableW@kernel32.dll stdcall';
+
+{ Full path of Windows PowerShell: the 64-bit one when Setup is a 32-bit process (Get-AppxPackage and Win32_Process
+  see all), else System32. Empty when there is none: never a search by name (that would also look in the folder of
+  Setup.exe, usually Downloads). }
+function PowerShellExe(): String;
+var
+  Root: String;
+begin
+  Root := GetEnv('SystemRoot');
+  if Root = '' then
+    Root := ExpandConstant('{win}');
+  Result := Root + '\Sysnative\WindowsPowerShell\v1.0\powershell.exe';
+  if not FileExists(Result) then
+    Result := Root + '\System32\WindowsPowerShell\v1.0\powershell.exe';
+  if not FileExists(Result) then
+    Result := '';
+end;
+
+{ Is the Microsoft Store copy of ClipSD installed for this user? Get-AppxPackage needs no administrator rights.
+  When PowerShell cannot answer, the private folder of the package decides (Windows removes it with the package). }
+function StorePackageInstalled(): Boolean;
+var
+  Code: Integer;
+  Asked: Boolean;
+  Ps: String;
+  R: TFindRec;
+begin
+  if not StoreChecked then
+  begin
+    StoreChecked := True;
+    StoreFound := False;
+    Asked := False;
+    Ps := PowerShellExe();
+    if Ps <> '' then
+      Asked := Exec(Ps,
+        '-NoProfile -ExecutionPolicy Bypass -Command "if (Get-AppxPackage -Name {#StorePackageName}) { exit 0 } else { exit 3 }"',
+        '', SW_HIDE, ewWaitUntilTerminated, Code);
+    if Asked and ((Code = 0) or (Code = 3)) then
+      StoreFound := (Code = 0)
+    else if FindFirst(ExpandConstant('{localappdata}') + '\Packages\{#StorePackageName}_*', R) then
+    begin
+      StoreFound := True;
+      FindClose(R);
+    end;
+    if StoreFound then
+      Log('Microsoft Store copy of ClipSD: installed')
+    else
+      Log('Microsoft Store copy of ClipSD: not installed');
+  end;
+  Result := StoreFound;
+end;
+
+{ Stops ClipSD.exe and ClipSD-app.exe that run from a file inside Dir, and only those. Never by the name alone:
+  the copy from the Microsoft Store has the same file names (ClipSD-app.exe) and runs from WindowsApps.
+  Last resort: when PowerShell or WMI does not work (AppLocker, a stopped service) and there is no Store copy,
+  nothing but our own copy can carry these names, so the old taskkill by name is used. }
+procedure StopProcessesIn(const Dir: String);
+var
+  Ps: String;
+  Code: Integer;
+  Done: Boolean;
+begin
+  Done := False;
+  Ps := PowerShellExe();
+  if Ps <> '' then
+  begin
+    SetEnvironmentVariableW('CLIPSD_STOP_DIR', RemoveBackslash(Dir) + '\');
+    Done := Exec(Ps, '-NoProfile -ExecutionPolicy Bypass -Command "try { $d = $env:CLIPSD_STOP_DIR; ' +
+      'Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object { ' +
+      '(@(''ClipSD.exe'', ''ClipSD-app.exe'') -contains $_.Name) -and $_.ExecutablePath -and ' +
+      '$_.ExecutablePath.StartsWith($d, [StringComparison]::OrdinalIgnoreCase) } | ' +
+      'ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; exit 0 } catch { exit 4 }"',
+      '', SW_HIDE, ewWaitUntilTerminated, Code);
+    Done := Done and (Code = 0);
+    SetEnvironmentVariableW('CLIPSD_STOP_DIR', '');
+  end;
+  if not Done then
+  begin
+    if StorePackageInstalled() then
+      Log('Could not stop ClipSD by path and the Microsoft Store copy is installed: nothing is killed by name')
+    else
+    begin
+      Log('Could not stop ClipSD by path: taskkill by name (no Microsoft Store copy)');
+      Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM {#LauncherExe}', '', SW_HIDE, ewWaitUntilTerminated, Code);
+      Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM {#ProgramExe}', '', SW_HIDE, ewWaitUntilTerminated, Code);
+    end;
+  end;
+  Sleep(700);
+end;
+
+{ Wizard, "Ready to install" page: one line when the Microsoft Store copy is already there (not forbidden) }
+function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo,
+  MemoGroupInfo, MemoTasksInfo: String): String;
+begin
+  Result := '';
+  if MemoDirInfo <> '' then Result := Result + MemoDirInfo + NewLine + NewLine;
+  if MemoGroupInfo <> '' then Result := Result + MemoGroupInfo + NewLine + NewLine;
+  if MemoTasksInfo <> '' then Result := Result + MemoTasksInfo + NewLine + NewLine;
+  if StorePackageInstalled() then
+    Result := Result + ExpandConstant('{cm:StoreInstalledNote}') + NewLine;
+end;
+
 { Only for the move from 1.x: the old program has to be closed before its files are removed. }
 procedure StopRunning();
 var
   Code: Integer;
 begin
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM {#LauncherExe}', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  { only the program of this folder, never by image name (the Microsoft Store copy has the same names) }
+  StopProcessesIn(ExpandConstant('{app}'));
   { install.bat version runs as pythonw.exe from %LOCALAPPDATA%\ClipSD\venv }
-  Exec('powershell.exe',
+  if PowerShellExe() <> '' then
+    Exec(PowerShellExe(),
     '-NoProfile -ExecutionPolicy Bypass -Command "Get-Process pythonw,python -ErrorAction SilentlyContinue | ' +
     'Where-Object { $_.Path -like ($env:LOCALAPPDATA + ''\ClipSD\*'') } | Stop-Process -Force"',
     '', SW_HIDE, ewWaitUntilTerminated, Code);
@@ -483,18 +631,38 @@ var
   F: TSetupForm;
   Box: TNewCheckBox;
   Ok, Cancel: TNewButton;
+  Warn: TNewStaticText;
+  StoreCopy: Boolean;
+  Extra: Integer;
 begin
   Result := True;
   PurgeUser := ExpandConstant('{param:PURGE|0}') = '1';
   if UninstallSilent() then
     Exit;
-  F := CreateCustomForm(ScaleX(440), ScaleY(150), False, True);
+  { The Microsoft Store copy keeps its settings in the same folder: say so, and do not delete them by default }
+  StoreCopy := StorePackageInstalled();
+  Extra := 0;
+  if StoreCopy then
+    Extra := 80;
+  F := CreateCustomForm(ScaleX(440), ScaleY(150 + Extra), False, True);
   try
     F.Caption := ExpandConstant('{cm:PurgeTitle}');
+    if StoreCopy then
+    begin
+      Warn := TNewStaticText.Create(F);
+      Warn.Parent := F;
+      Warn.AutoSize := False;
+      Warn.WordWrap := True;
+      Warn.Left := ScaleX(16);
+      Warn.Top := ScaleY(16);
+      Warn.Width := F.ClientWidth - ScaleX(32);
+      Warn.Height := ScaleY(64);
+      Warn.Caption := ExpandConstant('{cm:PurgeStoreWarn}');
+    end;
     Box := TNewCheckBox.Create(F);
     Box.Parent := F;
     Box.Left := ScaleX(16);
-    Box.Top := ScaleY(16);
+    Box.Top := ScaleY(16 + Extra);
     Box.Width := F.ClientWidth - ScaleX(32);
     Box.Height := ScaleY(48);
     Box.Checked := False;
@@ -519,7 +687,13 @@ begin
     Cancel.Top := Ok.Top;
     F.Position := poScreenCenter;
     if F.ShowModal() = mrOk then
-      PurgeUser := Box.Checked
+    begin
+      PurgeUser := Box.Checked;
+      { ticked while the Microsoft Store copy is installed: ask once more, the answer "No" keeps the settings }
+      if PurgeUser and StoreCopy then
+        if MsgBox(ExpandConstant('{cm:PurgeStoreConfirm}'), mbConfirmation, MB_YESNO or MB_DEFBUTTON2) <> IDYES then
+          PurgeUser := False;
+    end
     else
       Result := False;
   finally
@@ -659,6 +833,8 @@ var
 begin
   if CurUninstallStep <> usUninstall then
     Exit;
+  { Stop the program of this folder (by path: the Microsoft Store copy keeps running) before its files are removed }
+  StopProcessesIn(ExpandConstant('{app}'));
   Data := ExpandConstant('{localappdata}\ClipSD');
   { Always: what the program and the updater wrote while working }
   DelTree(Data + '\logs', True, True, True);

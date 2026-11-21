@@ -27,7 +27,7 @@ os.environ["QT_QPA_PLATFORM"] = "offscreen:configfile=" + _cfg
 from PyQt6.QtCore import QPoint, QPointF, QRect, Qt
 from PyQt6.QtGui import QColor, QFontMetrics, QGuiApplication, QImage, QPainter, QPixmap
 from PyQt6.QtTest import QTest
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QLabel
 
 app = QApplication(sys.argv)
 from clipshot import app as appmod, ocr, translate, translate_ui, themes
@@ -211,9 +211,11 @@ check(ocr.Toast.FADE_IN == 150 and ocr.Toast.SHOW == 1400 and ocr.Toast.FADE_OUT
 check(wait(lambda: tb.effect.opacity() < 0.99, 3) and wait(lambda: not tb.isVisible(), 3), "плашка угасла и скрылась сама")
 ed.select_tool(TRANSLATE)
 settle()
-hint = ed.tr_message   # 1.29: сообщение режима перевода в бирюзовой полосе внизу окна
-fm = QFontMetrics(hint.font())
-check(hint.isVisible() and fm.horizontalAdvance(hint.text()) <= hint.width() - 24, "режим перевода: сообщение в бирюзовой полосе помещается целиком")
+hint = ed.tr_message   # 1.32.4: сообщение режима перевода в строке сверху; не помещается: режется многоточием
+shown = QLabel.text(hint)
+check((not hint.isVisible() and hint.text() in ed.tr_icon_button.toolTip())
+      or (shown == hint.text() and QFontMetrics(hint.font()).horizontalAdvance(shown) <= hint.width()),
+      f"режим перевода: сообщение в строке сверху показано целиком или спрятано совсем (виден в подсказке значка): «{shown}»")
 ed.canvas.modified, ed.exported = False, True
 ed.close()
 themes.apply_app(app, {"ui_theme": "standard"})

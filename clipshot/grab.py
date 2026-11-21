@@ -10,9 +10,12 @@ Wayland: асинхронно — GNOME Shell (как gnome-screenshot) → xdg-
 асинхронный: оверлей выделения показывается сразу, а замороженный кадр подставляется, когда готов.
 """
 
+import atexit
 import itertools
 import os
+import secrets
 import shutil
+import stat
 import subprocess
 import tempfile
 from urllib.parse import unquote, urlparse
@@ -63,9 +66,39 @@ def claim_shell_name() -> bool:
     return _shell_name_owned
 
 
+_private_dir = None
+
+
+def _is_private(path: str) -> bool:
+    """Папка своя: настоящая папка (не ссылка), владелец этот пользователь, другим недоступна (0700)."""
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return False
+    owner_ok = not hasattr(os, "getuid") or st.st_uid == os.getuid()
+    return stat.S_ISDIR(st.st_mode) and owner_ok and not st.st_mode & 0o077
+
+
+def private_dir() -> str:
+    """Личная временная папка ClipSD для снимков стола и окон: XDG_RUNTIME_DIR, если она своя и закрыта от других
+    (обычно /run/user/<uid>, 0700); иначе своя папка 0700 во временной папке системы, убирается при выходе.
+    Раньше без XDG_RUNTIME_DIR снимок шёл в общий /tmp с предсказуемым именем (проверка 1.33)."""
+    global _private_dir
+    if _private_dir is not None and _is_private(_private_dir):
+        return _private_dir
+    run = os.environ.get("XDG_RUNTIME_DIR")
+    if run and _is_private(run):
+        _private_dir = run
+    else:
+        _private_dir = tempfile.mkdtemp(prefix="clipsd-")   # 0700
+        atexit.register(shutil.rmtree, _private_dir, True)
+    return _private_dir
+
+
 def _temp_png() -> str:
-    folder = os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()
-    return os.path.join(folder, f"clipshot-{os.getpid()}-{next(_counter)}.png")
+    """Новое имя файла в личной папке: номер процесса, счётчик и случайная часть (имя не угадать заранее; дополнение
+    GNOME пишет файл только новым, существующий и ссылку не трогает)."""
+    return os.path.join(private_dir(), f"clipshot-{os.getpid()}-{next(_counter)}-{secrets.token_hex(4)}.png")
 
 
 def _load(path: str):
