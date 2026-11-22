@@ -1295,11 +1295,13 @@ def test_allow_again_windows():
           "администратору только -EncodedCommand, без -File и -Command")
     script = base64.b64decode(parts[-1]).decode("utf-16-le")
     netsh_q = "'" + os.path.join(fake_sys, "netsh.exe") + "'"
-    check(script.count("& " + netsh_q + " 'advfirewall' 'firewall'") == 2 and "exit $LASTEXITCODE" in script,
-          "две команды netsh по полному пути, итог кодом выхода")
+    check(script.count("$null = & " + netsh_q + " 'advfirewall' 'firewall'") == 2 and "exit $LASTEXITCODE" in script
+          and "Out-Null" not in script and script.startswith('$env:PSModulePath = "$PSHOME\\Modules"\n'),
+          "две команды netsh по полному пути без командлетов, PSModulePath сброшен первой строкой, итог кодом выхода")
     check(f"'program={exe}'" in script and "'profile=private'" in script and "'remoteip=localsubnet'" in script
           and "'localport=8765-8767'" in script, "правило: эта программа, частные сети, своя подсеть, свои порты")
-    check(not any(w in script for w in ("Out-File", "Set-Content", "WriteAllText", "Get-Content", "$env:", "TEMP")),
+    body = script[len(sysenv.ELEVATED_PS_PROLOGUE):] if script.startswith(sysenv.ELEVATED_PS_PROLOGUE) else script
+    check(not any(w in body for w in ("Out-File", "Set-Content", "WriteAllText", "Get-Content", "$env:", "TEMP")),
           "команда администратора не читает и не пишет файлы и не берёт данных из окружения")
     # путь программы проверяется: существует, абсолютный, это сама ClipSD
     folder = tempfile.mkdtemp(prefix="clipsd-fwtest-")
@@ -1345,13 +1347,14 @@ def test_allow_again_windows():
             outcome[0] = result
             d = phone_ui.TroubleDialog(win, platform="win32")
             d.allow_btn.click()
-            busy = not d.allow_btn.isEnabled() and d.status.text() == "Ждём ответа Windows на запрос разрешения…"
+            busy = not d.allow_btn.isEnabled() and d.status.text() == tr("phone.allow_working")
             check(wait_for(lambda: not phone_ui._firewall_jobs and d.allow_btn.isEnabled(), 10), "ожидание закончилось")
             settle()
             return d, busy
 
         d, busy = press((0, "", False))
-        check(busy, "кнопка: сразу «Ждём ответа Windows», кнопка выключена, окно живёт")
+        check(busy and tr("phone.allow_working").startswith("Windows спросит разрешение для Windows PowerShell"),
+              "кнопка: сразу «Windows спросит разрешение для Windows PowerShell…» (М11), кнопка выключена, окно живёт")
         program, parameters, _ = calls[-1]
         check(program == os.path.join(fake_sys, "WindowsPowerShell", "v1.0", "powershell.exe") and os.path.isabs(program),
               "с правами администратора: PowerShell по полному пути из системной папки, не ClipSD")

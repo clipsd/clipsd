@@ -2,7 +2,7 @@
   "phone.allow_again": "Yeniden izin ver",
   "phone.allow_done": "Tamam. Kodu telefonda yeniden açın.",
   "phone.allow_failed": "Windows kuralı değiştirilmedi: {error}",
-  "phone.allow_working": "Windows'un izin istemesi bekleniyor…",
+  "phone.allow_working": "Windows, Windows PowerShell (yayımcı Microsoft) için izin isteyecek: bu normaldir, “Evet”e tıklayın. Yanıt bekleniyor…",
   "phone.allow_declined": "İzin verilmedi. “Yeniden izin ver”e tıklayın ve “Evet” deyin.",
   "phone.android17": "Android 17: tarayıcıya yerel ağa erişim izni verin. Ayarlar → Uygulamalar → tarayıcınız → İzinler → Yakındaki cihazlar → İzin ver.",
   "phone.bind_failed": "Bu bilgisayarda alım açılamadı. Ayrıntılar: {error}",

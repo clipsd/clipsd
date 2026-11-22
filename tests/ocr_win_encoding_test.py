@@ -163,21 +163,31 @@ check(ocr.install_help("windows_lang").ocr_capability == "ru-RU", "подска�
 check(ocr.install_help("windows_lang", "deu").ocr_capability == "de-DE", "подсказка про немецкий: кнопка ставит de-DE")
 for bad in ("ru-RU; calc", "ru-RU\"; Remove-Item C:\\", "", "xx-XX"):
     try:
-        ocr.install_parameters(bad)
+        ocr.install_arguments(bad)
         check(False, f"чужой тег {bad!r} не принимается")
     except ValueError:
         pass
-params = ocr.install_parameters("ru-RU")
-parts = params.split()
-check(parts[:-1] == ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand"]
-      and "-File" not in parts and "-Command" not in parts,
-      "администратору только -EncodedCommand, без -File и -Command")
-inst = base64.b64decode(parts[-1]).decode("utf-16-le")
-check('"Language.OCR~~~ru-RU~0.0.1.0"' in inst and "Add-WindowsCapability" in inst and "@TAG@" not in inst,
-      "команда ставит Language.OCR~~~ru-RU~0.0.1.0, тег вписан из списка")
-check(not any(w in inst for w in ("WriteAllText", "Out-File", "Set-Content", "$env:", "TEMP", "Get-Content", "param(")),
-      "команда администратора не читает и не пишет файлы и не берёт данных из окружения")
-check(all(ocr.install_parameters(t) for t in ocr.OCR_CAPS.values()), "все теги списка дают команду")
+params = ocr.install_arguments("ru-RU")
+check(params == "/Online /Add-Capability /CapabilityName:Language.OCR~~~ru-RU~0.0.1.0 /NoRestart /Quiet",
+      f"Б5: администратору только Dism с постоянными аргументами и тегом из списка, /NoRestart ({params})")
+check(not hasattr(ocr, "WINDOWS_INSTALL_PS") and not hasattr(ocr, "install_parameters"),
+      "Б5: сценария PowerShell для установки больше нет (его командлеты подгружали модуль Dism по PSModulePath)")
+check(all(ocr.install_arguments(t).count("Language.OCR~~~" + t + "~0.0.1.0") == 1 for t in ocr.OCR_CAPS.values()),
+      "все теги списка дают команду")
+check(ocr.DISM_OK == (0, 3010) and ocr.exit_text(87) == "exit 87" and ocr.exit_text(0x800F0954) == "exit 0x800F0954",
+      "коды Dism: 0 и 3010 успех, большие коды шестнадцатеричными")
+# «Разрешить заново»: PowerShell без модулей (только язык и netsh.exe по полному пути)
+from clipshot import phone as _phone  # noqa: E402
+fw = base64.b64decode(_phone.firewall_parameters(sys.executable, netsh=os.path.join(os.path.abspath(os.sep), "netsh.exe"))
+                      .split()[-1]).decode("utf-16-le")
+first = fw.splitlines()[:2]
+check(first == ['$env:PSModulePath = "$PSHOME\\Modules"', "$PSModuleAutoLoadingPreference = 'None'"],
+      f"Б5: повышенный PowerShell первым делом сбрасывает PSModulePath и выключает подгрузку модулей ({first})")
+import re  # noqa: E402
+words = set(re.findall(r"(?m)^(?:\$null = )?&?\s*([A-Za-z]+-[A-Za-z]+)", fw)) | set(re.findall(r"\|\s*([A-Za-z]+-[A-Za-z]+)", fw))
+check(not words and "Out-Null" not in fw and "Import-Module" not in fw,
+      f"в повышенном сценарии брандмауэра нет командлетов, только язык и netsh.exe ({sorted(words)})")
+check(_phone.firewall_parameters(sys.executable).startswith("-NoProfile "), "повышенный PowerShell с -NoProfile")
 
 
 class FakeApi:
@@ -227,6 +237,11 @@ elevated = []
 real_wait, real_ps = sysenv.run_elevated_wait, sysenv.powershell_exe
 
 
+langs_now = [[]]
+real_langs = ocr.installed_ocr_languages
+ocr.installed_ocr_languages = lambda: langs_now[0]
+
+
 def fake_wait(program, parameters, timeout_ms, api=None):
     import time
     elevated.append((program, parameters, timeout_ms))
@@ -256,8 +271,11 @@ try:
     check(block.install_button is not None and block.install_button.text() == tr("ocr.win_install_button"),
           "Windows: в подсказке кнопка «Установить распознавание»")
     check(busy, "кнопка: сразу «Идёт установка», кнопка выключена, ожидание в фоне")
-    check(elevated and elevated[0][0] == exe and elevated[0][1] == params and elevated[0][2] == ocr.INSTALL_TIMEOUT * 1000,
-          "с правами администратора: PowerShell по полному пути и команда только с тегом ru-RU")
+    dism = os.path.join(FAKE_SYSTEM, "Dism.exe")
+    check(elevated and elevated[0][0] == dism and elevated[0][1] == params and elevated[0][2] == ocr.INSTALL_TIMEOUT * 1000,
+          "с правами администратора: Dism.exe по полному пути из системной папки, аргументы только с тегом ru-RU")
+    check(tr("ocr.win_install_started").startswith("Windows спросит разрешение для своей программы DISM"),
+          "М11: в строке ожидания сказано, для какой программы Windows спросит разрешение")
     check(block.install_status.text() == tr("ocr.win_install_done") and not block.install_button.isEnabled(),
           "код 0: «Готово, распознайте текст ещё раз»")
     block, _ = run_block((None, "ShellExecuteEx 1223", True))
@@ -266,6 +284,17 @@ try:
     block, _ = run_block((3, "", False))
     check(block.install_status.text() == tr("ocr.win_install_failed", error="exit 3") and block.install_button.isEnabled(),
           "сбой установки: код выхода в тексте, кнопку можно нажать снова")
+    block, _ = run_block((3010, "", False))
+    check(block.install_status.text() == tr("ocr.win_install_done"), "Dism 3010 (нужна перезагрузка): тоже «Готово»")
+    block, _ = run_block((0x800F0954, "", False))
+    check(block.install_status.text() == tr("ocr.win_install_failed", error="exit 0x800F0954"),
+          "сбой Windows Update: код шестнадцатеричный")
+    n = len(elevated)
+    langs_now[0] = ["en-US", "ru"]
+    block, _ = run_block((3, "", False))
+    check(len(elevated) == n and block.install_status.text() == tr("ocr.win_install_done"),
+          "язык уже установлен (проверка без повышения): «Готово» без запроса UAC")
+    langs_now[0] = []
     outcome = (0, "", False)
     block = ocr.InstallBlock(ocr.install_help("windows_lang"))
     block.install_button.click()
@@ -278,6 +307,7 @@ try:
     check(not ocr._install_jobs, "окно закрыли посреди установки: итог пришёл без падения, задание убрано")
 finally:
     sysenv.run_elevated_wait, sys.platform, sysenv._system_dir = real_wait, real_platform, real_sysdir
+    ocr.installed_ocr_languages = real_langs
 after = set(os.listdir(tempfile.gettempdir()))
 check(not [n for n in after - before if n.startswith("clipsd")], f"установка не создаёт файлов и папок во временной папке ({sorted(after - before)})")
 check(ocr.InstallBlock(ocr.install_help("no_rus")).install_button is None, "Tesseract без русского: кнопки Windows нет")
@@ -368,6 +398,11 @@ if sys.platform == "win32":
           and ps_exe.lower().endswith("\\windowspowershell\\v1.0\\powershell.exe"),
           "Windows: PowerShell по полному пути из системной папки, файл есть")
     check(os.path.isfile(phone.windows_firewall_commands("C:\\x.exe")[0][0]), "Windows: netsh.exe по полному пути, файл есть")
+    dism = sysenv.dism_exe()
+    check(os.path.isabs(dism) and os.path.isfile(dism) and os.path.basename(dism).lower() == "dism.exe",
+          f"Windows: Dism.exe по полному пути из системной папки, файл есть ({dism})")
+    langs_have = ocr.installed_ocr_languages()
+    check(langs_have is not None and langs_have == have, f"Windows: проверка «уже установлено» без повышения ({langs_have})")
 
     # 7. Windows: буфер обмена настоящий (платформа windows, не offscreen), формат CF_UNICODETEXT
     child = r'''

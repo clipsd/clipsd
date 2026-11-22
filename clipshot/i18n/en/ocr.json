@@ -42,7 +42,7 @@
   "ocr.win_install_declined": "Installation cancelled: administrator permission was not given. Click the button again and answer “Yes”.",
   "ocr.win_install_done": "Done: recognition is installed. Recognize the text again.",
   "ocr.win_install_failed": "Could not install ({error}). Install it manually using the steps above.",
-  "ocr.win_install_started": "Installing, 1-3 minutes. “Done” will appear here when it finishes.",
+  "ocr.win_install_started": "Windows will ask permission for its own program DISM (publisher Microsoft): this is normal, click “Yes”. Installing takes 1-3 minutes; “Done” will appear here when it finishes.",
   "ocr.win_lang_guide_title": "Microsoft guide: how to add a language in Windows",
   "ocr.win_lang_need": "Windows has no Russian text recognition installed, so Russian letters come out as Latin ones. Click “Install recognition”: Windows will ask for permission; it takes 1-3 minutes and needs the internet. Manually: open “Settings → Time & language → Language & region”, click “…” next to “Russian” → “Language options” and download “Optical character recognition”. If Russian is not in the list, first “Add a language” → “Russian”. Another option: the free Tesseract program (second link), ClipSD will find it by itself.",
   "ocr.win_lang_need_lang": "Windows has no text recognition for {lang} installed. Click “Install recognition”: Windows will ask for permission; it takes 1-3 minutes and needs the internet. Manually: open “Settings → Time & language → Language & region”, click “…” next to that language → “Language options” and download “Optical character recognition”. If the language is not in the list, first “Add a language”. Another option: the free Tesseract program (second link), ClipSD will find it by itself.",

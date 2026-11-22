@@ -2,7 +2,7 @@
   "phone.allow_again": "Zezwól ponownie",
   "phone.allow_done": "Gotowe. Otwórz kod w telefonie jeszcze raz.",
   "phone.allow_failed": "Reguła Windows nie została zmieniona: {error}",
-  "phone.allow_working": "Czekamy na prośbę Windows o zgodę…",
+  "phone.allow_working": "Windows poprosi o zgodę dla Windows PowerShell (wydawca Microsoft): to normalne, kliknij „Tak”. Czekamy na odpowiedź…",
   "phone.allow_declined": "Nie udzielono zgody. Kliknij „Zezwól ponownie” i odpowiedz „Tak”.",
   "phone.android17": "Android 17: zezwól przeglądarce na dostęp do sieci lokalnej. Ustawienia → Aplikacje → Twoja przeglądarka → Uprawnienia → Urządzenia w pobliżu → Zezwól.",
   "phone.bind_failed": "Nie udało się otworzyć odbioru na tym komputerze. Szczegóły: {error}",

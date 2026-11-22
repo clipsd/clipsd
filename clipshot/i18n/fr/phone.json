@@ -2,7 +2,7 @@
   "phone.allow_again": "Autoriser à nouveau",
   "phone.allow_done": "C’est fait. Ouvrez à nouveau le code sur le téléphone.",
   "phone.allow_failed": "La règle Windows n’a pas été modifiée : {error}",
-  "phone.allow_working": "En attente de la demande d’autorisation de Windows…",
+  "phone.allow_working": "Windows demandera l’autorisation pour Windows PowerShell (éditeur Microsoft) : c’est normal, cliquez sur « Oui ». En attente de la réponse…",
   "phone.allow_declined": "Autorisation refusée. Cliquez sur « Autoriser à nouveau » et répondez « Oui ».",
   "phone.android17": "Android 17 : autorisez le navigateur à accéder au réseau local. Paramètres → Applications → votre navigateur → Autorisations → Appareils à proximité → Autoriser.",
   "phone.bind_failed": "Impossible d’ouvrir la réception sur cet ordinateur. Détails : {error}",

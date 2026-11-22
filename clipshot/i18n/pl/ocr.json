@@ -42,7 +42,7 @@
   "ocr.win_install_declined": "Instalacja anulowana: nie udzielono zgody administratora. Kliknij przycisk jeszcze raz i odpowiedz „Tak”.",
   "ocr.win_install_done": "Gotowe: rozpoznawanie jest zainstalowane. Rozpoznaj tekst jeszcze raz.",
   "ocr.win_install_failed": "Nie udało się zainstalować ({error}). Zainstaluj ręcznie według kroków powyżej.",
-  "ocr.win_install_started": "Trwa instalacja, 1-3 minuty. Po zakończeniu pojawi się tu „Gotowe”.",
+  "ocr.win_install_started": "Windows poprosi o zgodę dla swojego programu DISM (wydawca Microsoft): to normalne, kliknij „Tak”. Instalacja trwa 1-3 minuty, po zakończeniu pojawi się tu „Gotowe”.",
   "ocr.win_lang_guide_title": "Instrukcja Microsoft: jak dodać język w Windows",
   "ocr.win_lang_need": "W Windows nie ma rozpoznawania tekstu rosyjskiego, dlatego rosyjskie litery wychodzą jako łacińskie. Kliknij „Zainstaluj rozpoznawanie”: Windows poprosi o zgodę, instalacja trwa 1-3 minuty i wymaga internetu. Ręcznie: „Ustawienia → Czas i język → Język i region”, przy „Rosyjski” kliknij „…” → „Opcje języka” i pobierz „Optyczne rozpoznawanie znaków”. Jeśli rosyjskiego nie ma na liście, najpierw „Dodaj język” → „Rosyjski”. Inna możliwość: bezpłatny program Tesseract (drugi link), ClipSD sam go znajdzie.",
   "ocr.win_lang_need_lang": "W Windows nie ma rozpoznawania tekstu w języku „{lang}”. Kliknij „Zainstaluj rozpoznawanie”: Windows poprosi o zgodę, instalacja trwa 1-3 minuty i wymaga internetu. Ręcznie: „Ustawienia → Czas i język → Język i region”, przy tym języku kliknij „…” → „Opcje języka” i pobierz „Optyczne rozpoznawanie znaków”. Jeśli języka nie ma na liście, najpierw „Dodaj język”. Inna możliwość: bezpłatny program Tesseract (drugi link), ClipSD sam go znajdzie.",

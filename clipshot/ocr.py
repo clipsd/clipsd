@@ -27,7 +27,7 @@ from PyQt6.QtWidgets import (QFrame, QGraphicsOpacityEffect, QLabel, QPushButton
 
 from .dialogs import ClipDialog, icon_pixmap, link_colored
 from .i18n import tr
-from .sysenv import child_env, elevated_powershell_parameters, encoded_command, open_url
+from .sysenv import child_env, encoded_command, open_url
 
 DEFAULT_LANGS = "rus+eng"
 # 1.31: языки распознавания по умолчанию (config ocr_langs = "auto"): язык интерфейса и английский
@@ -517,33 +517,49 @@ def _powershell(script_text: str, env: dict = None, timeout: int = None) -> subp
         raise OcrError("ocr.err_powershell_start", detail=exc)
 
 
-# 1.34.1: кнопка «Установить распознавание». Б4 проверки: с правами администратора идёт только PowerShell Windows по
-# полному пути из системной папки, команда целиком в -EncodedCommand (тег языка только из OCR_CAPS, вписан в текст),
-# файлов пользователя он не читает и не пишет; итог: код выхода, который ClipSD ждёт в фоне (sysenv.run_elevated_wait).
-WINDOWS_INSTALL_PS = r'''
-$ErrorActionPreference = "Stop"
-$ProgressPreference = "SilentlyContinue"
-try {
-    $name = "Language.OCR~~~@TAG@~0.0.1.0"
-    $cap = Get-WindowsCapability -Online -Name $name
-    if (-not $cap -or -not $cap.Name) { exit 4 }
-    if ("$($cap.State)" -ne "Installed") { $null = Add-WindowsCapability -Online -Name $name }
-    if ("$((Get-WindowsCapability -Online -Name $name).State)" -eq "Installed") { exit 0 }
-    exit 1
-} catch { exit 3 }
-'''
+# 1.34.2: кнопка «Установить распознавание». Б4 и Б5 проверки 1.34.1: с правами администратора идёт только программа
+# Windows Dism.exe по полному пути из системной папки, без PowerShell (его командлеты Get/Add-WindowsCapability подгружают
+# модуль Dism по PSModulePath, первая папка которого пользовательская: подложенный модуль выполнился бы от администратора).
+# Аргументы постоянные, тег языка только из OCR_CAPS. Файлов пользователя Dism не читает и не пишет; итог: код выхода,
+# который ClipSD ждёт в фоне (sysenv.run_elevated_wait). «Уже установлено» проверяется без повышения (installed_ocr_languages).
 INSTALL_TIMEOUT = 20 * 60   # секунд: скачивание компонента через Windows Update
+DISM_OK = (0, 3010)         # 3010: установлено, Windows хочет перезагрузку (распознавание обычно работает и без неё)
 
 
-def install_parameters(tag: str) -> str:
-    """Командная строка PowerShell для установки распознавания языка tag (только из OCR_CAPS, иначе ValueError)."""
+def install_arguments(tag: str) -> str:
+    """Командная строка Dism.exe для установки распознавания языка tag (только из OCR_CAPS, иначе ValueError):
+    /Online /Add-Capability /CapabilityName:Language.OCR~~~<тег>~0.0.1.0 /NoRestart /Quiet. /NoRestart обязателен:
+    без него Dism в тихом режиме сам перезагрузил бы компьютер, а в обычном ждал бы ответа в скрытом окне."""
     if tag not in OCR_CAPS.values():
         raise ValueError(f"unknown OCR language: {tag!r}")
-    return elevated_powershell_parameters(WINDOWS_INSTALL_PS.replace("@TAG@", tag))
+    return f"/Online /Add-Capability /CapabilityName:Language.OCR~~~{tag}~0.0.1.0 /NoRestart /Quiet"
+
+
+WINDOWS_LANGS_PS = r'''
+$ErrorActionPreference = "Stop"
+$null = [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType = WindowsRuntime]
+foreach ($l in [Windows.Media.Ocr.OcrEngine]::AvailableRecognizerLanguages) { [Console]::Out.WriteLine($l.LanguageTag) }
+'''
+
+
+def installed_ocr_languages():
+    """Языки распознавания, установленные в Windows (без повышения прав), или None, если узнать не удалось."""
+    try:
+        out = _powershell(WINDOWS_LANGS_PS, timeout=60)
+    except OcrError:
+        return None
+    if out.returncode != 0:
+        return None
+    return [t.strip() for t in _decode_console(out.stdout).splitlines() if t.strip()]
+
+
+def exit_text(code) -> str:
+    """Код выхода для строки сбоя: «exit 87», большие коды Windows шестнадцатеричными («exit 0x800F0954»)."""
+    return f"exit 0x{code:08X}" if isinstance(code, int) and code > 0xFFFF else f"exit {code}"
 
 
 class InstallJob(QThread):
-    """Установка распознавания в фоне: запрос UAC и ожидание конца установки, окно не замирает.
+    """Установка распознавания в фоне: проверка «уже есть», запрос UAC и ожидание Dism, окно не замирает.
     done(ok, причина, отказ UAC). Живёт в _install_jobs, а не в окне: окно можно закрыть посреди установки."""
     done = pyqtSignal(bool, str, bool)
 
@@ -553,15 +569,19 @@ class InstallJob(QThread):
 
     def run(self):
         from . import sysenv
+        have = installed_ocr_languages() or []
+        if any(_lang_main(t) == _lang_main(self.tag) for t in have):
+            self.done.emit(True, "", False)   # уже установлено (например, вручную): запрос UAC не нужен
+            return
         try:
-            code, reason, declined = sysenv.run_elevated_wait(sysenv.powershell_exe(), install_parameters(self.tag),
+            code, reason, declined = sysenv.run_elevated_wait(sysenv.dism_exe(), install_arguments(self.tag),
                                                               INSTALL_TIMEOUT * 1000)
         except (OSError, ValueError) as exc:
             code, reason, declined = None, str(exc), False
-        if code == 0:
+        if code in DISM_OK:
             self.done.emit(True, "", False)
         else:
-            self.done.emit(False, reason or f"exit {code}", declined)
+            self.done.emit(False, reason or exit_text(code), declined)
 
 
 _install_jobs = []   # живые установки: иначе QThread удалится раньше времени

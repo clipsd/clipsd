@@ -42,7 +42,7 @@
   "ocr.win_install_declined": "Yükleme iptal edildi: yönetici izni verilmedi. Düğmeye yeniden tıklayın ve “Evet” deyin.",
   "ocr.win_install_done": "Hazır: tanıma yüklendi. Metni yeniden tanıyın.",
   "ocr.win_install_failed": "Yüklenemedi ({error}). Yukarıdaki adımlarla elle yükleyin.",
-  "ocr.win_install_started": "Yükleniyor, 1-3 dakika. Bittiğinde burada “Hazır” görünecek.",
+  "ocr.win_install_started": "Windows kendi programı DISM (yayımcı Microsoft) için izin isteyecek: bu normaldir, “Evet”e tıklayın. Yükleme 1-3 dakika sürer; bittiğinde burada “Hazır” görünecek.",
   "ocr.win_lang_guide_title": "Microsoft kılavuzu: Windows'a dil nasıl eklenir",
   "ocr.win_lang_need": "Windows'ta Rusça metin tanıma yüklü değil, bu yüzden Rus harfleri Latin harfleri olarak çıkıyor. “Tanımayı yükle”ye tıklayın: Windows izin isteyecek; yükleme 1-3 dakika sürer ve internet gerekir. Elle: “Ayarlar → Zaman ve dil → Dil ve bölge”, “Rusça”nın yanındaki “…” → “Dil seçenekleri”ne tıklayın ve “Optik karakter tanıma”yı indirin. Rusça listede yoksa önce “Dil ekle” → “Rusça”. Başka bir yol: ücretsiz Tesseract programı (ikinci bağlantı), ClipSD onu kendisi bulur.",
   "ocr.win_lang_need_lang": "Windows'ta “{lang}” için metin tanıma yüklü değil. “Tanımayı yükle”ye tıklayın: Windows izin isteyecek; yükleme 1-3 dakika sürer ve internet gerekir. Elle: “Ayarlar → Zaman ve dil → Dil ve bölge”, bu dilin yanındaki “…” → “Dil seçenekleri”ne tıklayın ve “Optik karakter tanıma”yı indirin. Dil listede yoksa önce “Dil ekle”. Başka bir yol: ücretsiz Tesseract programı (ikinci bağlantı), ClipSD onu kendisi bulur.",

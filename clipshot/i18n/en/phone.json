@@ -2,7 +2,7 @@
   "phone.allow_again": "Allow again",
   "phone.allow_done": "Done. Open the code on the phone again.",
   "phone.allow_failed": "The Windows rule was not changed: {error}",
-  "phone.allow_working": "Waiting for Windows to ask for permission…",
+  "phone.allow_working": "Windows will ask permission for Windows PowerShell (publisher Microsoft): this is normal, click “Yes”. Waiting for the answer…",
   "phone.allow_declined": "Permission was not given. Click “Allow again” and answer “Yes”.",
   "phone.android17": "Android 17: allow the browser to access the local network. Settings → Apps → your browser → Permissions → Nearby devices → Allow.",
   "phone.bind_failed": "Could not open receiving on this computer. Details: {error}",

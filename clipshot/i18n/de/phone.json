@@ -2,7 +2,7 @@
   "phone.allow_again": "Erneut erlauben",
   "phone.allow_done": "Fertig. Öffnen Sie den Code auf dem Smartphone erneut.",
   "phone.allow_failed": "Die Windows-Regel wurde nicht geändert: {error}",
-  "phone.allow_working": "Warten auf die Berechtigungsabfrage von Windows…",
+  "phone.allow_working": "Windows fragt nach der Berechtigung für Windows PowerShell (Herausgeber Microsoft): Das ist normal, klicken Sie auf „Ja“. Warten auf die Antwort…",
   "phone.allow_declined": "Berechtigung nicht erteilt. Klicken Sie auf „Erneut erlauben“ und antworten Sie mit „Ja“.",
   "phone.android17": "Android 17: Erlauben Sie dem Browser den Zugriff auf das lokale Netzwerk. Einstellungen → Apps → Ihr Browser → Berechtigungen → Geräte in der Nähe → Zulassen.",
   "phone.bind_failed": "Der Empfang konnte auf diesem Computer nicht geöffnet werden. Details: {error}",

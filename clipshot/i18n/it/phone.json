@@ -2,7 +2,7 @@
   "phone.allow_again": "Consenti di nuovo",
   "phone.allow_done": "Fatto. Apri di nuovo il codice sul telefono.",
   "phone.allow_failed": "La regola di Windows non è stata modificata: {error}",
-  "phone.allow_working": "In attesa della richiesta di autorizzazione di Windows…",
+  "phone.allow_working": "Windows chiederà il permesso per Windows PowerShell (autore Microsoft): è normale, fai clic su «Sì». In attesa della risposta…",
   "phone.allow_declined": "Autorizzazione non concessa. Fai clic su «Consenti di nuovo» e rispondi «Sì».",
   "phone.android17": "Android 17: consenti al browser l’accesso alla rete locale. Impostazioni → App → il tuo browser → Autorizzazioni → Dispositivi nelle vicinanze → Consenti.",
   "phone.bind_failed": "Impossibile aprire la ricezione su questo computer. Dettagli: {error}",

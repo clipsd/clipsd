@@ -1010,11 +1010,13 @@ def firewall_program(program: str = None, executable: str = None) -> str:
 
 def windows_firewall_script(program: str, netsh: str = None) -> str:
     """PowerShell script of "Allow again": the two netsh commands, every argument a single-quoted literal
-    (sysenv.ps_quote), so nothing in the path is expanded. Exit code: that of the add command."""
+    (sysenv.ps_quote), so nothing in the path is expanded. Only the language and netsh.exe by full path: no cmdlet,
+    so no module is needed (the elevated prologue switches module loading off, Б5 of the 1.34.1 review). PowerShell
+    and not two netsh starts: one UAC prompt instead of two. Exit code: that of the add command."""
     from .sysenv import ps_quote
     delete, add = windows_firewall_commands(program, netsh=netsh)
-    line = lambda argv: "& " + " ".join(ps_quote(a) for a in argv) + " | Out-Null"   # noqa: E731
-    return "\n".join(['$ProgressPreference = "SilentlyContinue"', line(delete), line(add), "exit $LASTEXITCODE"]) + "\n"
+    line = lambda argv: "$null = & " + " ".join(ps_quote(a) for a in argv)   # noqa: E731
+    return "\n".join([line(delete), line(add), "exit $LASTEXITCODE"]) + "\n"
 
 
 def firewall_parameters(program: str = None, executable: str = None, netsh: str = None) -> str:

@@ -2,7 +2,7 @@
   "phone.allow_again": "重新允许",
   "phone.allow_done": "完成。请在手机上再次打开二维码。",
   "phone.allow_failed": "Windows 规则未更改：{error}",
-  "phone.allow_working": "正在等待 Windows 请求权限…",
+  "phone.allow_working": "Windows 会为 Windows PowerShell（发布者 Microsoft）请求权限：这是正常的，请点击“是”。正在等待回应…",
   "phone.allow_declined": "未获得权限。请点击“重新允许”并选择“是”。",
   "phone.android17": "Android 17：请允许浏览器访问本地网络。设置 → 应用 → 您的浏览器 → 权限 → 附近设备 → 允许。",
   "phone.bind_failed": "无法在这台电脑上开启接收。详情：{error}",

@@ -1,0 +1,10 @@
+- Okno „Nowości w wersji” nie pojawia się już nad oknem zaznaczania, jeśli tuż po zrzucie naciśniesz Alt+W: pokaże się, gdy skończysz.
+- Z telefonu. Zdjęcie, które przyjdzie, gdy zrzut jest zamykany (otwarte pytanie „Zrzut nie jest zapisany”), już nie ginie: otwiera się jako osobny zrzut. Każde zdjęcie z telefonu od razu trafia do folderu zrzutów (jeśli autozapis jest włączony), nawet gdy zostało wstawione do otwartego zrzutu.
+- Okno zaznaczania. Ponowne „Zapisz” tego samego zrzutu nie tworzy już jednakowych plików: widać „Już zapisano” i nazwę pliku. Przytrzymane Ctrl+S też zapisuje tylko raz.
+- Windows. Lista „Otwarte okna ▾” nie czeka na dyski sieciowe: program z dysku sieciowego ma literę zamiast ikony.
+- Podpowiedź przy palecie nie jest już szersza niż dawniej: długi wiersz przechodzi do następnego.
+- Przycisk „Z telefonu” w edytorze jest dostępny z klawiatury (Tab).
+- Okno „Nowości w wersji” zmienia język razem z programem.
+- Poprawki w tłumaczeniach na ukraiński, chiński, hiszpański, angielski, portugalski i turecki.
+- Windows. Rosyjski tekst z obrazka nie zamienia się już w łacińskie litery. Jeśli w Windows nie ma rozpoznawania rosyjskiego tekstu, program proponuje je zainstalować przyciskiem „Zainstaluj rozpoznawanie”.
+- Windows. Bezpieczeństwo: rozpoznawanie tekstu instaluje się teraz bezpośrednio programem Windows DISM, bez PowerShell, a zanim Windows poprosi o zgodę, program mówi, dla którego programu Microsoft pojawi się prośba (DISM lub Windows PowerShell): to normalne, kliknij „Tak”.

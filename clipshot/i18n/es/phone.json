@@ -2,7 +2,7 @@
   "phone.allow_again": "Permitir de nuevo",
   "phone.allow_done": "Listo. Vuelva a abrir el código en el teléfono.",
   "phone.allow_failed": "La regla de Windows no se ha cambiado: {error}",
-  "phone.allow_working": "Esperando la solicitud de permiso de Windows…",
+  "phone.allow_working": "Windows pedirá permiso para Windows PowerShell (editor Microsoft): es normal, pulse «Sí». Esperando la respuesta…",
   "phone.allow_declined": "No se dio el permiso. Pulse «Permitir de nuevo» y responda «Sí».",
   "phone.android17": "Android 17: permita al navegador acceder a la red local. Ajustes → Aplicaciones → su navegador → Permisos → Dispositivos cercanos → Permitir.",
   "phone.bind_failed": "No se pudo abrir la recepción en este equipo. Detalles: {error}",

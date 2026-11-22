@@ -155,9 +155,25 @@ def ps_quote(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
+# First lines of every script for an elevated PowerShell (Б5 of the 1.34.1 review): no module is loaded at all.
+# PSModulePath starts with the user's Documents\WindowsPowerShell\Modules (and may come from HKCU\Environment): a module
+# planted there with the name of a command would run as administrator. The path is reset to the system modules and
+# autoloading is switched off, so a script may use only the language itself and native programs by full path.
+ELEVATED_PS_PROLOGUE = ('$env:PSModulePath = "$PSHOME\\Modules"\n'
+                        "$PSModuleAutoLoadingPreference = 'None'\n"
+                        '$ProgressPreference = "SilentlyContinue"\n')
+
+
 def elevated_powershell_parameters(script_text: str) -> str:
-    """Command line for an elevated Windows PowerShell (run_elevated_wait): the whole script in -EncodedCommand."""
-    return "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand " + encoded_command(script_text)
+    """Command line for an elevated Windows PowerShell (run_elevated_wait): -NoProfile, the prologue above and the
+    whole script in -EncodedCommand."""
+    return "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand " + encoded_command(
+        ELEVATED_PS_PROLOGUE + script_text)
+
+
+def dism_exe() -> str:
+    """Dism.exe by full path (the OCR language install; no PowerShell, so no modules from PSModulePath)."""
+    return system_program("Dism.exe")
 
 
 ERROR_CANCELLED = 1223   # ShellExecuteEx: the person refused the UAC prompt
