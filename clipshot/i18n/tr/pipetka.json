@@ -1,0 +1,9 @@
+{
+  "novoe.pipetka_text": "Renk seçici (J) imlecin altındaki rengi gösterir ve kodunu kopyalar. Seçim penceresinde ok tuşları çerçeveyi 1 nokta, Shift 10 nokta kaydırır, Alt+oklar boyutu değiştirir.",
+  "novoe.pipetka_title": "Renk seçici ve hassas çerçeve",
+  "ozn.pipetka_text": "Ekrandan renk ve hassas çerçeve",
+  "pipetka.picked_button": "Bu renkle çiz",
+  "pipetka.picked_sub": "Çizimleri bu renkle yapabilirsiniz",
+  "pipetka.picked_title": "{color} rengi kopyalandı",
+  "pipetka.tip": "Renk seçici (J)\nBir noktaya gelin: büyütülmüş pikseller ve renk görünür. Tıklama renk kodunu kopyalar, Esc: çık"
+}

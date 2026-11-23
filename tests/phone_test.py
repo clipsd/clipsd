@@ -682,8 +682,8 @@ def test_menus():
     fake = FakeApp()
     menu = fake._build_tray_menu()
     texts = [a.text() for a in menu.actions()]
-    check("Скриншот/фото с телефона" in texts and texts.index("Скриншот/фото с телефона") == texts.index(tr("app.menu_open")) + 1,
-          "меню значка: «Скриншот/фото с телефона» после «Открыть изображение…»")
+    check("Скриншот/фото с телефона" in texts and texts.index("Скриншот/фото с телефона") == texts.index(tr("app.menu_open")) - 1,
+          "меню значка: «Скриншот/фото с телефона» перед «Открыть изображение…»")
     next(a for a in menu.actions() if a.text() == "Скриншот/фото с телефона").trigger()
     check(fake.phone_calls == [None], "пункт меню значка открывает окно (фото станет новым снимком)")
     from clipshot.editor import EditorWindow

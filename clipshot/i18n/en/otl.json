@@ -4,6 +4,10 @@
   "otl.h3": "For 3 hours",
   "otl.m15": "For 15 minutes",
   "otl.more": "Choose how long to snooze",
+  "otl.never_ask": "Don’t ask again",
+  "otl.never_novoe": "Don’t show this version’s news",
+  "otl.never_ozn": "Don’t open on its own",
+  "otl.never_tour": "Don’t show the tour",
   "otl.tip": "Snooze for 1 hour",
   "otl.tomorrow": "Until tomorrow",
   "otl.week": "For a week"

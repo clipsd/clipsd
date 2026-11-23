@@ -71,6 +71,8 @@ check("text" in hits("перевод"), "поиск «перевод»: текс
 check(dlg.current_section() == "text", "поиск переключил на раздел с совпадением")
 check("updates" in hits("обнов"), "поиск «обнов»: обновления")
 check("updates" in hits("update") and "text" in hits("ocr"), "поиск по английским словам на русском интерфейсе")
+for q in ("тема", "тёмн", "оформ", "цвет", "appearance"):   # 1.36: раздел «Оформление» (стиль и цвета)
+    check("editor" in hits(q), f"поиск «{q}»: оформление")
 check(hits("zzzzqq") == set() and dlg.search_none.isVisible(), "ничего не найдено: сообщение")
 check(hits("") == set(dlg.pages) and not dlg.search_none.isVisible() and not dlg._found_widgets, "пустой запрос: всё как было")
 # раздел запоминается

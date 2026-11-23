@@ -75,7 +75,8 @@ DEFAULTS = {
     "tool_order": [],               # порядок кнопок инструментов (перетаскиванием в редакторе)
     "default_tool": "",             # инструмент по умолчанию: редактор открывается с ним; пусто: с последним (правая кнопка по инструменту)
     "remember_region": True,        # подсвечивать прошлую область при новом снимке
-    "save_format": "png",           # png | jpg — формат по умолчанию при сохранении
+    "save_format": "png",           # png | jpg — формат по умолчанию при сохранении (PDF только вручную, 1.36)
+    "pdf_page": "image",            # image | a4 — размер страницы PDF: по снимку или A4 (1.36)
     "insert_target_mode": "here",   # 22.11.2026: картинка с телефона/из файла: "here" в этот снимок, "apart" отдельным снимком
     "form_last": "round2",          # 1.34: последняя форма снимка (кнопка «Форма снимка» включает её одним щелчком)
     "form_radius": 28.0,            # 1.34: свой радиус скруглённых углов (точки), когда form_last = round
@@ -327,7 +328,7 @@ class Clipshot(QObject):
         self._setup_tray()
         self._setup_hotkeys()
         from . import updater
-        updater.start(self)   # итог прошлой попытки, метка запуска, проверка раз в сутки
+        updater.start(self)   # итог прошлой попытки, метка запуска, проверка раз в 6 часов
         self._start_rating()
 
     # --- оценка программы (1.32, feedback.py) ---------------------------------
@@ -513,47 +514,75 @@ class Clipshot(QObject):
             else:
                 print("Системный трей недоступен: используйте Alt+W или clipsd --region")
             return
-        self.tray = QSystemTrayIcon(self.icon, self)
+        from .icons import tray_icon
+        self.tray = QSystemTrayIcon(tray_icon(), self)   # 1.36: значок у часов свой, логотип программы не меняется
         self.tray.setToolTip(self._tray_tip())
         self.tray.setContextMenu(self._build_tray_menu())
         self.tray.activated.connect(self._on_tray_activated)
         self.tray.show()
 
     def _build_tray_menu(self) -> QMenu:
-        menu = QMenu()
+        """Меню значка у часов (1.36): разделы «Снимок» и «Инструменты», подменю «Обучение» и «Справка», язык, выход.
+        У каждого пункта значок цвета темы; справа сочетание клавиш из настроек."""
+        from . import icons, themes, updater
+        from .language import make_menu
         from .menus import style_menu
+        menu = QMenu()
         style_menu(menu, self.config)
-        items = [
-            (tr("app.menu_region"), lambda: self.capture_region(delay=250)),
-            (tr("app.menu_full"), lambda: self.capture_fullscreen(delay=250)),
-            (tr("app.menu_record"), self.open_screen_recording),
-            (tr("app.menu_open"), self.open_file),
-            (tr("phone.menu"), lambda: self.open_phone()),   # после 1.32: фото с телефона по QR-коду (phone_ui.py)
-            (None, None),
-            (tr("app.menu_folder"), self.open_folder),
-            (tr("app.menu_settings"), lambda: self.open_settings()),
-            ("language", None),
-            (tr("novoe.menu"), lambda: self.show_novoe()),   # 1.34: «Что нового» в любой момент (novoe.py)
-            (tr("ozn.menu"), lambda: self.open_oznakomlenie()),   # 1.35: окно «Ознакомление» со всеми функциями
-            (tr("app.menu_tour"), self.demo_tour),
-            (tr("app.menu_tour_selector"), self.demo_selector_tour),
-            (tr("feedback.rate_title"), self.show_rating),
-            (tr("app.menu_about"), self.show_about),
-            (None, None),
-            (tr("app.menu_quit"), self.qapp.quit),
-        ]
-        for text, slot in items:
-            if text is None:
-                menu.addSeparator()
-            elif text == "language":   # «Язык · Language» с глобусом: подменю языков на самих себе
-                from .language import make_menu
-                menu.addMenu(make_menu(self, menu))
-            else:
-                action = QAction(text, menu)
-                action.triggered.connect(slot)
-                menu.addAction(action)
-        from . import updater
-        updater.install_menu(menu, self)   # «Проверить обновления» над последним разделителем
+        tokens = themes.tokens(self.config or {})
+        color = tokens["text"] if tokens.get("dark") else "#2e3436"
+
+        def add(target, key, text, slot, hotkey="", bold=False):
+            action = QAction(icons.icon(key, color), text + (("\t" + hotkey) if hotkey else ""), target)
+            action.setData(key)
+            action.triggered.connect(slot)
+            if bold:
+                font = action.font()
+                font.setBold(True)
+                action.setFont(font)
+            target.addAction(action)
+            return action
+
+        def section(text):
+            action = QAction(text, menu)
+            action.setEnabled(False)
+            action.setProperty("clipsd_section", True)
+            menu.addAction(action)
+
+        def submenu(text, key):
+            sub = QMenu(text, menu)
+            style_menu(sub, self.config)
+            sub.setIcon(icons.icon(key, color))
+            menu.addMenu(sub)
+            return sub
+
+        section(tr("app.menu_sec_capture"))
+        add(menu, "region", tr("app.menu_region"), lambda: self.capture_region(delay=250),
+            self.config.get("hotkey_region") or "", bold=True)
+        add(menu, "fullscreen", tr("app.menu_full"), lambda: self.capture_fullscreen(delay=250),
+            self.config.get("hotkey_fullscreen") or "")
+        add(menu, "record", tr("app.menu_record"), self.open_screen_recording)
+        add(menu, "phone", tr("phone.menu"), lambda: self.open_phone())   # после 1.32: фото с телефона по QR-коду (phone_ui.py)
+        add(menu, "image_open", tr("app.menu_open"), self.open_file)
+        menu.addSeparator()
+        section(tr("app.menu_sec_tools"))
+        add(menu, "folder", tr("app.menu_folder"), self.open_folder)
+        add(menu, "settings", tr("app.menu_settings"), lambda: self.open_settings())
+        menu.addSeparator()
+        learn = submenu(tr("app.menu_learn"), "cap")
+        add(learn, "book", tr("ozn.menu"), lambda: self.open_oznakomlenie())   # 1.35: окно «Ознакомление» со всеми функциями
+        add(learn, "bell", tr("novoe.menu"), lambda: self.show_novoe())   # 1.34: «Что нового» в любой момент (novoe.py)
+        add(learn, "play", tr("app.menu_tour"), self.demo_tour)
+        add(learn, "region", tr("app.menu_tour_selector"), self.demo_selector_tour)
+        helpm = submenu(tr("app.menu_help"), "help")
+        upd = updater.install_menu(helpm, self)   # «Проверить обновления» первым в «Справке»
+        upd.setIcon(icons.icon("update", color))
+        upd.setData("update")
+        add(helpm, "star", tr("feedback.rate_title"), self.show_rating)
+        add(helpm, "info", tr("app.menu_about"), self.show_about)
+        menu.addMenu(make_menu(self, menu))   # «Язык · Language» с глобусом: подменю языков на самих себе
+        menu.addSeparator()
+        add(menu, "quit", tr("app.menu_quit"), self.qapp.quit)
         self._menu = menu
         return menu
 
@@ -969,31 +998,49 @@ class Clipshot(QObject):
 
     def update_gnome_extension(self):
         """Кнопка «Обновить» («Установить») в списке окон: дополнение ClipSD ставится в папку пользователя (пароль
-        не нужен), потом честно говорится, что под Wayland GNOME подхватит его после выхода из сеанса и входа."""
-        from . import __version__, gnome_ext, windows
+        не нужен), потом честно говорится, что под Wayland GNOME подхватит его после выхода из сеанса и входа.
+        Найдено старое дополнение ClipSD (поставлено вручную): окно с кнопкой «Заменить», без тупика."""
+        from . import __version__, gnome_ext
         state, detail = gnome_ext.update(version=__version__)
-        if state in (gnome_ext.INSTALLED, gnome_ext.UPDATED):
+        if state == gnome_ext.FOREIGN:
+            if self._show_ext_card(tr("app.ext_old_title"), tr("app.ext_old_text"), "info",
+                                   secondary=tr("app.ext_old_later"), primary=tr("app.ext_old_replace")) != "primary":
+                return state   # «Не сейчас» или крестик: ничего не меняется
+            state, detail = gnome_ext.update(version=__version__, replace=True, fallback=self._ext_hotkey_fallback)
+            if state == gnome_ext.FAILED:
+                self._sync_gnome_hotkeys()   # откат: сочетания снова по состоянию дополнения
+        self._report_ext_state(state, detail)
+        return state
+
+    def _ext_hotkey_fallback(self):
+        """Запасной Alt+W: обычное сочетание GNOME (без дополнения) включается до выключения старого дополнения."""
+        from .settings import GnomeHotkeys
+        if sys.platform == "win32" or not GnomeHotkeys.available():
+            return
+        GnomeHotkeys(ext=None).apply(self.config["hotkey_region"], self.config["hotkey_fullscreen"],
+                                     self.config.get("hotkey_both_layouts", True))
+
+    def _report_ext_state(self, state, detail):
+        from . import gnome_ext, windows
+        if state in (gnome_ext.INSTALLED, gnome_ext.UPDATED, gnome_ext.REPLACED):
             self.config["gnome_ext_relogin"] = windows.shell_owner() or True
             self.save_config()
-            title = "app.ext_installed_title" if state == gnome_ext.INSTALLED else "app.ext_updated_title"
-            if self._show_ext_card(tr(title), tr("app.ext_relogin_text"), "ok", tr("app.ext_logout")) == "secondary":
+            if state == gnome_ext.REPLACED:
+                title, text = "app.ext_replaced_title", "app.ext_replaced_text"
+            else:
+                title = "app.ext_installed_title" if state == gnome_ext.INSTALLED else "app.ext_updated_title"
+                text = "app.ext_relogin_text"
+            if self._show_ext_card(tr(title), tr(text), "ok", tr("app.ext_logout")) == "secondary":
                 gnome_ext.log_out()
-        elif state == gnome_ext.FOREIGN:
-            self._show_ext_card(tr("app.ext_foreign_title"), tr("app.ext_foreign_text"), "info")
         elif state == gnome_ext.USER_EXT_OFF:
             self._show_ext_card(tr("app.ext_userext_off_title"), tr("app.ext_userext_off_text"), "info")
         elif state == gnome_ext.UNSUPPORTED:
             self._show_ext_card(tr("app.ext_unsupported_title"), tr("app.ext_unsupported_text", version=detail), "info")
         else:
             reason = tr("app.ext_no_source") if state == gnome_ext.NO_SOURCE else (detail or "?")
-            self._show_ext_card(tr("app.ext_failed_title"), tr("app.ext_failed_text", reason=reason), "error")
-        return state
-
-    def _show_ext_card(self, title, text, icon, secondary=None) -> str:
-        from .dialogs import MessageCard
-        box = MessageCard(None, title, text, icon, secondary=secondary)
-        box.exec()
-        return box.choice
+            if self._show_ext_card(tr("app.ext_failed_title"), tr("app.ext_failed_text", reason=reason), "error",
+                                   secondary=tr("app.ext_open_folder")) == "secondary":
+                gnome_ext.open_folder()
 
     def _selector_tour(self, selector):
         """1.32: знакомство с окном выделения: при первом показе или по запросу из меню значка."""
@@ -1045,7 +1092,9 @@ class Clipshot(QObject):
             return
         target, self.insert_target = self.insert_target, None
         if target is not None and target in self.editors:
-            if pixmap is not None:
+            if pixmap is not None and action == "pin":
+                self.pin_image(pixmap.toImage(), rect.topLeft())   # 1.36: «Закрепить» из выделения поверх открытого редактора
+            elif pixmap is not None:
                 target.canvas.insert_image(pixmap.toImage())
             target.show()
             target.raise_()
@@ -1060,6 +1109,9 @@ class Clipshot(QObject):
                 self.config["last_region"] = [rect.x(), rect.y(), rect.width(), rect.height()]
                 self.save_config()
             saved = self.autosave(pixmap.toImage())
+            if action == "pin":
+                self.pin_image(pixmap.toImage(), rect.topLeft())
+                return
             if action == "save":
                 self.save_quick(pixmap.toImage())
                 return
@@ -1073,6 +1125,11 @@ class Clipshot(QObject):
                     editor.only_in_memory = not saved   # снимок не в файле: выход для обновления его бы потерял
                     if action == "ocr" and self.config.get("ocr_enabled", True):
                         editor.select_tool(OCR_TOOL)   # «Копировать текст»: редактор сразу в режиме текста
+
+    def pin_image(self, image: QImage, top_left=None):
+        """1.36: «Закрепить поверх окон»: снимок повисает окошком на месте области (zakrepit.py)."""
+        from . import zakrepit
+        return zakrepit.pin(self, image, top_left)
 
     def capture_fullscreen(self, delay=0):
         """Весь экран: окно выделения сразу с рамкой по краю экрана, надписью и кнопками в центре."""
@@ -1240,7 +1297,11 @@ class Clipshot(QObject):
             items = novoe.window_items(self.config) or items
             if editor is not None and (editor not in self.editors or sip.isdeleted(editor)):
                 editor = None
-        if choice in ("show", "notes"):
+        if choice == "never":
+            # «Не показывать новинки этой версии»: окно само не придёт, метки скрыты, точка колокольчика гаснет
+            novoe.hide_version(self.config)
+            self.mark_whatsnew_read()
+        elif choice in ("show", "notes"):
             novoe.window_done(self.config)
             self.mark_whatsnew_read()   # человек посмотрел новое: точка на колокольчике гаснет (слова владельца 22.11.2026)
         elif choice == "snooze" or (auto and choice != "relang"):
@@ -1264,13 +1325,15 @@ class Clipshot(QObject):
         from . import __version__, notifications
         notifications.mark_read(self.config, [f"whatsnew:{__version__}"], self.save_config)
 
-    def open_oznakomlenie(self, focus_new=False, ask_after=False):
+    def open_oznakomlenie(self, focus_new=False, ask_after=False, auto=False):
         """Окно «Ознакомление» (oznakomlenie.py): все функции, новое сверху. focus_new: сразу на первой новинке.
         ask_after: после закрытия один раз на версию вопрос «Хотите узнать о других функциях?», если человек смотрел
         только новое."""
         from . import novoe, oznakomlenie, otlozhit
         otlozhit.shown(self.config, "ozn")   # окно открыто (само, из меню или после срока): отложенное снято
         win = oznakomlenie.open_window(self, focus_new)
+        if win is not None and hasattr(win, "set_auto"):
+            win.set_auto(bool(auto or ask_after))   # открылось само: в меню «Отложить ▾» есть «Не открывать само»
         if oznakomlenie.new_ids(self.config):
             novoe.window_done(self.config)
             self.mark_whatsnew_read()   # открыл «Ознакомление» на новинках: «Что нового» прочитано
@@ -1364,7 +1427,7 @@ class Clipshot(QObject):
                 ident = otlozhit.data(self.config, "ozn").get("id")
                 otlozhit.shown(self.config, "ozn")
                 self.save_config()
-                win = self.open_oznakomlenie(ask_after=True)
+                win = self.open_oznakomlenie(ask_after=True, auto=True)
                 if win is not None and ident:
                     win.select(ident)   # учебный показ продолжается с той же функции
             elif topic == "tour":
@@ -1460,6 +1523,11 @@ class Clipshot(QObject):
         for url in ("https://clipsd.github.io", "https://github.com/clipsd/clipsd"):
             link = dlg.text(f'<a href="{url}">{url}</a>')
             link.linkActivated.connect(open_url)   # not Qt's own opener: see sysenv.open_url
+        from . import errorlog
+        if errorlog.log_exists():   # 1.36: журнал ошибок, если непредвиденные ошибки были
+            log_link = dlg.link(tr("errlog.menu_open"))
+            log_link.clicked.connect(errorlog.open_log_folder)
+            dlg.open_log_button = log_link
         close = dlg.primary(tr("about.close"))
         close.clicked.connect(dlg.close)
         dlg.setStyleSheet(dlg.styleSheet() + " QLabel { font-size: 14px; } QLabel#clipNote { font-size: 14px; }"
@@ -1670,6 +1738,32 @@ class Clipshot(QObject):
         print(tr("app.saved", path=path))
         return path
 
+    def print_from_selector(self, selector, pixmap):
+        """Ctrl+Shift+P в окне выделения (1.36): системное окно печати для снимка рамки. Окно выделения прячется на
+        время окна печати и возвращается с тем же снимком. Принтеров нет и выбрано «Сохранить PDF»: окно выбора файла."""
+        from . import pechat
+        selector.suspend_for_dialog()
+        try:
+            image = pixmap.toImage()
+            result = pechat.print_image(None, image, self.config, save_pdf=lambda: self._save_pdf_quick(image))
+        finally:
+            selector.resume_after_dialog()
+        if result == "printed":
+            self.notify(tr("pechat.sent"))
+        elif result == "failed":
+            self.notify(tr("pechat.failed"))
+
+    def _save_pdf_quick(self, image: QImage):
+        from .editor import ask_save_path
+        path = ask_save_path(None, self.config, "pdf")
+        if path and hidpi.save_image(image, path, self.config):
+            self.config["save_dir"] = os.path.dirname(path)
+            self.save_config()
+            self.notify(tr("app.saved", path=path))
+        elif path:
+            hidpi.discard_reserved(path)
+            self.notify(tr("app.save_failed", path=path))
+
     def save_quick(self, image: QImage):
         """Кнопка «Сохранить» под областью: окно выбора места (с папки «Загрузки»), без редактора."""
         from .editor import ask_save_path
@@ -1809,7 +1903,8 @@ def hand_over(server_name: str, command: str, own_kind: str = "") -> bool:
 
 
 def main() -> int:
-    from . import i18n
+    from . import errorlog, i18n
+    errorlog.install()   # 1.36: непредвиденная ошибка пишется в журнал (errors.log), а не закрывает программу молча
     from .language import early_choice
     i18n.set_language(early_choice(CONFIG_PATH))   # до разбора командной строки и до первых окон
     if getattr(sys, "frozen", False):   # собранная программа: каталоги переводов попали в сборку?
@@ -1855,6 +1950,7 @@ def main() -> int:
             pass
 
     qapp = QApplication(sys.argv)
+    errorlog.attach(qapp)
     install_translations(qapp)
     setup_fonts(qapp)
     qapp.setApplicationName("ClipSD")
@@ -1883,11 +1979,18 @@ def main() -> int:
     if args.quit:
         return 0
 
+    if os.environ.get("CLIPSD_NO_FAULTHANDLER") != "1":
+        # Жёсткие падения: crash.log. После замка и передачи команды: повторный запуск, который отдал команду и вышел,
+        # не пишет «запуск» в журнал работающей программы. Помощник обновления сюда не заходит.
+        errorlog.enable_faulthandler()
     app = Clipshot(qapp, migrate=True)
     app.instance_lock = lock   # держится до конца процесса
     from . import themes
     themes.apply_app(qapp, app.config)
     app.start(server_name, command)
+    errorlog.set_loop_running(True)
     rc = qapp.exec()
+    errorlog.set_loop_running(False)
     app.shutdown()
+    errorlog.disable_faulthandler()   # обычный выход: сбои выгрузки Qt на Windows не считаются падением
     return rc

@@ -175,6 +175,9 @@ def discard_reserved(path: str) -> None:
 
 def save_image(image: QImage, path: str, config=None, quality: int = None) -> bool:
     """Сохранить снимок в файл по настройке «Размер снимка». PNG — с плотностью pHYs, JPG — с плотностью JFIF."""
+    if path.lower().endswith(".pdf"):   # 1.36: одна страница, снимок без пережатия (pechat.py)
+        from . import pechat
+        return pechat.write_pdf(image, path, config)
     out = prepare(image, size_mode(config))
     if path.lower().endswith(".png"):
         data = png_bytes(out)

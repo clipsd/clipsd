@@ -1,0 +1,9 @@
+{
+  "novoe.pipetka_text": "Die Pipette (J) zeigt die Farbe unter dem Zeiger und kopiert ihren Code. Im Auswahlfenster bewegen die Pfeiltasten den Rahmen um 1 Punkt, Umschalt um 10, Alt+Pfeile ändern die Größe.",
+  "novoe.pipetka_title": "Pipette und genauer Rahmen",
+  "ozn.pipetka_text": "Farbe vom Bildschirm und genauer Rahmen",
+  "pipetka.picked_button": "Mit dieser Farbe zeichnen",
+  "pipetka.picked_sub": "Mit dieser Farbe lässt sich weiterzeichnen",
+  "pipetka.picked_title": "Farbe {color} kopiert",
+  "pipetka.tip": "Pipette (J)\nÜber die Stelle fahren: vergrößerte Pixel und die Farbe werden gezeigt. Ein Klick kopiert den Farbcode, Esc: beenden"
+}

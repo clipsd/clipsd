@@ -1,0 +1,23 @@
+{
+  "novoe.zakrepit_text": "截图像便利贴一样悬浮在所有窗口之上：可拖动，滚轮调整大小，Ctrl+滚轮调整透明度。编辑器和选区窗口中都有“置顶”按钮，快捷键 F3。",
+  "novoe.zakrepit_title": "将截图置顶显示",
+  "ozn.zakrepit_text": "截图置于所有窗口之上",
+  "zakrepit.button": "置顶",
+  "zakrepit.copied": "已复制",
+  "zakrepit.menu_close": "关闭",
+  "zakrepit.menu_close_all": "关闭所有置顶截图",
+  "zakrepit.menu_copy": "复制",
+  "zakrepit.menu_editor": "在编辑器中打开",
+  "zakrepit.menu_opacity": "透明度",
+  "zakrepit.menu_pin": "将截图置顶显示",
+  "zakrepit.menu_save": "保存…",
+  "zakrepit.pinned_toast": "截图已置顶",
+  "zakrepit.save_failed": "无法保存",
+  "zakrepit.saved": "已保存：{name}",
+  "zakrepit.tile_sub": "窗口之上",
+  "zakrepit.tile_title": "置顶",
+  "zakrepit.tip": "将截图置顶显示在所有窗口之上 (F3)\n截图会以独立小窗口悬浮。用鼠标拖动，滚轮调整大小，Ctrl+滚轮调整透明度，双击或按 Esc 关闭，右键打开菜单",
+  "zakrepit.training": "练习截图：不会置顶显示。",
+  "zakrepit.wayland_hint": "此桌面可能无法让窗口保持在最上层。如果窗口被其他窗口遮住：按 Alt+空格，选择“始终置顶”。",
+  "zakrepit.window_name": "置顶截图"
+}

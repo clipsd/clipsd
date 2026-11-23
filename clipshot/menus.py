@@ -95,6 +95,17 @@ class ClipMenuStyle(QProxyStyle):
                              label)
             painter.restore()
             return
+        if act is not None and act.property("clipsd_section"):
+            # 1.36: заголовок раздела меню значка («Снимок», «Инструменты»): мелко, приглушённо, не пункт
+            f = self._font(option.font)
+            f.setPixelSize(12)
+            f.setBold(True)
+            painter.setFont(f)
+            painter.setPen(self.muted)
+            label, _s = self._split(option.text)
+            painter.drawText(rect.adjusted(PAD_H, 4, -PAD_H, 0), int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft), label)
+            painter.restore()
+            return
         if (option.state & QStyle.StateFlag.State_Selected) and enabled:
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(self.hover)

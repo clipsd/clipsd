@@ -1,0 +1,9 @@
+{
+  "errlog.close": "Close",
+  "errlog.copied": "Report copied",
+  "errlog.copy": "Copy report",
+  "errlog.menu_open": "Open error log",
+  "errlog.send": "Send report",
+  "errlog.text": "An unexpected error occurred. ClipSD keeps working: your screenshots and settings are safe. The details are saved in the error log. If it keeps happening, copy or send the report: it has none of your text or screenshots, and nothing is sent until you press the button.",
+  "errlog.title": "Something went wrong"
+}

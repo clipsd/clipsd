@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import QHBoxLayout, QMenu, QPushButton, QWidget
 from .i18n import tr
 
 DEFAULT = "1h"
+NEVER = "never"          # последний пункт меню «Не показывать» (подпись по смыслу окна), chosen("never")
 MAX_SNOOZES = 3          # после трёх откладываний подряд: не раньше чем через неделю
 WEEK = 7 * 86400
 TOMORROW_HOUR = 9        # «До завтра»: завтра в 9:00
@@ -177,7 +178,7 @@ class SnoozeButton(QWidget):
 
     chosen = pyqtSignal(str)
 
-    def __init__(self, dark: bool = False, compact: bool = False, parent=None):
+    def __init__(self, dark: bool = False, compact: bool = False, parent=None, never: str = None):
         super().__init__(parent)
         self.dark, self.compact = bool(dark), bool(compact)
         self.setObjectName("otlButton")
@@ -205,6 +206,10 @@ class SnoozeButton(QWidget):
             act.triggered.connect(lambda _c=False, k=code: self.chosen.emit(k))
             self.menu.addAction(act)
             self.actions_by_key[code] = act
+        self.never_key = None
+        self.never_action = None
+        self._never_sep = None
+        self.set_never(never)
         self._long = False
         self._press = QTimer(self)
         self._press.setSingleShot(True)
@@ -214,6 +219,23 @@ class SnoozeButton(QWidget):
         self.main.released.connect(self._press.stop)
         self.main.clicked.connect(self._main_clicked)
         self.arrow.clicked.connect(self.open_menu)
+
+    def set_never(self, label_key):
+        """Последний пункт меню «Не показывать» после разделителя; подпись по смыслу окна (ключ i18n). None: пункта нет."""
+        if self.never_action is not None:
+            self.menu.removeAction(self.never_action)
+            if self._never_sep is not None:
+                self.menu.removeAction(self._never_sep)
+            self.never_action = self._never_sep = None
+        self.never_key = label_key
+        if not label_key:
+            return
+        self._never_sep = self.menu.addSeparator()
+        act = QAction(tr(label_key), self.menu)
+        act.triggered.connect(lambda _c=False: self.chosen.emit(NEVER))
+        self.menu.addAction(act)
+        self.never_action = act
+        self.actions_by_key[NEVER] = act
 
     # основная часть
     def _pressed(self):
@@ -264,3 +286,5 @@ class SnoozeButton(QWidget):
         self.arrow.setToolTip(tr("otl.more"))
         for code, _sec, label in CHOICES:
             self.actions_by_key[code].setText(tr(label))
+        if self.never_action is not None:
+            self.never_action.setText(tr(self.never_key))

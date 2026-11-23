@@ -14,17 +14,20 @@ ARROW, LINE, RECT, ELLIPSE, MARKER, PENCIL, TEXT, NUMBER, BLUR, CALLOUT = (
 DARROW, FARROW = "darrow", "farrow"   # стрелка в обе стороны; свободная (рисуется рукой) стрелка
 FLINE, FSHAPE = "fline", "fshape"     # плавная линия от руки; свободная замкнутая фигура
 IMAGE = "image"                       # вставленная картинка (из буфера, файла или нового снимка)
+STICKER = "sticker"                   # 1.36: эмодзи, плашка с текстом или номер в кружке (clipshot/stickers.py)
 
 FREEHAND_KINDS = {MARKER, PENCIL, FARROW, FLINE, FSHAPE}
 SMOOTHED_KINDS = {FARROW, FLINE, FSHAPE}   # после отпускания мыши спрямляется дрожание руки
 LINE_KINDS = {ARROW, DARROW, LINE}    # ручки на концах
 BOX_KINDS = {RECT, ELLIPSE, BLUR, IMAGE}   # ручки по углам
 CALLOUT_PAD = 8                       # поля текста внутри выносного блока
+ROTATE_GAP = 26                       # ручка поворота стикера: на столько выше верхней стороны
 
 PEN_WIDTHS = {1: 2, 2: 3, 3: 5, 4: 8, 5: 12}
 FONT_SIZES = {1: 14, 2: 18, 3: 24, 4: 32, 5: 44}
 NUMBER_RADII = {1: 11, 2: 14, 3: 18, 4: 23, 5: 30}
 NUMBER_HANDLE_GAP = 8   # ручка нетянутого номера стоит на столько дальше края кружка, чтобы не касаться цифры
+SOLID_COVER = "#45494f"   # 1.36: нейтральный тёмно-серый: виден и на светлом, и на тёмном фоне
 PIXELATE_BLOCK = 10
 
 
@@ -124,6 +127,9 @@ class Shape:
         self.text_color = None   # цвет цифры/текста сноски; None — авто (контраст к заливке)
         self.erasures = []       # стёртые ластиком куски: [(ширина кисти, [точки])]
         self.image = None        # QImage для вставленной картинки
+        self.sticker = ""        # 1.36: код стикера (stickers.ALL); текст плашки лежит в text
+        self.solid = False       # 1.36: «Скрыть личные данные»: сплошная заливка вместо пикселизации (подбором не вернуть)
+        self.angle = 0.0         # 1.36: поворот стикера, градусы по часовой стрелке вокруг центра
 
     def copy(self):
         clone = Shape(self.kind, self.color, self.size, self.points[0], self.filled)
@@ -133,6 +139,9 @@ class Shape:
         clone.text_color = QColor(self.text_color) if self.text_color is not None else None
         clone.erasures = [(w, [QPointF(pt) for pt in pts]) for w, pts in self.erasures]
         clone.image = self.image   # картинка не меняется, можно делить между копиями
+        clone.sticker = self.sticker
+        clone.angle = self.angle
+        clone.solid = self.solid
         return clone
 
     # --- геометрия ---------------------------------------------------------
@@ -151,14 +160,51 @@ class Shape:
     def is_empty(self) -> bool:
         if self.kind == TEXT:
             return not self.text.strip()
-        if self.kind in (NUMBER, IMAGE):
+        if self.kind in (NUMBER, IMAGE, STICKER):
             return False
         r = QPolygonF(self.points).boundingRect()
         return r.width() < 3 and r.height() < 3
 
+    # --- стикер: прямоугольник points[0]..points[-1] без поворота, поворот вокруг его центра ---------------------
+
+    def _to_world(self, local: QPointF) -> QPointF:
+        """Точка стикера (в его неповёрнутой раме, от центра) -> точка снимка."""
+        a = math.radians(self.angle)
+        c = self.rect().center()
+        return c + QPointF(local.x() * math.cos(a) - local.y() * math.sin(a),
+                           local.x() * math.sin(a) + local.y() * math.cos(a))
+
+    def _to_local(self, point: QPointF) -> QPointF:
+        a = math.radians(-self.angle)
+        d = point - self.rect().center()
+        return QPointF(d.x() * math.cos(a) - d.y() * math.sin(a), d.x() * math.sin(a) + d.y() * math.cos(a))
+
+    def sticker_corners(self) -> list:
+        """Углы повёрнутого стикера на снимке: левый верхний, правый верхний, правый нижний, левый нижний."""
+        r = self.rect()
+        hw, hh = r.width() / 2, r.height() / 2
+        return [self._to_world(QPointF(x, y)) for x, y in ((-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh))]
+
+    def rotate_handle(self) -> QPointF:
+        return self._to_world(QPointF(0, -self.rect().height() / 2 - ROTATE_GAP))
+
+    def set_size(self, size: int):
+        """Кнопка толщины/размера 1-5: у стикера задаёт длинную сторону (пропорции и центр остаются)."""
+        self.size = size
+        if self.kind == STICKER:
+            from . import stickers
+            r = self.rect()
+            side = float(stickers.SIZES.get(size, stickers.SIZES[3]))
+            k = side / max(r.width(), r.height(), 1.0)
+            c = r.center()
+            hw, hh = r.width() * k / 2, r.height() * k / 2
+            self.points = [QPointF(c.x() - hw, c.y() - hh), QPointF(c.x() + hw, c.y() + hh)]
+
     def bounding_rect(self) -> QRectF:
         if self.kind == IMAGE:
             return self.rect()
+        if self.kind == STICKER:
+            return QPolygonF(self.sticker_corners()).boundingRect().adjusted(-2, -2, 2, 2)
         if self.kind == TEXT:
             fm = QFontMetricsF(text_font(self.size))
             lines = self.text.split("\n")
@@ -185,6 +231,8 @@ class Shape:
             return any(_segment_distance(point, a, b) <= tolerance for a, b in zip(pts, pts[1:]))
         if self.kind == IMAGE:
             return self.rect().contains(point)
+        if self.kind == STICKER:
+            return self.rect().translated(-self.rect().center()).adjusted(-3, -3, 3, 3).contains(self._to_local(point))
         if self.kind in (RECT, ELLIPSE) and not self.filled:
             r = self.rect()
             inner = r.adjusted(tolerance, tolerance, -tolerance, -tolerance)
@@ -208,6 +256,8 @@ class Shape:
         if self.kind in BOX_KINDS:
             r = self.rect()
             return [r.topLeft(), r.topRight(), r.bottomRight(), r.bottomLeft()]
+        if self.kind == STICKER:
+            return self.sticker_corners() + [self.rotate_handle()]   # четыре угла и ручка поворота над верхней стороной
         if self.kind == NUMBER:
             return [self.number_handle()]   # конец выносной линии
         if self.kind == CALLOUT:
@@ -241,6 +291,8 @@ class Shape:
                 h = w / ratio
                 pos = fixed + QPointF(math.copysign(w, d.x() or 1), math.copysign(h, d.y() or 1))
             self.points = [fixed, pos]
+        elif self.kind == STICKER:
+            self._drag_sticker(index, pos, shift)
         elif self.kind in BOX_KINDS:
             corners = self.handles()
             fixed = corners[(index + 2) % 4]
@@ -249,6 +301,28 @@ class Shape:
             self.points[-1] = pos
         elif self.kind == CALLOUT:
             self.points[0] = pos
+
+    def _drag_sticker(self, index: int, pos: QPointF, shift=False):
+        r = self.rect()
+        if index == 4:   # ручка поворота: стикер смотрит верхом на курсор; Shift: шаг 15 градусов
+            d = pos - r.center()
+            if math.hypot(d.x(), d.y()) < 1:
+                return
+            angle = math.degrees(math.atan2(d.y(), d.x())) + 90.0
+            if shift:
+                angle = round(angle / 15.0) * 15.0
+            self.angle = ((angle + 180.0) % 360.0) - 180.0
+            return
+        # угол: масштаб с сохранением пропорций вокруг противоположного угла (считается в раме стикера)
+        sx, sy = ((-1, -1), (1, -1), (1, 1), (-1, 1))[index]
+        fixed_local = QPointF(-sx * r.width() / 2, -sy * r.height() / 2)
+        d = self._to_local(pos) - fixed_local
+        a = r.width() / max(r.height(), 1e-6)
+        w = max(abs(d.x()), abs(d.y()) * a, 12.0 * max(1.0, a))
+        h = w / a
+        center_local = fixed_local + QPointF(sx * w / 2, sy * h / 2)
+        center = self._to_world(center_local)
+        self.points = [QPointF(center.x() - w / 2, center.y() - h / 2), QPointF(center.x() + w / 2, center.y() + h / 2)]
 
     # --- выносной текстовый блок --------------------------------------------
 
@@ -384,6 +458,15 @@ class Shape:
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawRect(r.adjusted(0.5, 0.5, -0.5, -0.5))
 
+    def _paint_sticker(self, p, _base):
+        from . import stickers
+        r = self.rect()
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        p.translate(r.center())
+        p.rotate(self.angle)
+        stickers.draw(p, self.sticker, QRectF(-r.width() / 2, -r.height() / 2, r.width(), r.height()),
+                      self.color, self.text)
+
     def _paint_fline(self, p, _base):
         p.setPen(self._pen())
         p.setBrush(Qt.BrushStyle.NoBrush)
@@ -405,6 +488,16 @@ class Shape:
         bounds = QRect(0, 0, round(base.width() / ratio), round(base.height() / ratio))
         target = self.rect().toRect().intersected(bounds)
         if target.width() < 2 or target.height() < 2:
+            return
+        if self.solid:
+            p.save()
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(SOLID_COVER))
+            # Прямоугольник ровно по рамке, без сглаживания и скругления: скруглённые углы открывали бы
+            # пиксели скрытого текста, а расширение рамки задевало бы соседние открытые символы («последние 4»).
+            p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+            p.drawRect(target)
+            p.restore()
             return
         phys = QRect(round(target.x() * ratio), round(target.y() * ratio),
                      round(target.width() * ratio), round(target.height() * ratio)).intersected(base.rect())

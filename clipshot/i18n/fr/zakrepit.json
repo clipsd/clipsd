@@ -1,0 +1,23 @@
+{
+  "novoe.zakrepit_text": "La capture reste au-dessus de toutes les fenêtres comme un pense-bête : déplacez-la, la molette change la taille, Ctrl+molette la transparence. Bouton « Épingler » dans l'éditeur et dans la fenêtre de sélection, touche F3.",
+  "novoe.zakrepit_title": "Épingler une capture au-dessus des fenêtres",
+  "ozn.zakrepit_text": "Une capture au-dessus des fenêtres",
+  "zakrepit.button": "Épingler",
+  "zakrepit.copied": "Copié",
+  "zakrepit.menu_close": "Fermer",
+  "zakrepit.menu_close_all": "Fermer toutes les captures épinglées",
+  "zakrepit.menu_copy": "Copier",
+  "zakrepit.menu_editor": "Ouvrir dans l'éditeur",
+  "zakrepit.menu_opacity": "Transparence",
+  "zakrepit.menu_pin": "Épingler la capture au-dessus des fenêtres",
+  "zakrepit.menu_save": "Enregistrer…",
+  "zakrepit.pinned_toast": "Capture épinglée au-dessus des fenêtres",
+  "zakrepit.save_failed": "Échec de l'enregistrement",
+  "zakrepit.saved": "Enregistré : {name}",
+  "zakrepit.tile_sub": "au-dessus",
+  "zakrepit.tile_title": "Épingler",
+  "zakrepit.tip": "Épingler la capture au-dessus des fenêtres (F3)\nLa capture reste dans une petite fenêtre à part. Déplacez-la à la souris, la molette change la taille, Ctrl+molette la transparence, un double clic ou Échap la ferme, le clic droit ouvre un menu",
+  "zakrepit.training": "Image d'entraînement : elle n'est pas épinglée au-dessus des fenêtres.",
+  "zakrepit.wayland_hint": "Ce bureau peut ne pas garder la fenêtre au premier plan. Si elle passe dessous : Alt+Espace, puis « Toujours au premier plan ».",
+  "zakrepit.window_name": "Capture épinglée"
+}

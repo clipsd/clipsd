@@ -963,7 +963,7 @@ def test_app_flow():
 
     # дополнение обновлено кнопкой: напоминание о входе, после входа (список от нового дополнения) оно уходит
     cards = []
-    c._show_ext_card = lambda title, text, icon, secondary=None: cards.append((title, text, icon, secondary)) or "close"
+    c._show_ext_card = lambda title, text, icon, secondary=None, primary=None: cards.append((title, text, icon, secondary)) or "close"
     gnome_ext.update = lambda version="": (gnome_ext.INSTALLED, "")
     # как в настоящем сеансе GNOME: Shell на шине есть, его имя запоминается до входа; окно «выйдите и войдите» то же
     windows.shell_owner = lambda: ":1.7"
@@ -990,7 +990,8 @@ def test_app_flow():
     gnome_ext.update = lambda version="": (gnome_ext.FOREIGN, "clipsd@old")
     cards.clear()
     c.update_gnome_extension()
-    check(cards and cards[0][0] == tr("app.ext_foreign_title") and cards[0][3] is None, "рабочая копия: объяснение, одна кнопка")
+    check(cards and cards[0][0] == tr("app.ext_old_title") and cards[0][3] == tr("app.ext_old_later"),
+          "старое дополнение: окно «Найдено старое дополнение» с «Заменить» и «Не сейчас» (подробно: ext_zamenit_test)")
     for state, detail, title in ((gnome_ext.USER_EXT_OFF, "", "app.ext_userext_off_title"),
                                  (gnome_ext.UNSUPPORTED, "51", "app.ext_unsupported_title")):
         gnome_ext.update = lambda version="", s=state, d=detail: (s, d)

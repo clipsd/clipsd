@@ -1,0 +1,9 @@
+{
+  "errlog.close": "关闭",
+  "errlog.copied": "报告已复制",
+  "errlog.copy": "复制报告",
+  "errlog.menu_open": "打开错误日志",
+  "errlog.send": "发送报告",
+  "errlog.text": "程序发生了意外错误，但仍在继续运行：截图和设置没有丢失。详细信息已写入错误日志。如果反复出现，请复制或发送报告：报告中不含您的文字和截图，只有您点击按钮才会发送。",
+  "errlog.title": "出了点问题"
+}

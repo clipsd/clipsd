@@ -270,8 +270,8 @@ def make(kind="linux", installed="2.0.0", config=None, answer="later", channel=N
 cfg = {}
 check(up.should_check(cfg, NOW), "расписание: первая проверка разрешена")
 up.mark_checked(cfg, NOW)
-check(not up.should_check(cfg, NOW + timedelta(hours=23)), "расписание: через 23 часа рано")
-check(up.should_check(cfg, NOW + timedelta(days=1)), "расписание: через сутки пора (тихая проверка раз в день)")
+check(not up.should_check(cfg, NOW + timedelta(hours=5, minutes=59)), "расписание: через 5 ч 59 мин рано")
+check(up.should_check(cfg, NOW + timedelta(hours=6)), "расписание: через 6 часов пора (тихая проверка, 1.36)")
 check(up.should_check(cfg, NOW + timedelta(hours=1), manual=True), "расписание: ручная проверка сразу")
 check(not up.should_check({"update_check": False}, NOW), "расписание: выключенная проверка не ходит в сеть")
 up.mark_notified(cfg, NOW)
@@ -307,8 +307,8 @@ for half in range(30 * 48):
     if len(ui.offers) > before_off:
         offered_at.append((clock.now, ui.offers[-1]))
 gaps = [b - a for a, b in zip(request_times, request_times[1:])]
-check(len(request_times) == 30 and all(g >= timedelta(days=1) for g in gaps),
-      f"30 дней: {len(request_times)} тихих проверок, раз в сутки")
+check(len(request_times) == 120 and all(g >= timedelta(hours=6) for g in gaps),
+      f"30 дней: {len(request_times)} тихих проверок, раз в 6 часов")
 wgaps = [b[0] - a[0] for a, b in zip(offered_at, offered_at[1:])]
 check(bool(offered_at) and offered_at[0][0] - NOW >= upr.DELAY and all(g >= upr.DELAY for g in wgaps)
       and 8 <= len(offered_at) <= 10,
@@ -449,7 +449,7 @@ ch.publish("2.0.2")
 i_u.tick()
 check(not i_ui.offers, "после установки исправления обычная версия снова ждёт недельного окна")
 
-# review R04b P1-2: the saved fix expired and no network: at most one request to the channel per 24 h
+# review R04b P1-2: the saved fix expired and no network: at most one request to the channel per 6 h (1.36; was 24 h)
 up.drop_critical("stable")
 _d = document(version="2.0.1", critical=True, expires=NOW - timedelta(days=5))
 up.save_critical("stable", _d, signed(_d))
@@ -458,8 +458,8 @@ ch.fail = urllib.error.URLError("offline")
 for _h in range(30):
     u.tick()
     clock.now += timedelta(hours=1)
-check(ch.requests == 2 and not ui.offers,
-      f"просроченная копия, нет сети: {ch.requests} запроса за 30 часов (раз в сутки, не каждый час)")
+check(ch.requests == 5 and not ui.offers,
+      f"просроченная копия, нет сети: {ch.requests} запросов за 30 часов (раз в 6 часов, не каждый час; 1.36)")
 ch.fail = None
 ch2 = Channel()
 ch2.doc, ch2.sig = _d, signed(_d)   # a frozen channel serves the expired document

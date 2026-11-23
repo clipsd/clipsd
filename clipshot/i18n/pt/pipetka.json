@@ -1,0 +1,9 @@
+{
+  "novoe.pipetka_text": "O conta-gotas (J) mostra a cor sob o cursor e copia o seu código. Na janela de seleção, as setas movem a moldura 1 ponto, Shift 10, Alt+setas mudam o tamanho.",
+  "novoe.pipetka_title": "Conta-gotas e moldura precisa",
+  "ozn.pipetka_text": "Uma cor do ecrã e uma moldura precisa",
+  "pipetka.picked_button": "Desenhar com esta cor",
+  "pipetka.picked_sub": "Pode desenhar as marcas com esta cor",
+  "pipetka.picked_title": "Cor {color} copiada",
+  "pipetka.tip": "Conta-gotas (J)\nAponte para um ponto: veem-se os píxeis ampliados e a cor. Um clique copia o código da cor, Esc: sair"
+}

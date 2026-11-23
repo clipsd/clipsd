@@ -1,0 +1,9 @@
+{
+  "novoe.pipetka_text": "取色器 (J) 显示光标下的颜色并复制其代码。在选区窗口中，方向键将选框移动 1 个点，Shift+方向键移动 10 个点，Alt+方向键调整大小。",
+  "novoe.pipetka_title": "取色器与精确选框",
+  "ozn.pipetka_text": "取屏幕颜色与精确选框",
+  "pipetka.picked_button": "用此颜色绘制",
+  "pipetka.picked_sub": "可以用这个颜色绘制标注",
+  "pipetka.picked_title": "颜色 {color} 已复制",
+  "pipetka.tip": "取色器 (J)\n将鼠标移到某处：显示放大的像素和颜色。点击复制颜色代码，Esc 退出"
+}

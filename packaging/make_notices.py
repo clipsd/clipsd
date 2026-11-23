@@ -42,8 +42,12 @@ COMPONENTS = [
     ("python-xlib", "python-xlib", "LGPL-2.1-or-later", "https://github.com/python-xlib/python-xlib", ["LGPL-2.1.txt"], "linux"),
     ("six", "six", "MIT", "https://github.com/benjaminp/six", ["six-MIT.txt"], "linux"),
     ("fontTools", "fonttools", "MIT", "https://github.com/fonttools/fonttools", ["fontTools-MIT.txt"], "linux"),
+    ("zxing-cpp (reads QR codes and barcodes from a screenshot, 1.36)", "zxing-cpp", "Apache-2.0",
+     "https://github.com/zxing-cpp/zxing-cpp", ["Apache-2.0.txt"]),
     ("libxcb-cursor", "0.1 (Ubuntu 22.04)", "MIT", "https://gitlab.freedesktop.org/xorg/lib/libxcb-cursor",
      ["libxcb-cursor-MIT.txt"], "linux"),
+    ("Twemoji graphics (the emoji stickers of the editor; a selection of 71 SVG files, unchanged; Copyright 2019 Twitter, Inc and other contributors)",
+     "15.0", "CC-BY-4.0", "https://github.com/jdecked/twemoji", ["Twemoji-CC-BY-4.0.txt"]),
     ("Mesa llvmpipe software OpenGL (opengl32sw.dll in PyQt6-Qt6)", "in PyQt6-Qt6", "MIT; LLVM: Apache-2.0 WITH LLVM-exception",
      "https://www.mesa3d.org , https://llvm.org", ["Apache-2.0.txt", "LLVM-exception.txt"], "windows"),
 ]

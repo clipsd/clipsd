@@ -1,0 +1,9 @@
+{
+  "errlog.close": "Kapat",
+  "errlog.copied": "Rapor kopyalandı",
+  "errlog.copy": "Raporu kopyala",
+  "errlog.menu_open": "Hata günlüğünü aç",
+  "errlog.send": "Raporu gönder",
+  "errlog.text": "Beklenmeyen bir hata oluştu. Çalışma devam ediyor: ekran görüntüleriniz ve ayarlarınız kaybolmadı. Ayrıntılar hata günlüğüne yazıldı. Tekrarlanırsa raporu kopyalayın veya gönderin: raporda metniniz ve ekran görüntüleriniz yoktur, düğmeye basmadan hiçbir şey gönderilmez.",
+  "errlog.title": "Bir şeyler ters gitti"
+}

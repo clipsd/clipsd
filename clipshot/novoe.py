@@ -61,6 +61,17 @@ ITEMS = (
     ("1.35.0", "otlozhit", "app:otlozhit", "update"),
     ("1.35.0", "settings_apply", "app:settings_apply", "settings"),
     ("1.35.0", "phone_target", "editor:phone_target", "phone"),
+    # 1.36.0: «Печать ▾» внизу редактора (печать, предпросмотр, сохранить в PDF; Ctrl+P) и PDF в окне «Сохранить»
+    ("1.36.0", "pechat", "editor:print_button", "print"),
+    ("1.36.0", "pdf", "app:pdf", "print"),
+    # 1.36.0: «Стикер» (в группе «Надписи»; метка на кнопке группы) и «Тень, рамка и поля» (пункт меню «Форма снимка»)
+    ("1.36.0", "stikery", "editor:tool:sticker", "sticker"),
+    ("1.36.0", "ten_ramka", "editor:form_button|more_button", "deco"),
+    # 1.36.0: плитка «Закрепить» окна выделения, пипетка на панели инструментов; чтение QR-кода живёт в шапке только
+    # когда код найден, поэтому метки у него нет (цель app:)
+    ("1.36.0", "zakrepit", "selector:pin", "pin"),
+    ("1.36.0", "qr_chtenie", "app:qr_chtenie", "qr"),
+    ("1.36.0", "pipetka", "editor:tool:pipette", "pipette"),
 )
 
 MAX_WINDOW = 4        # пунктов в окне «Новое в версии»
@@ -73,7 +84,9 @@ USE_MARKERS = ("tour_done", "tour_selector_done", "theme_chosen")   # прогр
 ICON_COLORS = {"window": ("#2a6df4", "#7fb2ff"), "translate": ("#0b766c", "#4fd1c5"), "number": ("#c81e1e", "#ff8a80"),
                "phone": ("#b4236e", "#f48fc1"), "region": ("#0b4fb3", "#7fb2ff"), "form_round2": ("#6d3fd0", "#b9a4ff"),
                "info": ("#0b4fb3", "#7fb2ff"), "marker": ("#9a5200", "#f5b45c"), "ocr": ("#6d3fd0", "#b9a4ff"),
-               "update": ("#0b766c", "#4fd1c5"), "settings": ("#4b5563", "#aab1ba")}
+               "update": ("#0b766c", "#4fd1c5"), "settings": ("#4b5563", "#aab1ba"), "print": ("#0b4fb3", "#7fb2ff"),
+               "sticker": ("#8a5a00", "#f5c400"), "deco": ("#4b5563", "#aab1ba"),
+               "pin": ("#1660d0", "#7fb2ff"), "qr": ("#0b4fb3", "#7fb2ff"), "pipette": ("#9a5200", "#f5b45c")}
 BADGE_BG = "#1660d0"      # белый текст 5,8:1 (цвет ссылки); метка значит «новое», не ошибку и не главное действие
 BADGE_GRAY = (("#666c75", "#ffffff"), ("#474d55", "#e3e6ea"))   # изучено (1.35): фон и текст метки, светлая и тёмная тема, контраст текста не ниже 4,5:1
 BADGE_RING = ("#ffffff", "#232323")   # тонкое кольцо цвета панели: метка отделена от кнопки в обеих темах
@@ -134,6 +147,7 @@ def _upgraded(cfg, previous: str):
     cfg["novoe_from"] = previous   # "" : с версии без этой записи (1.33 и старше)
     cfg.pop("novoe_window", None)
     cfg.pop("novoe_later", None)
+    cfg.pop("novoe_hidden", None)   # «Не показывать» относилось к прежней версии: новые новинки показываются
     for topic in ("novoe", "ask", "ozn"):
         otlozhit.clear(cfg, topic)   # откладывания прежней версии забываются
     cfg.pop("novoe_asked", None)
@@ -172,6 +186,20 @@ def window_done(cfg, version: str = None):
     otlozhit.clear(cfg, "novoe")
 
 
+def hide_version(cfg, version: str = None):
+    """«Не показывать» (слова владельца 23.11.2026): окно этой версии само больше не приходит (ни окно, ни вопрос про
+    другие функции), метки «Новое» скрыты, отложенный срок снят. Меню значка «Что нового» и «Ознакомление» работают."""
+    version = version or __version__
+    window_done(cfg, version)
+    ask_done(cfg, version)
+    otlozhit.clear(cfg, "ozn")
+    cfg["novoe_hidden"] = version
+
+
+def hidden(cfg, version: str = None) -> bool:
+    return isinstance(cfg, dict) and cfg.get("novoe_hidden") == (version or __version__)
+
+
 def ask_pending(cfg, version: str = None) -> bool:
     return (isinstance(cfg, dict) and cfg.get("novoe_asked") != (version or __version__)
             and not otlozhit.is_snoozed(cfg, "ask"))
@@ -184,7 +212,7 @@ def ask_done(cfg, version: str = None):
 
 def badges(cfg, scope: str, version: str = None) -> dict:
     """Метки, которые ещё видны: {цель без "scope:": id} для scope "selector" или "editor"."""
-    if not enabled(cfg):
+    if not enabled(cfg) or hidden(cfg, version):
         return {}
     used = set(cfg.get("novoe_used") or [])
     shows = cfg.get("novoe_shows") if isinstance(cfg.get("novoe_shows"), dict) else {}
@@ -460,7 +488,7 @@ def _item_row(ident: str, icon_name: str, dark: bool) -> QWidget:
     row = QWidget()
     row.setObjectName("novoeItem")
     lay = QHBoxLayout(row)
-    lay.setContentsMargins(0, 2, 0, 2)
+    lay.setContentsMargins(0, 0, 0, 0)
     lay.setSpacing(12)
     pic = QLabel()
     pic.setPixmap(_icon_pixmap(icon_name, dark))
@@ -477,7 +505,7 @@ def _item_row(ident: str, icon_name: str, dark: bool) -> QWidget:
     sub.setObjectName("novoeItemText")
     sub.setWordWrap(True)
     sub.setTextFormat(Qt.TextFormat.PlainText)
-    sub.setStyleSheet(f"color: {PALETTES[bool(dark)]['muted']}; font-size: 13px;")
+    sub.setStyleSheet(f"color: {PALETTES[bool(dark)]['muted']}; font-size: 12px;")
     col.addWidget(head)
     col.addWidget(sub)
     lay.addLayout(col, 1)
@@ -498,16 +526,37 @@ def make_window(version: str, items: list, parent=None, updated: bool = False, n
             self.setModal(True)
             self.choice = "close"
             self.delay = None
+            self.body.setSpacing(2)   # 1.36: четыре пункта по три строки + «Отложить ▾» должны помещаться в 910x512
             self.rows = [_item_row(ident, icon_name, self.dark) for _v, ident, _w, icon_name in items]
+            # Пункты лежат в прокручиваемой области: на низком экране (1366x768 при 150 % это 910x472) окно берёт всю
+            # доступную высоту, лишнее прокручивается, а строки не наезжают друг на друга (проверка 1.36, В4).
+            from PyQt6.QtWidgets import QFrame, QScrollArea
+            self.rows_box = QWidget()
+            self.rows_box.setObjectName("novoeRows")
+            self.rows_box.setStyleSheet("#novoeRows { background: transparent; }")
+            self.rows_lay = QVBoxLayout(self.rows_box)
+            self.rows_lay.setContentsMargins(0, 0, 0, 0)
+            self.rows_lay.setSpacing(2)
             for r in self.rows:
-                self.body.addWidget(r)
+                self.rows_lay.addWidget(r)
+            self.scroll = QScrollArea()
+            self.scroll.setObjectName("novoeScroll")
+            self.scroll.setWidgetResizable(True)
+            self.scroll.setFrameShape(QFrame.Shape.NoFrame)
+            self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            self.scroll.setStyleSheet("QScrollArea#novoeScroll, QScrollArea#novoeScroll > QWidget > QWidget"
+                                      " { background: transparent; border: none; }")
+            self.scroll.setMinimumHeight(60)
+            self.scroll.setWidget(self.rows_box)
+            self.body.addWidget(self.scroll, 1)
             self.notes_link = self.link(tr("updater.offer.show_notes")) if notes else None
-            self.later_button = otlozhit.SnoozeButton(self.dark)
+            self.later_button = otlozhit.SnoozeButton(self.dark, never="otl.never_novoe")
             self.footer_right.addWidget(self.later_button)
             self.show_button = self.primary(tr("novoe.show"))
             if self.notes_link is not None:
                 self.notes_link.clicked.connect(lambda: self._pick("notes"))
-            self.later_button.chosen.connect(lambda key: self._pick("snooze", key))
+            self.later_button.chosen.connect(
+                lambda key: self._pick("never") if key == otlozhit.NEVER else self._pick("snooze", key))
             self.show_button.clicked.connect(lambda: self._pick("show"))
             self.show_button.setFocus()
             # М6 проверки 1.34.0: язык сменили, пока окно открыто (меню значка у часов). Тексты задаются при
@@ -516,6 +565,45 @@ def make_window(version: str, items: list, parent=None, updated: bool = False, n
             self._off_lang = i18n.on_change(lambda _lang: QTimer.singleShot(0, lambda: self._pick("relang")))
             self.finished.connect(lambda _r: self._off_lang())
 
+        def rows_height(self, width: int) -> int:
+            """Высота всех пунктов при данной ширине."""
+            lay = self.rows_lay
+            return lay.totalHeightForWidth(width) if lay.hasHeightForWidth() else lay.sizeHint().height()
+
+        def _area(self):
+            from PyQt6.QtGui import QCursor, QGuiApplication
+            parent = self.parentWidget()
+            screen = parent.screen() if parent is not None else None
+            screen = screen or QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
+            return screen.availableGeometry()
+
+        def fit_to_screen(self):
+            """Высота: сколько нужно всем пунктам, но не больше доступной области экрана. Qt сам при adjustSize и первом
+            показе режет окно до 2/3 экрана, и строки сжимались до наезда друг на друга (В4 проверки 1.36)."""
+            self.scroll.setMinimumHeight(1)
+            self.layout().activate()
+            self.adjustSize()
+            width = self.width()
+            lay = self.layout()
+            m = lay.contentsMargins()
+            card_m = self.card.layout().contentsMargins()
+            inner = width - m.left() - m.right() - card_m.left() - card_m.right()
+            need = self.rows_height(inner)
+            chrome = (lay.minimumHeightForWidth(width) if lay.hasHeightForWidth() else lay.minimumSize().height()) - 1
+            height = min(chrome + need, self._area().height())
+            self.scroll.setMinimumHeight(max(1, min(need, height - chrome)))
+            self.setMinimumHeight(0)
+            self.resize(width, height)
+            self._fitted = True
+
+        def place_centered(self):
+            """По центру экрана с мышью, высота по fit_to_screen."""
+            from .frame_extents import track_frame_extents
+            self.fit_to_screen()
+            area = self._area()
+            track_frame_extents(self, self.frame_extents_margins)
+            self.move(area.center().x() - self.width() // 2, max(area.top(), area.center().y() - self.height() // 2))
+
         def _pick(self, choice, delay=None):
             if self.isVisible() or choice != "relang":
                 self.choice = choice
@@ -523,11 +611,16 @@ def make_window(version: str, items: list, parent=None, updated: bool = False, n
                 self.accept()
 
         def showEvent(self, event):
+            if not getattr(self, "_fitted", False):
+                self.fit_to_screen()
             super().showEvent(event)
             if self.parentWidget() is not None:   # над окном редактора, из которого открыто
                 frame = self.frameGeometry()
                 frame.moveCenter(self.parentWidget().frameGeometry().center())
-                self.move(frame.topLeft())
+                area = self._area()   # окно целиком в доступной области экрана (на низком экране оно во всю высоту)
+                x = min(max(frame.left(), area.left()), max(area.left(), area.right() - frame.width() + 1))
+                y = min(max(frame.top(), area.top()), max(area.top(), area.bottom() - frame.height() + 1))
+                self.move(x, y)
 
     return NovoeDialog()
 
@@ -537,6 +630,6 @@ def make_question(parent=None, dark=None):
     После закрытия choice: primary, secondary, snooze (box.delay), close."""
     from .dialogs import MessageCard
     box = MessageCard(parent, tr("novoe.ask_title"), tr("novoe.ask_text"), "info", primary=tr("novoe.ask_yes"),
-                      secondary=tr("novoe.ask_no"), logo=True, dark=dark, snooze=True)
+                      secondary=tr("novoe.ask_no"), logo=True, dark=dark, snooze=True, never="otl.never_ask")
     box.setProperty("clipsd_closable", True)
     return box

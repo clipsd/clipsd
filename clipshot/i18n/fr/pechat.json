@@ -1,0 +1,10 @@
+{
+  "pechat.dialog_title": "Imprimer la capture",
+  "pechat.failed": "Impossible d'imprimer la capture",
+  "pechat.none_close": "Fermer",
+  "pechat.none_pdf": "Enregistrer en PDF",
+  "pechat.none_text": "Aucune imprimante n'est configurée sur cet ordinateur. La capture peut être enregistrée en PDF puis imprimée plus tard ou sur un autre ordinateur.",
+  "pechat.none_title": "Aucune imprimante trouvée",
+  "pechat.preview_title": "Aperçu avant impression",
+  "pechat.sent": "Envoyé à l'imprimante"
+}

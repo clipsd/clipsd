@@ -1,0 +1,23 @@
+{
+  "novoe.zakrepit_text": "La schermata resta sopra tutte le finestre come un foglietto adesivo: trascinala, la rotellina cambia la dimensione, Ctrl+rotellina la trasparenza. Pulsante «Fissa» nell'editor e nella finestra di selezione, tasto F3.",
+  "novoe.zakrepit_title": "Fissare una schermata sopra le finestre",
+  "ozn.zakrepit_text": "Una schermata sopra le finestre",
+  "zakrepit.button": "Fissa",
+  "zakrepit.copied": "Copiato",
+  "zakrepit.menu_close": "Chiudi",
+  "zakrepit.menu_close_all": "Chiudi tutte quelle fissate",
+  "zakrepit.menu_copy": "Copia",
+  "zakrepit.menu_editor": "Apri nell'editor",
+  "zakrepit.menu_opacity": "Trasparenza",
+  "zakrepit.menu_pin": "Fissa la schermata sopra le finestre",
+  "zakrepit.menu_save": "Salva…",
+  "zakrepit.pinned_toast": "Schermata fissata sopra le finestre",
+  "zakrepit.save_failed": "Salvataggio non riuscito",
+  "zakrepit.saved": "Salvato: {name}",
+  "zakrepit.tile_sub": "sopra le finestre",
+  "zakrepit.tile_title": "Fissa",
+  "zakrepit.tip": "Fissa la schermata sopra le finestre (F3)\nLa schermata resta in una finestrella a parte. Trascinala con il mouse, la rotellina cambia la dimensione, Ctrl+rotellina la trasparenza, doppio clic o Esc la chiude, il tasto destro apre un menu",
+  "zakrepit.training": "Immagine di esercizio: non viene fissata sopra le finestre.",
+  "zakrepit.wayland_hint": "Questo desktop potrebbe non tenere la finestra in primo piano. Se finisce sotto le altre: Alt+Spazio, poi «Sempre in primo piano».",
+  "zakrepit.window_name": "Schermata fissata"
+}

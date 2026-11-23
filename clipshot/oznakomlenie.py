@@ -38,6 +38,8 @@ CATALOG = (
     ("phone_editor", "phone", "phone", "widget", "phone_button", None, "phone"),
     ("translate_head", "text", "translate", "widget", "tr_block|tool:translate", None, None),
     ("numbers", "pometki", "number", "tool", "number", "numbers", None),
+    ("stikery", "pometki", "sticker", "tool", "sticker", "stikery", None),
+    ("ten_ramka", "forma", "deco", "widget", "form_button|more_button", "ten_ramka", None),
     ("region", "snimok", "region", "panel", "frame", None, "region"),
     ("full", "snimok", "fullscreen", "panel", "full", None, "full"),
     ("record", "snimok", "record", "panel", "record", None, "record"),
@@ -54,6 +56,7 @@ CATALOG = (
     ("undo", "save", "redo", "widget", "undo_button", "undo", None),
     ("save", "save", "save", "widget", "save_button", None, None),
     ("copy", "save", "copy", "widget", "copy_button", None, None),
+    ("pechat", "save", "print", "widget", "print_button", None, None),   # 1.36
     ("settings", "settings", "settings", "widget", "settings_button", None, None),
     ("help", "settings", "help", "widget", "help_button", None, None),
     # новинки 1.35 (novoe.ITEMS): живут не в редакторе, показать их на учебном снимке нельзя: пояснение и отметка
@@ -64,6 +67,11 @@ CATALOG = (
     ("otlozhit", "settings", "update", "info", None, None, None),
     ("settings_apply", "settings", "settings", "info", None, None, None),
     ("phone_target", "phone", "phone", "info", None, None, None),
+    ("pdf", "save", "print", "info", None, None, None),   # 1.36: PDF живёт в окне «Сохранить» и в меню «Печать ▾»
+    # новинки 1.36
+    ("zakrepit", "snimok", "pin", "panel", "pin", None, "region"),
+    ("qr_chtenie", "text", "qr", "info", None, None, None),
+    ("pipetka", "pometki", "pipette", "tool", "pipette", None, None),
 )
 BY_ID = {c[0]: c for c in CATALOG}
 NEW_KEYS = {c[0] for c in CATALOG if c[0] in {it[1] for it in novoe.ITEMS}}   # какие пункты бывают «новыми»
@@ -218,7 +226,7 @@ def make_editor_class():
         def _toast_training(self):
             self.show_toast(tr("ozn.no_save"))
 
-        def save_and_close(self):
+        def save_and_close(self, *_a):
             self._toast_training()
             self._host.lesson.note("save")
 
@@ -229,6 +237,16 @@ def make_editor_class():
         def copy_to_clipboard(self):
             self._toast_training()
             self._host.lesson.note("copy")
+
+        def print_image(self):   # 1.36: учебный снимок не печатается и окна печати не открывает
+            self._toast_training()
+            self._host.lesson.note("pechat")
+
+        def print_preview(self):
+            self.print_image()
+
+        def save_pdf(self):
+            self._toast_training()
 
         def insert_from_phone(self):
             self._host.explain("phone_editor")
@@ -554,8 +572,8 @@ class OznakomlenieWindow(QWidget):
         self._apply_compact()
 
     def _apply_compact(self):
-        """Низкое окно: у пояснения остаётся название и кнопки, подробности по «Подробнее ▾», «Готово» не нужна (есть
-        крестик окна); учебному снимку отдано всё место."""
+        """Низкое окно: у пояснения остаётся название и кнопки, подробности по «Подробнее ▾»; учебному снимку отдано всё
+        место."""
         if not hasattr(self, "hint"):
             return
         c = self.compact
@@ -565,10 +583,10 @@ class OznakomlenieWindow(QWidget):
         self.hint_line.setVisible(full)
         self.more_button.setVisible(c and self.hint.isVisible() and self.current is not None)
         self.more_button.setText(tr("ozn.less") if self._more else tr("ozn.more"))
-        self.done_button.setVisible(not c)
         m = 8 if c else 16
         self.right_w.layout().setContentsMargins(m, 8 if c else 14, m, 6 if c else 12)
         self.right_w.layout().setSpacing(6 if c else 10)
+        self._place_next()
 
     def _to_list(self):
         self._show_list = True
@@ -649,6 +667,10 @@ QPushButton#oznBtn:disabled {{ color: {c['muted']}; }}
         bl.addStretch(1)
         self.scroll.setWidget(body)
         ll.addWidget(self.scroll, 1)
+        self.left_foot = QHBoxLayout()   # «Готово» и «Отложить ▾» живут под списком: не там, где ищут «Следующая функция»
+        self.left_foot.setContentsMargins(8, 4, 8, 2)
+        self.left_foot.setSpacing(8)
+        ll.addLayout(self.left_foot)
         root.addWidget(left)
         self.left_w = left
 
@@ -695,7 +717,7 @@ QPushButton#oznBtn:disabled {{ color: {c['muted']}; }}
         self.real_button.setObjectName("clipPrimary")
         self.reset_button = QPushButton(tr("ozn.reset"))
         self.reset_button.setObjectName("oznBtn")
-        self.next_button = QPushButton(tr("ozn.next"))
+        self.next_button = QPushButton(tr("ozn.next") + " ›")
         self.next_button.setObjectName("clipPrimary")
         self.next_button.clicked.connect(self.next_function)
         self.result_label = QLabel()
@@ -706,14 +728,22 @@ QPushButton#oznBtn:disabled {{ color: {c['muted']}; }}
         for b in (self.show_button, self.try_button, self.real_button, self.reset_button, self.next_button):
             b.setFocusPolicy(Qt.FocusPolicy.TabFocus)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
-            buttons.addWidget(b)
+            if b is not self.next_button:
+                buttons.addWidget(b)
         buttons.addWidget(self.more_button)
         buttons.addStretch(1)
+        buttons.addWidget(self.next_button)   # справа: куда смотрит человек, который ищет «дальше»
         self.done_button = QPushButton(tr("ozn.done"))
         self.done_button.setObjectName("oznBtn")
         buttons.insertWidget(0, self.back_button)   # «‹ Все функции» в узком окне: в одном ряду с кнопками
         hl.addSpacing(4)
         hl.addLayout(buttons)
+        self.buttons_row = buttons
+        self.next_row = QHBoxLayout()   # запасной ряд: когда кнопки в один ряд не помещаются, «Следующая функция ›» уходит сюда
+        self.next_row.setContentsMargins(0, 0, 0, 0)
+        self.next_row.addStretch(1)
+        hl.addLayout(self.next_row)
+        self._next_below = False
         self.show_button.clicked.connect(self.play)
         self.try_button.clicked.connect(self.try_myself)
         self.real_button.clicked.connect(self.try_real)
@@ -721,7 +751,9 @@ QPushButton#oznBtn:disabled {{ color: {c['muted']}; }}
         self.done_button.clicked.connect(self.close)
         self.snooze_button = otlozhit.SnoozeButton(self.dark)
         self.snooze_button.chosen.connect(self.snooze)
-        buttons.addWidget(self.snooze_button)   # в ряду кнопок подсказки справа: нижний ряд в низком окне не нужен, снимку всё место
+        self.left_foot.addWidget(self.done_button)
+        self.left_foot.addWidget(self.snooze_button)
+        self.left_foot.addStretch(1)
         rl.addWidget(self.hint)
 
         self.stack = QStackedWidget()
@@ -763,10 +795,6 @@ QPushButton#oznBtn:disabled {{ color: {c['muted']}; }}
         il.addStretch(1)
         self.stack.addWidget(info_page)           # 3
         rl.addWidget(self.stack, 1)
-        bottom = QHBoxLayout()
-        bottom.addStretch(1)
-        bottom.addWidget(self.done_button)
-        rl.addLayout(bottom)
         root.addWidget(right, 1)
         self.right_w = right
         self._show_list = True
@@ -778,7 +806,7 @@ QPushButton#oznBtn:disabled {{ color: {c['muted']}; }}
         self.try_button.setVisible(try_)
         self.real_button.setVisible(real)
         self.reset_button.setVisible(reset)
-        self.next_button.setVisible(False)
+        self._update_next(False)
 
     @staticmethod
     def is_panel(ident) -> bool:
@@ -913,9 +941,42 @@ QPushButton#oznBtn:disabled {{ color: {c['muted']}; }}
         if row is not None:
             row.done = True
             row.update()
-        i = self.order.index(ident) if ident in self.order else -1
         self.try_button.setVisible(False)
-        self.next_button.setVisible(0 <= i < len(self.order) - 1)
+        self._update_next(True)
+
+    def _update_next(self, primary: bool):
+        """«Следующая функция ›» есть у каждого пункта, кроме последнего: и у пояснений, и у учебных. Главной (зелёной)
+        она становится, когда другой главной кнопки нет или урок пройден."""
+        i = self.order.index(self.current) if self.current in self.order else -1
+        b = self.next_button
+        b.setVisible(0 <= i < len(self.order) - 1)
+        if self.show_button.isHidden() and self.real_button.isHidden():
+            primary = True
+        self._place_next()
+        name = "clipPrimary" if primary else "oznBtn"
+        if b.objectName() != name:
+            b.setObjectName(name)
+            b.style().unpolish(b)
+            b.style().polish(b)
+
+    def _place_next(self):
+        """Все кнопки в одном ряду, «Следующая функция ›» справа. Не помещаются (узкое окно, длинные подписи): она
+        переходит в ряд ниже, справа, и не обрезается."""
+        b = self.next_button
+        row = [self.buttons_row.itemAt(i).widget() for i in range(self.buttons_row.count())]
+        row = [w for w in row if w is not None and w is not b and not w.isHidden()]
+        need = sum(w.sizeHint().width() for w in row) + b.sizeHint().width() + self.buttons_row.spacing() * len(row)
+        have = self.right_w.width() - 2 * 16 - 28   # поля правой части и подсказки
+        below = need > have
+        if below == self._next_below and (b.parentWidget() is not None):
+            return
+        self._next_below = below
+        if below:
+            self.buttons_row.removeWidget(b)
+            self.next_row.addWidget(b)
+        else:
+            self.next_row.removeWidget(b)
+            self.buttons_row.addWidget(b)
 
     def mark_studied(self, ident):
         """Функцию изучили: у неё «Получилось» или показ досмотрен до конца. Метка «Новое» в списке становится серой и
@@ -1074,10 +1135,26 @@ QPushButton#oznBtn:disabled {{ color: {c['muted']}; }}
         if self.current is not None:
             self.lesson.demo()
 
+    def set_auto(self, auto: bool):
+        """Окно открылось само (после «Показать новое» или после срока): в меню «Отложить ▾» последний пункт
+        «Не открывать само». Открытое из меню значка пункта не имеет."""
+        self.snooze_button.set_never("otl.never_ozn" if auto else None)
+
     def snooze(self, key=None):
         """«Отложить ▾»: учебный показ останавливается, окно закрывается и возвращается, когда срок выйдет, на той же
         функции (otlozhit, тема "ozn"). Отложенное окно не задаёт вопрос «Хотите узнать о других функциях?»."""
         cfg = self.app.config
+        if key == otlozhit.NEVER:
+            from . import novoe
+            novoe.hide_version(cfg)   # само больше не приходит для этой версии; меню значка «Ознакомление» открывает
+            mark = getattr(self.app, "mark_whatsnew_read", None)
+            if callable(mark):
+                mark()
+            save = getattr(self.app, "save_config", None)
+            if callable(save):
+                save()
+            self.close()
+            return
         ident = self.current if self.current in BY_ID else None
         otlozhit.snooze(cfg, "ozn", key or otlozhit.DEFAULT, id=ident)
         save = getattr(self.app, "save_config", None)

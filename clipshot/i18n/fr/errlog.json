@@ -1,0 +1,9 @@
+{
+  "errlog.close": "Fermer",
+  "errlog.copied": "Rapport copié",
+  "errlog.copy": "Copier le rapport",
+  "errlog.menu_open": "Ouvrir le journal des erreurs",
+  "errlog.send": "Envoyer le rapport",
+  "errlog.text": "Une erreur inattendue s'est produite. Le travail continue : vos captures et réglages ne sont pas perdus. Les détails sont enregistrés dans le journal des erreurs. Si cela se répète, copiez ou envoyez le rapport : il ne contient ni votre texte ni vos captures, et rien n'est envoyé sans votre clic.",
+  "errlog.title": "Un problème est survenu"
+}

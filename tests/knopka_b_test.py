@@ -102,7 +102,7 @@ def layout(sel):
     return {k: r for k, _t, _s, r in buttons}, {k: t for k, t, _s, _r in buttons}, bar, hint
 
 
-ALL = ["record", "full", "ocr", "phone", "translate", "translate_pick", "save", "edit", "manual", "copy"]
+ALL = ["record", "full", "ocr", "phone", "pin", "translate", "translate_pick", "save", "edit", "manual", "copy"]   # 1.36: «Закрепить»
 BOTTOM = ["save", "edit", "manual", "copy"]
 RETAKE = {"ru": "Другая область", "en": "Another area", "es": "Otra zona", "de": "Anderer Bereich", "fr": "Autre zone",
           "it": "Altra area", "pt": "Outra área", "pl": "Inny obszar", "tr": "Başka alan", "uk": "Інша область",
@@ -173,7 +173,8 @@ for lang in i18n.LANGUAGE_NAMES:
         rects, texts, bar, hint = layout(sel)
         lv = sel.bar_level
         where = f"{lang} {width}"
-        check(sorted(rects) == sorted(ALL), f"{where}: кнопки {sorted(rects)}")
+        want = [k for k in ALL if k != "pin" or width != 800]   # 1.36: на 800 px «Закрепить» не ставится, подписи важнее
+        check(sorted(rects) == sorted(want), f"{where}: кнопки {sorted(rects)}")
         check(bar.left() >= 0 and bar.right() <= width - 1, f"{where}: панель в экране {bar}")
         for k, r in rects.items():
             check(bar.contains(r), f"{where}: {k} внутри панели")

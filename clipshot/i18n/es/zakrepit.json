@@ -1,0 +1,23 @@
+{
+  "novoe.zakrepit_text": "La captura queda sobre todas las ventanas como una nota adhesiva: arrástrela, la rueda cambia el tamaño, Ctrl+rueda la transparencia. Botón «Fijar» en el editor y en la ventana de selección, tecla F3.",
+  "novoe.zakrepit_title": "Fijar una captura sobre las ventanas",
+  "ozn.zakrepit_text": "Una captura sobre las ventanas",
+  "zakrepit.button": "Fijar",
+  "zakrepit.copied": "Copiado",
+  "zakrepit.menu_close": "Cerrar",
+  "zakrepit.menu_close_all": "Cerrar todas las fijadas",
+  "zakrepit.menu_copy": "Copiar",
+  "zakrepit.menu_editor": "Abrir en el editor",
+  "zakrepit.menu_opacity": "Transparencia",
+  "zakrepit.menu_pin": "Fijar la captura sobre las ventanas",
+  "zakrepit.menu_save": "Guardar…",
+  "zakrepit.pinned_toast": "Captura fijada sobre las ventanas",
+  "zakrepit.save_failed": "No se pudo guardar",
+  "zakrepit.saved": "Guardado: {name}",
+  "zakrepit.tile_sub": "sobre ventanas",
+  "zakrepit.tile_title": "Fijar",
+  "zakrepit.tip": "Fijar la captura sobre las ventanas (F3)\nLa captura queda en una ventanita aparte. Arrástrela con el ratón, la rueda cambia el tamaño, Ctrl+rueda la transparencia, doble clic o Esc la cierra, el botón derecho abre un menú",
+  "zakrepit.training": "Imagen de práctica: no se fija sobre las ventanas.",
+  "zakrepit.wayland_hint": "Este escritorio puede no mantener la ventana encima. Si pasa por debajo de otras: Alt+Espacio y «Siempre encima».",
+  "zakrepit.window_name": "Captura fijada"
+}

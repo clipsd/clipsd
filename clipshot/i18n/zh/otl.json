@@ -4,6 +4,10 @@
   "otl.h3": "3 小时",
   "otl.m15": "15 分钟",
   "otl.more": "选择推迟多久",
+  "otl.never_ask": "不再询问",
+  "otl.never_novoe": "不再显示此版本的新功能",
+  "otl.never_ozn": "不要自动打开",
+  "otl.never_tour": "不再显示入门引导",
   "otl.tip": "推迟 1 小时",
   "otl.tomorrow": "推迟到明天",
   "otl.week": "一周"

@@ -5,7 +5,12 @@
 name: Linux build
 
 on:
+  # 23.11.2026 (владелец: минимальный бюджет, сборки Windows реже): минуты GitHub для закрытого репозитория
+  # платные сверх месячного запаса. Сборка только для выпуска (метка v*), пробных сборок (proba/*), пакета Store
+  # (dev/store-msix) и вручную; проверка между выпусками идёт на компьютере (runfull.sh).
   push:
+    tags: ['v*']
+    branches: ['proba/**', 'dev/store-msix']
   workflow_dispatch:
     inputs:
       preview:
@@ -102,6 +107,7 @@ jobs:
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
+          retention-days: 7   # временные сборки: готовые выпуски лежат в Releases; квота артефактов (23.11.2026)
           name: ClipSD-linux
           path: dist/ClipSD-*-linux-x86_64.tar.gz
           if-no-files-found: error
@@ -130,6 +136,7 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         if: (startsWith(github.ref, 'refs/heads/proba/') || (github.event_name == 'workflow_dispatch' && inputs.preview)) && !startsWith(github.ref, 'refs/tags/')
         with:
+          retention-days: 7   # временные сборки: готовые выпуски лежат в Releases; квота артефактов (23.11.2026)
           name: ClipSD-linux-proba
           path: dist-proba/ClipSD-*-proba-linux-x86_64.tar.gz
           if-no-files-found: error

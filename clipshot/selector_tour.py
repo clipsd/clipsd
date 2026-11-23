@@ -75,7 +75,7 @@ class SelectorTour(QWidget):
         self.snooze_button = None
         if snoozable:
             from . import otlozhit
-            self.snooze_button = otlozhit.SnoozeButton(False, compact=True)   # карточка всегда белая
+            self.snooze_button = otlozhit.SnoozeButton(False, compact=True, never="otl.never_tour")   # карточка всегда белая
             self.snooze_button.chosen.connect(self.snooze)
             head.addWidget(self.snooze_button)
         box.addLayout(head)

@@ -118,6 +118,9 @@ def make_release(base: Path, ver: str, behavior="ok") -> Path:
     return rel
 
 
+PROGRAM_LOGS = ("ocr.log", "errors.log", "crash.log")
+
+
 def snapshot(home: Path):
     """Names, sizes and mtimes of everything ClipSD could write in the real home."""
     paths = [home / ".local/share/clipsd", home / ".local/bin/clipsd", home / ".config/systemd/user/clipsd.service",
@@ -129,6 +132,8 @@ def snapshot(home: Path):
     for p in paths:
         try:
             for q in [p] + (list(p.rglob("*")) if p.is_dir() and not p.is_symlink() else []):
+                if q.name.startswith(PROGRAM_LOGS) and q.parent == home / ".local/share/clipsd":
+                    continue   # журналы работающего ClipSD владельца пишутся сами, к тесту не относятся
                 st = q.lstat()
                 snap[str(q)] = (st.st_size, st.st_mtime_ns, os.readlink(q) if q.is_symlink() else "")
         except OSError:

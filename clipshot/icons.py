@@ -63,6 +63,24 @@ def _draw(name: str, p: QPainter, c: str):
         p.setFont(font)
         p.setPen(Qt.GlobalColor.white)
         p.drawText(QRectF(0, 0, SIZE, SIZE), Qt.AlignmentFlag.AlignCenter, "1")
+    elif name == "deco":   # 1.36: снимок с рамкой и тенью
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(0, 0, 0, 55))
+        p.drawRoundedRect(QRectF(6.5, 7.5, 14, 13), 2.5, 2.5)
+        p.setPen(_pen(c, 1.8))
+        p.setBrush(QColor("#ffffff"))
+        p.drawRoundedRect(QRectF(3.5, 3.5, 14, 13), 2.5, 2.5)
+    elif name == "sticker":   # 1.36: весёлое лицо (эмодзи и стикеры)
+        p.setPen(_pen(c, 1.6))
+        p.setBrush(QColor("#f5c400"))
+        p.drawEllipse(QPointF(12, 12), 9.2, 9.2)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(c))
+        p.drawEllipse(QPointF(8.6, 9.6), 1.35, 1.7)
+        p.drawEllipse(QPointF(15.4, 9.6), 1.35, 1.7)
+        p.setPen(_pen(c, 1.6))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawArc(QRectF(7.2, 8.4, 9.6, 8.6), 200 * 16, 140 * 16)
     elif name == "arrow":
         p.setPen(_pen(c, 2.4))
         p.drawLine(QPointF(4, 20), QPointF(16.5, 7.5))
@@ -146,6 +164,23 @@ def _draw(name: str, p: QPainter, c: str):
             for j in range(3):
                 p.setBrush(QColor(shades[i * 3 + j]))
                 p.drawRect(QRectF(3 + j * 6, 3 + i * 6, 6, 6))
+    elif name == "privacy":
+        # щит с замочной скважиной: скрыть личные данные
+        shield = QPainterPath()
+        shield.moveTo(12, 2.6)
+        shield.lineTo(20, 5.4)
+        shield.lineTo(20, 11.5)
+        shield.cubicTo(20, 16.6, 16.6, 19.9, 12, 21.6)
+        shield.cubicTo(7.4, 19.9, 4, 16.6, 4, 11.5)
+        shield.lineTo(4, 5.4)
+        shield.closeSubpath()
+        p.setPen(_pen(c, 1.8))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawPath(shield)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(c))
+        p.drawEllipse(QPointF(12, 10.4), 2.2, 2.2)
+        p.drawPolygon(QPolygonF([QPointF(10.9, 11.6), QPointF(13.1, 11.6), QPointF(13.7, 15.6), QPointF(10.3, 15.6)]))
     elif name == "translate":
         # «A» и «Я» со стрелкой: перевод (QFont уже подключён в модуле: свой импорт сломал бы другие значки)
         f = QFont()
@@ -348,6 +383,71 @@ def _draw(name: str, p: QPainter, c: str):
         p.drawEllipse(center, 7.5, 7.5)
         p.setBrush(QColor("#ffffff") if c != "#ffffff" else QColor("#1e78ff"))
         p.drawEllipse(center, 3.2, 3.2)
+    elif name == "folder":   # 1.36, меню значка: папка со снимками
+        p.setPen(_pen(c, 1.8))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        path = QPainterPath()
+        path.moveTo(3, 7)
+        path.lineTo(3, 18.5)
+        path.lineTo(21, 18.5)
+        path.lineTo(21, 8.5)
+        path.lineTo(11.5, 8.5)
+        path.lineTo(9.5, 5.5)
+        path.lineTo(4.5, 5.5)
+        path.closeSubpath()
+        p.drawPath(path)
+    elif name == "image_open":   # открыть изображение: рамка с горой и солнцем
+        p.setPen(_pen(c, 1.8))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(QRectF(3, 4, 18, 16), 2.5, 2.5)
+        p.drawPolyline(QPolygonF([QPointF(3.5, 17), QPointF(9, 11.5), QPointF(13, 15.5), QPointF(15.5, 13), QPointF(20.5, 18)]))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(c))
+        p.drawEllipse(QPointF(15.5, 8.6), 1.7, 1.7)
+    elif name == "book":   # ознакомление: раскрытая книга
+        p.setPen(_pen(c, 1.8))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawPolyline(QPolygonF([QPointF(12, 6.5), QPointF(12, 20)]))
+        left = QPainterPath()
+        left.moveTo(12, 6.5)
+        left.cubicTo(9.5, 4.5, 6, 4.5, 3, 5.5)
+        left.lineTo(3, 18.5)
+        left.cubicTo(6, 17.5, 9.5, 17.5, 12, 19.5)
+        p.drawPath(left)
+        right = QPainterPath()
+        right.moveTo(12, 6.5)
+        right.cubicTo(14.5, 4.5, 18, 4.5, 21, 5.5)
+        right.lineTo(21, 18.5)
+        right.cubicTo(18, 17.5, 14.5, 17.5, 12, 19.5)
+        p.drawPath(right)
+    elif name == "cap":   # обучение: шапка выпускника
+        p.setPen(_pen(c, 1.8))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawPolygon(QPolygonF([QPointF(12, 5), QPointF(22, 10), QPointF(12, 15), QPointF(2, 10)]))
+        p.drawPolyline(QPolygonF([QPointF(6.5, 12.5), QPointF(6.5, 17), QPointF(12, 19.5), QPointF(17.5, 17), QPointF(17.5, 12.5)]))
+        p.drawLine(QPointF(22, 10), QPointF(22, 16))
+    elif name == "star":   # «Оценить»: звезда
+        p.setPen(_pen(c, 1.8))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        pts = []
+        for k in range(10):
+            r = 9.5 if k % 2 == 0 else 4.2
+            a = math.radians(-90 + k * 36)
+            pts.append(QPointF(12 + r * math.cos(a), 12.6 + r * math.sin(a)))
+        p.drawPolygon(QPolygonF(pts))
+    elif name == "play":   # знакомство с программой: треугольник в круге
+        p.setPen(_pen(c, 2))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawEllipse(QPointF(12, 12), 9.5, 9.5)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(c))
+        p.drawPolygon(QPolygonF([QPointF(10, 8), QPointF(16.5, 12), QPointF(10, 16)]))
+    elif name == "quit":   # выход: дверь со стрелкой
+        p.setPen(_pen(c, 1.8))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawPolyline(QPolygonF([QPointF(10, 4), QPointF(4, 4), QPointF(4, 20), QPointF(10, 20)]))
+        p.drawLine(QPointF(9.5, 12), QPointF(19.5, 12))
+        p.drawPolyline(QPolygonF([QPointF(16, 8), QPointF(20, 12), QPointF(16, 16)]))
     elif name == "more":   # «⋯ Все инструменты» (1.32): три точки
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(c))
@@ -386,6 +486,44 @@ def _draw(name: str, p: QPainter, c: str):
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawRoundedRect(QRectF(8.8, 8.2, 6.4, 5.2), 1, 1)
         p.drawEllipse(QPointF(12, 10.8), 1.4, 1.4)
+    elif name == "pin":
+        # кнопка-булавка: головка, иголка (закрепить снимок поверх окон)
+        p.save()
+        p.translate(12, 12)
+        p.rotate(40)
+        p.translate(-12, -12)
+        p.setPen(_pen(c, 1.8))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(QRectF(8.5, 2.5, 7, 9), 1.8, 1.8)
+        p.drawLine(QPointF(6.5, 11.5), QPointF(17.5, 11.5))
+        p.drawLine(QPointF(12, 11.5), QPointF(12, 21.5))
+        p.restore()
+    elif name == "qr":
+        # три угловых квадрата QR-кода и россыпь модулей
+        p.setPen(_pen(c, 1.8))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        for x, y in ((3.5, 3.5), (14.5, 3.5), (3.5, 14.5)):
+            p.drawRect(QRectF(x, y, 6, 6))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(c))
+        for x, y in ((5.5, 5.5), (16.5, 5.5), (5.5, 16.5)):
+            p.drawRect(QRectF(x, y, 2, 2))
+        for x, y in ((14.5, 14.5), (18.5, 14.5), (16.5, 16.5), (14.5, 18.5), (18.5, 18.5)):
+            p.drawRect(QRectF(x, y, 2, 2))
+    elif name == "pipette":
+        # пипетка: наклонная трубка с грушей и каплей у кончика
+        p.save()
+        p.translate(12, 12)
+        p.rotate(45)
+        p.translate(-12, -12)
+        p.setPen(_pen(c, 1.8))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(QRectF(9.5, 7, 5, 11), 1.5, 1.5)
+        p.drawLine(QPointF(12, 18), QPointF(12, 22.5))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(c))
+        p.drawRoundedRect(QRectF(8, 2, 8, 5), 2.4, 2.4)
+        p.restore()
     elif name == "apart":
         # Окно со стрелкой наружу: открыть отдельным снимком (22.11.2026)
         p.setPen(_pen(c, 1.8))
@@ -393,6 +531,14 @@ def _draw(name: str, p: QPainter, c: str):
         p.drawRoundedRect(QRectF(3, 6, 13, 14), 2, 2)
         p.drawLine(QPointF(11, 13), QPointF(20.5, 3.5))
         p.drawPolyline(QPolygonF([QPointF(14.5, 3.5), QPointF(20.5, 3.5), QPointF(20.5, 9.5)]))
+    elif name == "print":
+        # Принтер (1.36): лист сверху, корпус, лист в лотке
+        p.setPen(_pen(c, 1.8))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRect(QRectF(7, 3, 10, 5))
+        p.drawRoundedRect(QRectF(3, 8, 18, 9), 2, 2)
+        p.drawRect(QRectF(7, 14, 10, 7))
+        p.drawPoint(QPointF(17.5, 11.2))
     elif name == "save":
         p.setPen(_pen(c, 1.8))
         p.setBrush(Qt.BrushStyle.NoBrush)
@@ -483,6 +629,26 @@ def app_icon() -> QIcon:
     for size in (16, 22, 24, 32, 48, 64, 128, 256):
         icon.addPixmap(logo_pixmap(size))
     return icon
+
+
+TRAY_SIZES = (16, 20, 24, 32, 48, 64)
+
+
+def tray_icon_dir():
+    """Папка со значком области уведомлений (clipshot/tray_icons): в сборке PyInstaller её кладёт --collect-data clipshot."""
+    from pathlib import Path
+    return Path(__file__).resolve().parent / "tray_icons"
+
+
+def tray_icon() -> QIcon:
+    """Значок у часов (1.36): отдельный набор 16, 20, 24, 32, 48, 64 px (на 16-24 px без уголков, крупные «SD»).
+    Логотип программы (окна, ярлык, установщик) остаётся app_icon(). Нет файлов: запасной app_icon()."""
+    icon = QIcon()
+    for size in TRAY_SIZES:
+        path = tray_icon_dir() / f"tray-{size}.png"
+        if path.is_file():
+            icon.addFile(str(path))
+    return icon if not icon.isNull() else app_icon()
 
 
 # --- флаги языков (1.32): 24x16 со скруглением, как на сайте clipsd.github.io; рисуются кодом, без внешних файлов ---

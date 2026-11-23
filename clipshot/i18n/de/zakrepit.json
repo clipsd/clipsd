@@ -1,0 +1,23 @@
+{
+  "novoe.zakrepit_text": "Der Screenshot hängt wie ein Haftzettel über allen Fenstern: ziehen, das Mausrad ändert die Größe, Strg+Mausrad die Transparenz. Knopf „Anheften“ im Editor und im Auswahlfenster, Taste F3.",
+  "novoe.zakrepit_title": "Screenshot über den Fenstern anheften",
+  "ozn.zakrepit_text": "Screenshot über allen Fenstern",
+  "zakrepit.button": "Anheften",
+  "zakrepit.copied": "Kopiert",
+  "zakrepit.menu_close": "Schließen",
+  "zakrepit.menu_close_all": "Alle angehefteten schließen",
+  "zakrepit.menu_copy": "Kopieren",
+  "zakrepit.menu_editor": "Im Editor öffnen",
+  "zakrepit.menu_opacity": "Transparenz",
+  "zakrepit.menu_pin": "Screenshot über Fenstern anheften",
+  "zakrepit.menu_save": "Speichern…",
+  "zakrepit.pinned_toast": "Screenshot über den Fenstern angeheftet",
+  "zakrepit.save_failed": "Speichern fehlgeschlagen",
+  "zakrepit.saved": "Gespeichert: {name}",
+  "zakrepit.tile_sub": "über Fenstern",
+  "zakrepit.tile_title": "Anheften",
+  "zakrepit.tip": "Screenshot über allen Fenstern anheften (F3)\nDer Screenshot hängt in einem eigenen kleinen Fenster. Mit der Maus ziehen, das Mausrad ändert die Größe, Strg+Mausrad die Transparenz, Doppelklick oder Esc schließt, die rechte Taste öffnet ein Menü",
+  "zakrepit.training": "Übungsbild: wird nicht über den Fenstern angeheftet.",
+  "zakrepit.wayland_hint": "Dieser Desktop hält das Fenster womöglich nicht im Vordergrund. Wenn es unter andere rutscht: Alt+Leertaste, dann „Immer im Vordergrund“.",
+  "zakrepit.window_name": "Angehefteter Screenshot"
+}

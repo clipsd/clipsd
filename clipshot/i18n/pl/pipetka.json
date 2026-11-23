@@ -1,0 +1,9 @@
+{
+  "novoe.pipetka_text": "Zakraplacz (J) pokazuje kolor pod kursorem i kopiuje jego kod. W oknie wyboru obszaru strzałki przesuwają ramkę o 1 punkt, Shift o 10, Alt+strzałki zmieniają rozmiar.",
+  "novoe.pipetka_title": "Zakraplacz i dokładna ramka",
+  "ozn.pipetka_text": "Kolor z ekranu i dokładna ramka",
+  "pipetka.picked_button": "Rysuj tym kolorem",
+  "pipetka.picked_sub": "Możesz rysować oznaczenia tym kolorem",
+  "pipetka.picked_title": "Kolor {color} skopiowany",
+  "pipetka.tip": "Zakraplacz (J)\nNajedź na miejsce: widać powiększone piksele i kolor. Kliknięcie kopiuje kod koloru, Esc: wyjście"
+}

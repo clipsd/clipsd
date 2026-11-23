@@ -359,6 +359,13 @@ def plan(ed, win, ident: str) -> list:
             Step("press", "undo_button", lambda: not cv.shapes and bool(cv.redo_stack), do=lambda: ed.undo_button.click())]
     if demo == "forma":
         return [Step("press", target, lambda: not cv.form.is_rect, do=lambda: ed.set_form(forma.ROUND))]
+    if demo == "stikery":
+        return [tool_step("sticker"),
+                Step("click", img((640, 300), (640, 300), 50), lambda: shaped("sticker"), path=[(640, 300)])]
+    if demo == "ten_ramka":
+        from . import ten_ramka
+        return [Step("press", target, lambda: cv.deco.active,
+                     do=lambda: cv.set_deco(ten_ramka.Deco(True, 18, 40, True, 4, "#1e78ff", False)))]
     if ident == "ocr":
         return [tool_step("ocr"),
                 Step("draw", img((40, row_y(0)), (330, row_y(0)), 20), lambda: bool(cv.text_sel) or "ocr" in noted,
@@ -369,6 +376,8 @@ def plan(ed, win, ident: str) -> list:
         return [tool_step("translate", target)]
     if ident in ("save", "copy"):
         return [Step("press", target, lambda: ident in noted, do=getattr(ed, target).click)]
+    if ident == "pechat":   # у кнопки меню: нажатие открыло бы выпадающий список, действие вызывается напрямую
+        return [Step("press", target, lambda: ident in noted, do=ed.print_image)]
     if ident in ("settings", "help"):
         return [Step("press", target, lambda: ident in noted)]
     if ident == "phone_editor":

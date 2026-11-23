@@ -1,0 +1,9 @@
+{
+  "errlog.close": "Schließen",
+  "errlog.copied": "Bericht kopiert",
+  "errlog.copy": "Bericht kopieren",
+  "errlog.menu_open": "Fehlerprotokoll öffnen",
+  "errlog.send": "Bericht senden",
+  "errlog.text": "Es ist ein unerwarteter Fehler aufgetreten. Die Arbeit geht weiter: Screenshots und Einstellungen sind nicht verloren. Die Einzelheiten stehen im Fehlerprotokoll. Wenn es sich wiederholt, kopieren oder senden Sie den Bericht: Er enthält weder Ihren Text noch Screenshots, gesendet wird nur auf Ihren Klick.",
+  "errlog.title": "Etwas ist schiefgelaufen"
+}

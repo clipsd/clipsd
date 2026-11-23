@@ -46,7 +46,17 @@ def note_headlines(markdown: str, limit: int = NOTE_ITEMS, chars: int = NOTE_CHA
             continue
         item = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", m.group(1))
         item = re.sub(r"[*_`]", "", item).strip()
-        sentence = re.split(r"(?<=[.!?。])\s", item, maxsplit=1)[0].strip()
+        parts = re.split(r"(?<=[.!?])\s+|(?<=。)\s*", item, maxsplit=1)
+        sentence = parts[0].strip()
+        # «С телефона. QR-код стал крупнее…»: короткое первое «предложение» это тема, а не смысл (владелец 23.11.2026:
+        # «там просто «С телефона», вообще ни о чём не говорит»). Тогда «Тема: следующее предложение».
+        topic = sentence.rstrip(".。")
+        if len(parts) > 1 and parts[1].strip() and len(topic) <= 26 and len(topic.split()) <= 4:
+            rest = re.split(r"(?<=[.!?。])\s", parts[1].strip(), maxsplit=1)[0].strip()
+            if (rest[:1].isupper() and not rest[1:2].isupper() and i18n.current() not in ("de", "tr")
+                    and not rest.startswith(("Windows", "Linux", "Microsoft", "ClipSD", "GNOME", "Tesseract"))):
+                rest = rest[0].lower() + rest[1:]
+            sentence = topic + ("：" if sentence.endswith("。") else ": ") + rest
         if len(sentence) > chars:
             sentence = sentence[:chars].rsplit(" ", 1)[0].rstrip(" ,;:") + "…"
         if sentence:

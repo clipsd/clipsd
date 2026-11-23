@@ -1,0 +1,9 @@
+{
+  "novoe.pipetka_text": "El cuentagotas (J) muestra el color bajo el cursor y copia su código. En la ventana de selección las flechas mueven el marco 1 punto, Mayús 10, Alt+flechas cambian el tamaño.",
+  "novoe.pipetka_title": "Cuentagotas y marco preciso",
+  "ozn.pipetka_text": "Un color de la pantalla y un marco preciso",
+  "pipetka.picked_button": "Dibujar con este color",
+  "pipetka.picked_sub": "Puede dibujar las marcas con este color",
+  "pipetka.picked_title": "Color {color} copiado",
+  "pipetka.tip": "Cuentagotas (J)\nSeñale un punto: se ven los píxeles ampliados y el color. Un clic copia el código del color, Esc: salir"
+}

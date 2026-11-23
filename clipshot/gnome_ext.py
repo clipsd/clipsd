@@ -26,6 +26,7 @@ EXT_SCHEMA = "org.gnome.shell.extensions.clipsd"
 PKG_MARK = ".clipsd-package"   # тот же файл-метка, что пишет install.sh
 
 INSTALLED, UPDATED, FOREIGN, NO_SOURCE, FAILED = "installed", "updated", "foreign", "no-source", "failed"
+REPLACED = "replaced"   # со согласия человека: старое дополнение выключено и отложено, своё поставлено
 USER_EXT_OFF, UNSUPPORTED = "user-extensions-off", "unsupported"   # проверка 1.33, О-М6: вход ничего бы не дал
 
 
@@ -102,10 +103,18 @@ def _shell_major(run) -> str:
     return words[-1].split(".")[0] if words and words[-1][:1].isdigit() else ""
 
 
-def update(src: Path = None, base: Path = None, run=subprocess.run, version: str = "") -> tuple:
+def update(src: Path = None, base: Path = None, run=subprocess.run, version: str = "", replace: bool = False,
+           fallback=None, today: str = "") -> tuple:
     """Поставить или обновить дополнение. Возвращает (итог, подробность): INSTALLED, UPDATED, FOREIGN, NO_SOURCE,
     USER_EXT_OFF (в GNOME выключены все пользовательские дополнения), UNSUPPORTED (подробность: версия GNOME),
     FAILED. run: подмена subprocess.run в тестах (gsettings, gnome-shell --version, glib-compile-schemas).
+
+    replace=True (человек согласился в окне «Найдено старое дополнение»): прежнее чужое дополнение с той же схемой
+    или папка цели без метки не блокируют, а выключаются и откладываются в сторону (папка переименовывается в
+    <имя>.disabled-by-clipsd-<дата>, ничего не удаляется), итог REPLACED. fallback: вызываемое без аргументов, оно
+    включает запасные сочетания GNOME (обычное сочетание клавиш системы) ДО выключения старого дополнения, чтобы
+    Alt+W не пропадал ни на минуту: новое дополнение загрузится только после выхода из системы и входа. Если
+    fallback упал, ничего не выключается (FAILED).
 
     Порядок: сначала новые файлы собираются рядом (.new), потом включение в enabled-extensions, и только потом
     прежняя папка заменяется новой. Не удалось включить: новая папка убирается, прежнее дополнение не тронуто."""
@@ -131,6 +140,7 @@ def update(src: Path = None, base: Path = None, run=subprocess.run, version: str
     # Прежнее дополнение ClipSD (другое имя, та же схема): чужое и включённое (рабочая копия) не трогаем совсем,
     # своё (с меткой пакета) выключаем, как install.sh, чтобы два дополнения не спорили за Alt+W.
     legacy_ours = []
+    aside = []   # чужие (при replace): выключаются и откладываются, не удаляются
     try:
         folders = sorted(p for p in base.iterdir() if p.is_dir() and p.name != EXT_UUID) if base.is_dir() else []
     except OSError:
@@ -141,10 +151,14 @@ def update(src: Path = None, base: Path = None, run=subprocess.run, version: str
         if (folder / PKG_MARK).exists():
             legacy_ours.append(folder)
         elif folder.name in enabled:
-            return FOREIGN, folder.name
+            if not replace:
+                return FOREIGN, folder.name
+            aside.append(folder)
     if target.exists() and not (target / PKG_MARK).exists() and any(target.iterdir()):
-        return FOREIGN, target.name
-    existed = target.exists() or target.is_symlink()
+        if not replace:
+            return FOREIGN, target.name
+        aside.append(target)
+    existed = (target.exists() or target.is_symlink()) and target not in aside
     fresh = base / f".{EXT_UUID}.new"
     old = base / f".{EXT_UUID}.old"
     try:
@@ -161,15 +175,52 @@ def update(src: Path = None, base: Path = None, run=subprocess.run, version: str
         except OSError:
             pass
         return FAILED, str(exc)
-    wanted = [u for u in enabled if u not in {f.name for f in legacy_ours}]
+    wanted = [u for u in enabled if u not in {f.name for f in (*legacy_ours, *aside)}]
     if EXT_UUID not in wanted:
         wanted.append(EXT_UUID)
+    if aside and fallback is not None:
+        # Старое дополнение вот-вот перестанет держать Alt+W, а новое загрузится только после входа в систему:
+        # запасное сочетание GNOME включается ПЕРВЫМ, пока старое ещё работает. Не вышло: ничего не выключаем.
+        try:
+            fallback()
+        except Exception as exc:   # запасной путь не должен ронять замену неясным исключением
+            _remove(fresh)
+            return FAILED, str(exc)
+    def _restore_enabled():
+        try:
+            if wanted != enabled:
+                _gsettings(run, "set", "org.gnome.shell", "enabled-extensions", _gvariant_list(enabled))
+        except (OSError, RuntimeError, subprocess.SubprocessError):
+            pass
     try:
         if wanted != enabled:
             _gsettings(run, "set", "org.gnome.shell", "enabled-extensions", _gvariant_list(wanted))
     except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
         try:
             _remove(fresh)   # включить не вышло: прежнее дополнение остаётся как было
+        except OSError:
+            pass
+        return FAILED, str(exc)
+    moved = []   # (отложенная папка, прежнее место): для отката
+    try:
+        stamp = today or __import__("datetime").date.today().strftime("%Y%m%d")
+        for folder in aside:
+            dest = folder.with_name(f"{folder.name}.disabled-by-clipsd-{stamp}")
+            n = 2
+            while dest.exists() or dest.is_symlink():
+                dest = folder.with_name(f"{folder.name}.disabled-by-clipsd-{stamp}-{n}")
+                n += 1
+            folder.rename(dest)
+            moved.append((dest, folder))
+    except OSError as exc:
+        for dest, orig in reversed(moved):
+            try:
+                dest.rename(orig)
+            except OSError:
+                pass
+        _restore_enabled()
+        try:
+            _remove(fresh)
         except OSError:
             pass
         return FAILED, str(exc)
@@ -183,13 +234,31 @@ def update(src: Path = None, base: Path = None, run=subprocess.run, version: str
                 old.rename(target)   # прежнее дополнение возвращается на место
             except OSError:
                 pass
+        for dest, orig in reversed(moved):
+            try:
+                dest.rename(orig)
+            except OSError:
+                pass
+        if moved:
+            _restore_enabled()
         return FAILED, str(exc)
     for leftover in (old, *legacy_ours):
         try:
             _remove(leftover)
         except OSError:
             pass
-    return (UPDATED if existed or legacy_ours else INSTALLED), ""
+    return (REPLACED if aside else UPDATED if existed or legacy_ours else INSTALLED), ""
+
+
+def open_folder() -> bool:
+    """Папка дополнений пользователя в файловом менеджере (если замена не удалась)."""
+    base = extensions_base()
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+        subprocess.Popen(["xdg-open", str(base)], env=child_env(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except OSError:
+        return False
 
 
 def log_out():

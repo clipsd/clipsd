@@ -1,0 +1,9 @@
+{
+  "novoe.pipetka_text": "La pipette (J) montre la couleur sous le curseur et copie son code. Dans la fenêtre de sélection, les flèches déplacent le cadre d'1 point, Maj de 10, Alt+flèches changent la taille.",
+  "novoe.pipetka_title": "Pipette et cadre précis",
+  "ozn.pipetka_text": "Une couleur de l'écran et un cadre précis",
+  "pipetka.picked_button": "Dessiner avec cette couleur",
+  "pipetka.picked_sub": "Vous pouvez dessiner avec cette couleur",
+  "pipetka.picked_title": "Couleur {color} copiée",
+  "pipetka.tip": "Pipette (J)\nPointez un endroit : pixels agrandis et couleur affichés. Un clic copie le code couleur, Échap : quitter"
+}

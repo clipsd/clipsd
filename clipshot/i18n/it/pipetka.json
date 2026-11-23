@@ -1,0 +1,9 @@
+{
+  "novoe.pipetka_text": "Il contagocce (J) mostra il colore sotto il cursore e ne copia il codice. Nella finestra di selezione le frecce spostano la cornice di 1 punto, Maiusc di 10, Alt+frecce ne cambiano la dimensione.",
+  "novoe.pipetka_title": "Contagocce e cornice precisa",
+  "ozn.pipetka_text": "Un colore dallo schermo e una cornice precisa",
+  "pipetka.picked_button": "Disegna con questo colore",
+  "pipetka.picked_sub": "Puoi disegnare le annotazioni con questo colore",
+  "pipetka.picked_title": "Colore {color} copiato",
+  "pipetka.tip": "Contagocce (J)\nPunta un punto: si vedono i pixel ingranditi e il colore. Un clic copia il codice colore, Esc: esci"
+}

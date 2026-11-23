@@ -82,10 +82,10 @@ def selector(width, kept=None, full=False, cfg=None):
     return sel
 
 
-EXPECT_ORDER = ["record", "full", "ocr", "phone", "translate", "translate_pick", "save", "edit", "manual", "copy"]   # 1.34: «С телефона»
+EXPECT_ORDER = ["record", "full", "ocr", "phone", "pin", "translate", "translate_pick", "save", "edit", "manual", "copy"]   # 1.34: «С телефона», 1.36: «Закрепить»
 EXPECT_TEXT = {"record": "Запись видео", "full": "Снимок всего экрана", "save": "Сохранить", "ocr": "Копировать текст",
                "translate": "Перевести выделенное", "translate_pick": "Выделить и перевести", "phone": "С телефона", "edit": "Редактировать",
-               "manual": "Другая область", "copy": "Скопировать и закрыть"}
+               "manual": "Другая область", "copy": "Скопировать и закрыть", "pin": "Закрепить"}
 # 1.34 (вариант Б, 21.11.2026): на экранах с подписями нижних рядов два: равные «Сохранить» и «Другая область» на всю
 # ширину, под ними крупные: широкая зелёная «Редактировать» и поуже «Скопировать и закрыть»; на 800 размер «wide»
 for width, level in ((1280, "wide"), (800, "wide"), (480, "narrow")):
@@ -94,13 +94,16 @@ for width, level in ((1280, "wide"), (800, "wide"), (480, "narrow")):
     buttons, bar, hint = sel._bar_layout()
     rects = {k: r for k, _t, _s, r in buttons}
     texts = {k: t for k, t, _s, _r in buttons}
-    check([k for k, *_x in buttons] == EXPECT_ORDER, f"{width}: порядок кнопок {[k for k, *_x in buttons]}")
-    check(texts == EXPECT_TEXT, f"{width}: подписи кнопок")
+    want = [k for k in EXPECT_ORDER if k != "pin" or width != 800]   # 1.36: на 800 px плитки «Закрепить» нет (панель не мельчает)
+    n_top = len(want) - 4
+    check([k for k, *_x in buttons] == want, f"{width}: порядок кнопок {[k for k, *_x in buttons]}")
+    check(texts == {k: v for k, v in EXPECT_TEXT.items() if k in want}, f"{width}: подписи кнопок")
     check(sel.bar_level["name"] == level, f"{width}: размер панели «{sel.bar_level['name']}» (ждали «{level}»)")
-    top = [rects[k] for k in EXPECT_ORDER[:6]]
-    bottom = [rects[k] for k in EXPECT_ORDER[6:]]
+    top = [rects[k] for k in want[:n_top]]
+    bottom = [rects[k] for k in want[n_top:]]
+    top_eq = [rects[k] for k in want[:n_top] if k != "pin"]   # «Закрепить» узкая плитка со значком
     # 1.34: шесть плиток; равные, если помещаются (1280), иначе каждая не уже своей подписи (800)
-    check(len({r.height() for r in top}) == 1 and (width != 1280 or max(r.width() for r in top) - min(r.width() for r in top) <= 1),
+    check(len({r.height() for r in top}) == 1 and (width != 1280 or max(r.width() for r in top_eq) - min(r.width() for r in top_eq) <= 1),
           f"{width}: плитки верхнего ряда одной высоты, на 1280 одной ширины ({sorted({r.width() for r in top})})")
     choice = sel._choice(sel.bar_level)
     if choice:
@@ -133,11 +136,11 @@ for width, level in ((1280, "wide"), (800, "wide"), (480, "narrow")):
     fm_l, fm_s = QFontMetrics(label_font), QFontMetrics(small_font)
     clipped = []
     if sel.bar_level["text"]:
-        for key in EXPECT_ORDER[:6]:
+        for key in [k for k in want[:n_top] if k != "pin"]:   # у «Закрепить» одни значок, подписи на плитке нет
             lines = sel._wrap(fm_l, texts[key], rects[key].width() - 12)
             if len(lines) > 2 or any(fm_l.horizontalAdvance(x) > rects[key].width() - 4 for x in lines):
                 clipped.append(key)
-        for key in EXPECT_ORDER[6:]:
+        for key in want[n_top:]:
             lvl = sel.bar_level
             bl_font, bs_font = sel._bar_bfonts(lvl)
             if key in ("save", "manual"):   # 1.34: мелкие кнопки отдельным рядом, подпись без пояснения
@@ -175,7 +178,7 @@ sel.close()
 sel = selector(1280, QRect(500, 90, 300, 200))
 check(sel.BAR_SUB == {"save": "в файл", "edit": "или щелчок в рамке", "manual": "или обведите на пустом",
                       "copy": "в буфер обмена", "translate": "эту рамку", "translate_pick": "обведите другое место",
-                      "phone": "камера или картинка"}, "вторые мелкие строки")
+                      "phone": "камера или картинка", "pin": "поверх окон"}, "вторые мелкие строки")
 # что реально нарисовано: перехватываем drawText панели
 from clipshot import selector as selmod
 drawn = []
@@ -191,7 +194,7 @@ real_painter = selmod.QPainter
 selmod.QPainter = SpyPainter
 sel.repaint()
 selmod.QPainter = real_painter
-check(all(w in " ".join(drawn).split() for t in EXPECT_TEXT.values() for w in t.split()) and not [t for t in drawn if "Ctrl" in t or "Enter" in t or "Delete" in t],
+check(all(w in " ".join(drawn).split() for k, t in EXPECT_TEXT.items() if k != "pin" for w in t.split()) and not [t for t in drawn if "Ctrl" in t or "Enter" in t or "Delete" in t],
       f"нарисованы все подписи кнопок, клавиши на кнопках не пишутся ({len(drawn)} строк)")
 shorts = {k: s for k, _t, s, _r in sel._bar_layout()[0]}
 check(shorts["manual"] == "R или Delete" and shorts["edit"] == "Enter" and shorts["copy"] == "Ctrl+Enter", f"клавиши в подсказке: {shorts}")
@@ -272,7 +275,7 @@ sel.close()
 # режим «весь экран» и выбор монитора
 sel = selector(1280, full=True)
 keys = [k for k, *_x in sel._bar_layout()[0]]
-check(sel.full_mode and "full" not in keys and keys[-4:] == ["save", "edit", "manual", "copy"] and len(keys) == 9, f"«весь экран»: кнопки {keys}")
+check(sel.full_mode and "full" not in keys and keys[-4:] == ["save", "edit", "manual", "copy"] and len(keys) == 10, f"«весь экран»: кнопки {keys}")
 check(sel._full_title() == "Снимок всего экрана", "«весь экран»: заголовок «Снимок всего экрана»")
 sel.select_monitor(None)
 check(sel.kept == sel.rect(), "«весь экран»: выбор «все мониторы» работает")
@@ -280,10 +283,10 @@ sel.close()
 # выключенные перевод и распознавание
 sel = selector(1280, QRect(500, 90, 300, 200), cfg={"translate_enabled": False})
 keys = [k for k, *_x in sel._bar_layout()[0]]
-check("translate" not in keys and "translate_pick" not in keys and len(keys) == 8, f"перевод выключен: на панели {keys}")
+check("translate" not in keys and "translate_pick" not in keys and len(keys) == 9, f"перевод выключен: на панели {keys}")
 bar = sel._bar_layout()
 br = {k: r for k, _t, _s, r in bar[0]}
-check(abs(br["record"].left() - br["edit"].left()) <= 1 and abs(br["phone"].right() - br["copy"].right()) <= 1,
+check(abs(br["record"].left() - br["edit"].left()) <= 1 and abs(br["pin"].right() - br["copy"].right()) <= 1,
       "перевод выключен: верхний ряд из трёх плиток, края рядов совпадают")
 sel.close()
 
