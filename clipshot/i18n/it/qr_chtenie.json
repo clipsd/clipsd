@@ -1,0 +1,18 @@
+{
+  "novoe.qr_chtenie_text": "Se la schermata contiene un codice QR o a barre, nell'intestazione dell'editor compare il pulsante «QR»: apri il link o copia il testo del codice. La lettura avviene senza internet.",
+  "novoe.qr_chtenie_title": "Lettura del codice QR",
+  "ozn.qr_chtenie_text": "Un codice QR da una schermata",
+  "qr_chtenie.close": "Chiudi",
+  "qr_chtenie.confirm_no": "Non aprire",
+  "qr_chtenie.confirm_note": "L'indirizzo proviene dal codice nella schermata e non è stato verificato. Apri solo ciò di cui ti fidi.",
+  "qr_chtenie.confirm_text": "Il programma aprirà questo indirizzo nel browser:",
+  "qr_chtenie.confirm_title": "Aprire il link?",
+  "qr_chtenie.confirm_yes": "Apri",
+  "qr_chtenie.copied": "Testo del codice copiato",
+  "qr_chtenie.copy": "Copia il testo del codice",
+  "qr_chtenie.not_link": "Non è un link: si aprono solo indirizzi http e https. Il testo si può copiare.",
+  "qr_chtenie.open": "Apri il link",
+  "qr_chtenie.tip": "Nella schermata è stato trovato un codice QR o un codice a barre. Fai clic per aprire il link o copiare il testo del codice",
+  "qr_chtenie.title_many": "Codici nella schermata: {n}",
+  "qr_chtenie.title_one": "Codice nella schermata"
+}

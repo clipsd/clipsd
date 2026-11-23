@@ -217,7 +217,7 @@ ctx.config["save_format"] = "png"
 ed._measure_rows()
 ed._adapt_rows(ed.min_content_width())
 check(not ed.form_button.isVisibleTo(ed), "узкое окно: кнопки формы в ряду нет")
-check(ed.min_content_width() <= ed._need_row1[-1] and ed._need_row1[-1] < ed._need_row1[0],
+check(ed.min_content_width() <= max(ed._need_row1[-1], ed._need_bottom[1]) and ed._need_row1[-1] < ed._need_row1[0],
       "узкое окно не шире, чем без кнопки формы")
 ed._adapt_rows(2000)
 check(ed.form_button.isVisibleTo(ed), "широкое окно: кнопка формы снова в ряду")

@@ -1,0 +1,9 @@
+{
+  "errlog.close": "Chiudi",
+  "errlog.copied": "Rapporto copiato",
+  "errlog.copy": "Copia rapporto",
+  "errlog.menu_open": "Apri il registro degli errori",
+  "errlog.send": "Invia rapporto",
+  "errlog.text": "Si è verificato un errore imprevisto. Il lavoro continua: schermate e impostazioni non sono andate perse. I dettagli sono salvati nel registro degli errori. Se si ripete, copi o invii il rapporto: non contiene il suo testo né le schermate e viene inviato solo se preme il pulsante.",
+  "errlog.title": "Qualcosa è andato storto"
+}

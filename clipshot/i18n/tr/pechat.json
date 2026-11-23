@@ -1,0 +1,10 @@
+{
+  "pechat.dialog_title": "Ekran görüntüsünü yazdır",
+  "pechat.failed": "Ekran görüntüsü yazdırılamadı",
+  "pechat.none_close": "Kapat",
+  "pechat.none_pdf": "PDF olarak kaydet",
+  "pechat.none_text": "Bu bilgisayarda kurulu bir yazıcı yok. Ekran görüntüsü PDF olarak kaydedilip daha sonra veya başka bir bilgisayarda yazdırılabilir.",
+  "pechat.none_title": "Yazıcı bulunamadı",
+  "pechat.preview_title": "Baskı önizleme",
+  "pechat.sent": "Yazıcıya gönderildi"
+}

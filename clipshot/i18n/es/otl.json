@@ -4,6 +4,10 @@
   "otl.h3": "Durante 3 horas",
   "otl.m15": "Durante 15 minutos",
   "otl.more": "Elegir cuánto tiempo posponer",
+  "otl.never_ask": "No volver a preguntar",
+  "otl.never_novoe": "No mostrar las novedades",
+  "otl.never_ozn": "No abrir sola",
+  "otl.never_tour": "No mostrar la introducción",
   "otl.tip": "Posponer 1 hora",
   "otl.tomorrow": "Hasta mañana",
   "otl.week": "Una semana"

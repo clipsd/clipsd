@@ -1,0 +1,9 @@
+{
+  "novoe.pipetka_text": "The color picker (J) shows the color under the cursor and copies its code. In the selection window the arrow keys move the frame by 1 point, Shift by 10, Alt+arrows change its size.",
+  "novoe.pipetka_title": "Color picker and precise frame",
+  "ozn.pipetka_text": "A color from the screen and a precise frame",
+  "pipetka.picked_button": "Draw in this color",
+  "pipetka.picked_sub": "You can draw marks with this color",
+  "pipetka.picked_title": "Color {color} copied",
+  "pipetka.tip": "Color picker (J)\nPoint at a spot: magnified pixels and the color are shown. A click copies the color code, Esc: leave"
+}

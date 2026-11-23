@@ -1,0 +1,18 @@
+{
+  "novoe.qr_chtenie_text": "Görüntüde QR kod veya barkod varsa düzenleyicinin üst çubuğunda “QR” düğmesi görünür: bağlantıyı açın veya kodun metnini kopyalayın. İnternet olmadan okunur.",
+  "novoe.qr_chtenie_title": "QR kod okuma",
+  "ozn.qr_chtenie_text": "Görüntüden QR kod",
+  "qr_chtenie.close": "Kapat",
+  "qr_chtenie.confirm_no": "Açma",
+  "qr_chtenie.confirm_note": "Adres, görüntüdeki koddan alındı ve doğrulanmadı. Yalnızca güvendiğiniz adresleri açın.",
+  "qr_chtenie.confirm_text": "Program bu adresi tarayıcıda açacak:",
+  "qr_chtenie.confirm_title": "Bağlantı açılsın mı?",
+  "qr_chtenie.confirm_yes": "Aç",
+  "qr_chtenie.copied": "Kod metni kopyalandı",
+  "qr_chtenie.copy": "Kod metnini kopyala",
+  "qr_chtenie.not_link": "Bu bir bağlantı değil: yalnızca http ve https adresleri açılır. Metin kopyalanabilir.",
+  "qr_chtenie.open": "Bağlantıyı aç",
+  "qr_chtenie.tip": "Görüntüde bir QR kod veya barkod bulundu. Tıklayın: bağlantıyı açın veya kodun metnini kopyalayın",
+  "qr_chtenie.title_many": "Görüntüdeki kodlar: {n}",
+  "qr_chtenie.title_one": "Görüntüdeki kod"
+}

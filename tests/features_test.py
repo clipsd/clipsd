@@ -644,7 +644,7 @@ check(os.path.basename(os.path.expanduser(appmod.DEFAULTS["auto_save_dir"])) in 
 from clipshot import editor as editormod
 asked = {}
 real_dialog = editormod.QFileDialog.getSaveFileName
-editormod.QFileDialog.getSaveFileName = staticmethod(lambda parent, title, start, filters: (asked.update(start=start) or (os.path.join(tmp_dir, "выбрано.png"), "")))
+editormod.QFileDialog.getSaveFileName = staticmethod(lambda parent, title, start, filters, selected="": (asked.update(start=start) or (os.path.join(tmp_dir, "выбрано.png"), "")))
 choice = editormod.ask_save_path(None, dict(appmod.DEFAULTS, save_dir=tmp_dir, save_ask=True))
 editormod.QFileDialog.getSaveFileName = real_dialog
 check(choice == os.path.join(tmp_dir, "выбрано.png") and os.path.dirname(asked.get("start", "")) == tmp_dir,

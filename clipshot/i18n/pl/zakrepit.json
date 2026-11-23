@@ -1,0 +1,23 @@
+{
+  "novoe.zakrepit_text": "Zrzut wisi nad wszystkimi oknami jak karteczka: przeciągaj, kółko zmienia rozmiar, Ctrl+kółko przezroczystość. Przycisk „Przypnij” w edytorze i w oknie wyboru obszaru, klawisz F3.",
+  "novoe.zakrepit_title": "Przypnij zrzut nad oknami",
+  "ozn.zakrepit_text": "Zrzut nad wszystkimi oknami",
+  "zakrepit.button": "Przypnij",
+  "zakrepit.copied": "Skopiowano",
+  "zakrepit.menu_close": "Zamknij",
+  "zakrepit.menu_close_all": "Zamknij wszystkie przypięte",
+  "zakrepit.menu_copy": "Kopiuj",
+  "zakrepit.menu_editor": "Otwórz w edytorze",
+  "zakrepit.menu_opacity": "Przezroczystość",
+  "zakrepit.menu_pin": "Przypnij zrzut nad oknami",
+  "zakrepit.menu_save": "Zapisz…",
+  "zakrepit.pinned_toast": "Zrzut przypięty nad oknami",
+  "zakrepit.save_failed": "Nie udało się zapisać",
+  "zakrepit.saved": "Zapisano: {name}",
+  "zakrepit.tile_sub": "nad oknami",
+  "zakrepit.tile_title": "Przypnij",
+  "zakrepit.tip": "Przypnij zrzut nad oknami (F3)\nZrzut wisi w osobnym małym oknie. Przeciągaj myszą, kółko zmienia rozmiar, Ctrl+kółko przezroczystość, dwuklik lub Esc zamyka, prawy przycisk otwiera menu",
+  "zakrepit.training": "Zrzut ćwiczebny: nie jest przypinany nad oknami.",
+  "zakrepit.wayland_hint": "Ten pulpit może nie trzymać okna na wierzchu. Jeśli zniknie pod innymi: Alt+Spacja i „Zawsze na wierzchu”.",
+  "zakrepit.window_name": "Przypięty zrzut"
+}

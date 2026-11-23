@@ -157,6 +157,7 @@ class ClipDialog(QDialog):
         # со всем текстом в промежуточную картинку, и на Windows с масштабом 125-150 % буквы выходят бледными и
         # размытыми (замечание владельца 21.11.2026 к окну «Снимок не сохранён»). Так текст рисуется прямо в окно.
         self.card.setMinimumWidth(width)
+        self._base_width = width
         outer.addWidget(self.card)
         lay = QVBoxLayout(self.card)
         lay.setContentsMargins(24, 20, 20, 22)
@@ -288,7 +289,30 @@ class ClipDialog(QDialog):
         self.raise_()
         self.activateWindow()
 
+    def fit_footer(self):
+        """Кнопки нижнего ряда не уже своей подписи: окно шире, если ряд не помещается (1.36, слова координатора
+        23.11.2026: «Показать новое» обрезалась рядом с «Отложить ▾»). Подписи на 12 языках, обе темы."""
+        buttons = []
+        for lay in (self.footer_left, self.footer_right):
+            for i in range(lay.count()):
+                w = lay.itemAt(i).widget()
+                if w is None:
+                    continue
+                buttons += [w] if isinstance(w, QPushButton) else w.findChildren(QPushButton)
+        for b in buttons:
+            b.ensurePolished()
+            b.setMinimumWidth(b.sizeHint().width())
+        row = self.footer_left.sizeHint().width() + self.footer_right.sizeHint().width() + 10 + 24 + 20
+        self.card.setMinimumWidth(max(self._base_width, row))   # явный минимум карточки перекрывает минимум ряда
+        lay = self.layout()
+        lay.invalidate()
+        lay.activate()
+        need = self.minimumSizeHint().width()
+        if self.width() < need:
+            self.resize(need, self.height())
+
     def showEvent(self, event):
+        self.fit_footer()
         super().showEvent(event)
         track_frame_extents(self, self.frame_extents_margins)   # менеджеру окон: видимая часть без поля тени
 
@@ -340,7 +364,7 @@ class MessageCard(ClipDialog):
 
     def __init__(self, parent, title: str, text: str, icon: str = "info", primary: str = None, secondary: str = None,
                  subtitle: str = "", modal: bool = True, width: int = 480, logo: bool = False, dark: bool = None,
-                 snooze: bool = False):
+                 snooze: bool = False, never: str = None):
         from . import themes
         super().__init__(parent, title, subtitle, icon, width, dark=themes.is_dark() if dark is None else dark, logo=logo)
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, parent is None)
@@ -352,9 +376,10 @@ class MessageCard(ClipDialog):
         self.snooze_button = None
         if snooze:   # «Отложить ▾» (otlozhit.py): слева от второстепенной кнопки
             from . import otlozhit
-            self.snooze_button = otlozhit.SnoozeButton(self.dark)
+            self.snooze_button = otlozhit.SnoozeButton(self.dark, never=never)
             self.footer_right.addWidget(self.snooze_button)
-            self.snooze_button.chosen.connect(lambda key: self._pick("snooze", key))
+            self.snooze_button.chosen.connect(
+                lambda key: self._pick("never") if key == "never" else self._pick("snooze", key))
         self.secondary_button = self.secondary(secondary) if secondary else None
         self.primary_button = self.primary(primary or tr("dialogs.ok"))
         self.primary_button.clicked.connect(lambda: self._pick("primary"))

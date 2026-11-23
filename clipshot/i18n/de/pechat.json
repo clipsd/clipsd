@@ -1,0 +1,10 @@
+{
+  "pechat.dialog_title": "Screenshot drucken",
+  "pechat.failed": "Der Screenshot konnte nicht gedruckt werden",
+  "pechat.none_close": "Schließen",
+  "pechat.none_pdf": "Als PDF speichern",
+  "pechat.none_text": "Auf diesem Computer ist kein Drucker eingerichtet. Der Screenshot lässt sich als PDF speichern und später oder an einem anderen Computer drucken.",
+  "pechat.none_title": "Kein Drucker gefunden",
+  "pechat.preview_title": "Seitenvorschau",
+  "pechat.sent": "An den Drucker gesendet"
+}

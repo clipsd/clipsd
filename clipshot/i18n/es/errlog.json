@@ -1,0 +1,9 @@
+{
+  "errlog.close": "Cerrar",
+  "errlog.copied": "Informe copiado",
+  "errlog.copy": "Copiar informe",
+  "errlog.menu_open": "Abrir el registro de errores",
+  "errlog.send": "Enviar informe",
+  "errlog.text": "Se produjo un error inesperado. El trabajo continúa: las capturas y los ajustes no se han perdido. Los detalles se guardaron en el registro de errores. Si se repite, copie o envíe el informe: no contiene su texto ni capturas, y solo se envía si usted pulsa el botón.",
+  "errlog.title": "Algo salió mal"
+}

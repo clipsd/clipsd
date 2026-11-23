@@ -1,0 +1,18 @@
+{
+  "novoe.qr_chtenie_text": "Si la capture contient un code QR ou un code-barres, un bouton « QR » apparaît dans l'en-tête de l'éditeur : ouvrir le lien ou copier le texte du code. La lecture se fait sans internet.",
+  "novoe.qr_chtenie_title": "Lecture d'un code QR",
+  "ozn.qr_chtenie_text": "Un code QR depuis une capture",
+  "qr_chtenie.close": "Fermer",
+  "qr_chtenie.confirm_no": "Ne pas ouvrir",
+  "qr_chtenie.confirm_note": "L'adresse vient du code de la capture et n'a pas été vérifiée. N'ouvrez que ce en quoi vous avez confiance.",
+  "qr_chtenie.confirm_text": "Le programme ouvrira cette adresse dans le navigateur :",
+  "qr_chtenie.confirm_title": "Ouvrir le lien ?",
+  "qr_chtenie.confirm_yes": "Ouvrir",
+  "qr_chtenie.copied": "Texte du code copié",
+  "qr_chtenie.copy": "Copier le texte du code",
+  "qr_chtenie.not_link": "Ce n'est pas un lien : seules les adresses http et https s'ouvrent. Le texte peut être copié.",
+  "qr_chtenie.open": "Ouvrir le lien",
+  "qr_chtenie.tip": "Un code QR ou un code-barres a été trouvé sur la capture. Cliquez pour ouvrir le lien ou copier le texte du code",
+  "qr_chtenie.title_many": "Codes sur la capture : {n}",
+  "qr_chtenie.title_one": "Code sur la capture"
+}

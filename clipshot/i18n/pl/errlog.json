@@ -1,0 +1,9 @@
+{
+  "errlog.close": "Zamknij",
+  "errlog.copied": "Raport skopiowany",
+  "errlog.copy": "Kopiuj raport",
+  "errlog.menu_open": "Otwórz dziennik błędów",
+  "errlog.send": "Wyślij raport",
+  "errlog.text": "Wystąpił nieoczekiwany błąd. Praca trwa dalej: zrzuty ekranu i ustawienia nie zostały utracone. Szczegóły zapisano w dzienniku błędów. Jeśli to się powtarza, skopiuj lub wyślij raport: nie zawiera Twojego tekstu ani zrzutów, a wysyłka następuje tylko po kliknięciu.",
+  "errlog.title": "Coś poszło nie tak"
+}

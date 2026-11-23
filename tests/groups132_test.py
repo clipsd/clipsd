@@ -94,12 +94,13 @@ STANDARD = [t for t, _g, _tip, _k in em.TOOLS]
 # --- 1. модель порядка ------------------------------------------------------------------------------------
 check(normalize_order([]) == STANDARD, "пустой tool_order: стандартный порядок 1.31.1")
 check(normalize_order(STANDARD) == STANDARD, "стандартный порядок уже в модели групп")
-check(STANDARD.index(NUMBER) == STANDARD.index(TEXT) + 1, "номер сразу после надписей, отдельной кнопкой")
+check(STANDARD.index(NUMBER) == STANDARD.index(em.STICKER) + 1 and em.TOOL_GROUP[em.STICKER] == "labels",
+      "номер сразу после группы надписей (в ней и «Стикер», 1.36), отдельной кнопкой")
 entries = order_entries(STANDARD)
 check([e[1] for e in entries] == [MOVE, "arrows", "shapes", "labels", NUMBER, "draw", "hide", "ocr", CROP],
       f"элементы ряда: {[e[1] for e in entries]}")
-check(GROUP_TOOLS["labels"] == (CALLOUT, TEXT) and TOOL_GROUP.get(NUMBER) is None and TOOL_GROUP.get(MOVE) is None
-      and TOOL_GROUP.get(CROP) is None, "надписи: выноска и текст; номер, выделение и обрезка вне групп")
+check(GROUP_TOOLS["labels"] == (CALLOUT, TEXT, em.STICKER) and TOOL_GROUP.get(NUMBER) is None and TOOL_GROUP.get(MOVE) is None
+      and TOOL_GROUP.get(CROP) is None, "надписи: выноска, текст и стикер (1.36); номер, выделение и обрезка вне групп")
 # порядок владельца из 1.31 (группы перемешаны): группа встаёт на место своего первого инструмента
 old = [NUMBER, ELLIPSE, MOVE, ARROW, RECT, TEXT, "unknown", LINE, ELLIPSE, CROP, PENCIL, BLUR]
 norm = normalize_order(old)
@@ -208,8 +209,8 @@ done(ed)
 ed, ctx = mk(300)
 keys = {t: k for t, _g, _tip, k in em.TOOLS}
 for tool, key in keys.items():
-    if tool in (OCR, TRANSLATE):
-        continue   # режимы с распознаванием (своя проверка в ui1291_test)
+    if tool in (OCR, TRANSLATE, em.PRIVACY):
+        continue   # режимы с распознаванием (своя проверка в ui1291_test); «Скрыть личные данные» действие (skryt_dannye_test)
     QTest.keyClick(ed, key.lower())
     settle(1)
     g = TOOL_GROUP.get(tool)
@@ -269,7 +270,7 @@ done(ed)
 ed, ctx = mk(300)
 menu = ed.build_all_tools_menu()
 rows = ed.all_tools_rows
-check(set(rows) == set(STANDARD) | {"translate_all"}, f"все 19 инструментов и «Перевести всё»: {len(rows)}")
+check(set(rows) == set(STANDARD) | {"translate_all"}, f"все 20 инструментов (с «Стикер», 1.36) и «Перевести всё»: {len(rows)}")
 check(rows[ELLIPSE].key == "E" and rows["translate_all"].key == "Shift+Y" and rows[MOVE].text() == "Выделение и перемещение",
       "у строк название и клавиша")
 sections = ed.all_tools_sections()

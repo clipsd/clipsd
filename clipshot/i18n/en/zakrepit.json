@@ -1,0 +1,23 @@
+{
+  "novoe.zakrepit_text": "The screenshot hangs on top of all windows like a sticky note: drag it, the wheel changes the size, Ctrl+wheel the transparency. The Pin button in the editor and in the selection window, or the F3 key.",
+  "novoe.zakrepit_title": "Pin a screenshot on top of windows",
+  "ozn.zakrepit_text": "A screenshot on top of all windows",
+  "zakrepit.button": "Pin",
+  "zakrepit.copied": "Copied",
+  "zakrepit.menu_close": "Close",
+  "zakrepit.menu_close_all": "Close all pinned",
+  "zakrepit.menu_copy": "Copy",
+  "zakrepit.menu_editor": "Open in the editor",
+  "zakrepit.menu_opacity": "Transparency",
+  "zakrepit.menu_pin": "Pin the screenshot on top of windows",
+  "zakrepit.menu_save": "Save…",
+  "zakrepit.pinned_toast": "Screenshot pinned on top of windows",
+  "zakrepit.save_failed": "Could not save",
+  "zakrepit.saved": "Saved: {name}",
+  "zakrepit.tile_sub": "on top of windows",
+  "zakrepit.tile_title": "Pin",
+  "zakrepit.tip": "Pin the screenshot on top of windows (F3)\nThe screenshot hangs in its own small window. Drag it with the mouse, the wheel changes the size, Ctrl+wheel the transparency, a double click or Esc closes it, the right button opens a menu",
+  "zakrepit.training": "Practice image: it is not pinned on top of windows.",
+  "zakrepit.wayland_hint": "This desktop may not keep the window on top. If it goes under others: Alt+Space, then “Always on Top”.",
+  "zakrepit.window_name": "Pinned screenshot"
+}

@@ -5,6 +5,7 @@
 """Окно редактирования снимка: открывается в размер скриншота на месте снятой области."""
 
 import datetime
+import math
 import os
 import sys
 
@@ -18,20 +19,24 @@ from PyQt6.QtWidgets import (QAbstractButton, QAbstractSpinBox, QKeySequenceEdit
                              QVBoxLayout,
                              QWidget)
 
-from . import forma, hidpi, icons, otdelno
+from . import forma, hidpi, icons, otdelno, pipetka, qr_read, stickers, ten_ramka, zakrepit
 from .dialogs import PALETTES as CARD_PALETTES, ClipDialog
 from .frame_extents import track_frame_extents
 from .i18n import dynamic, tr
 from .menus import style_menu
 from .selector import force_foreground, span_rect
+from .privacy_ui import PrivacyPanel, PrivacySession, already_hidden
+from .stickers_ui import DecoPanel, StickerPalette
 from .shapes import (ARROW, BLUR, CALLOUT, CALLOUT_PAD, DARROW, ELLIPSE, FARROW, FLINE, FREEHAND_KINDS, FSHAPE, IMAGE,
                      LINE,
-                     MARKER, NUMBER, PENCIL, RECT, SMOOTHED_KINDS, TEXT, Shape, constrain, simplify, text_color_on,
+                     MARKER, NUMBER, PENCIL, RECT, SMOOTHED_KINDS, STICKER, TEXT, Shape, constrain, simplify, text_color_on,
                      text_font)
 
 MOVE, CROP, ERASER = "move", "crop", "eraser"
 OCR = "ocr"   # текст с картинки: выделить область, текст в буфер обмена
 TRANSLATE = "translate"   # перевод: выделить кусок снимка, перевод ложится поверх (в снимок не попадает)
+PIPETTE = "pipette"   # 1.36: пипетка цвета: наведение показывает цвет и увеличенные точки, щелчок копирует код цвета
+PRIVACY = "privacy"   # 1.36: «Скрыть личные данные»: действие в группе «Скрыть», а не режим (холст в него не переходит)
 ERASER_SIZES = {1: 8, 2: 14, 3: 22, 4: 34, 5: 50}   # диаметр кисти ластика по кнопкам толщины
 
 # (инструмент, значок, подсказка, клавиша)
@@ -47,11 +52,14 @@ TOOLS = [   # порядок по умолчанию (1.31.1): перемеще�
     (FSHAPE, "", "editor.tip_fshape", "O"),
     (CALLOUT, "", "editor.tip_callout", "K"),
     (TEXT, "", "editor.tip_text", "T"),
+    (STICKER, "", "editor.tip_sticker", "S"),   # 1.36: в группе «Надписи» (отдельной кнопкой окно стало бы шире на 38 px)
     (NUMBER, "", "editor.tip_number", "N"),
     (MARKER, "", "editor.tip_marker", "M"),
     (PENCIL, "", "editor.tip_pencil", "P"),
+    (PIPETTE, "", "pipetka.tip", "J"),   # 1.36: «I» занята распознаванием текста, пипетка на «J»; в группе «Рисование»
     (BLUR, "", "editor.tip_blur", "B"),
     (ERASER, "", "editor.tip_eraser", "X"),
+    (PRIVACY, "", "privacy.tip", "H"),
     (OCR, "", "editor.tip_ocr", "I"),
     (TRANSLATE, "", "editor.tip_translate", "Y"),
     (CROP, "", "editor.tip_crop", "C"),
@@ -126,6 +134,9 @@ class Canvas(QWidget):
     pressed = pyqtSignal()                           # нажатие мыши по снимку (подсказка про цвет объекта уходит)
     size_wheeled = pyqtSignal(int)                   # колесо над выделенным объектом поменяло его толщину
     form_changed = pyqtSignal()                      # 1.34: форма снимка сменилась (меню, отмена, повтор)
+    deco_changed = pyqtSignal()                      # 1.36: тень, рамка или поля сменились (панель, отмена, повтор)
+    restored = pyqtSignal()                          # 1.36: отмена или повтор вернули другие объекты (сеанс «Скрыть личные данные» закончен)
+    color_picked = pyqtSignal(object)                # 1.36: пипеткой выбран цвет (QColor)
     ZOOM_MIN, ZOOM_MAX = 0.1, 8.0
 
     def __init__(self, image: QImage, tool, color, size):
@@ -144,6 +155,8 @@ class Canvas(QWidget):
         self.eraser_mode = "object"   # object — объект целиком, part — частично
         self.eraser_size = 2          # размер кисти ластика (кнопки толщины 1–5 при ластике)
         self.eraser_pos = None        # где нарисовать кружок кисти
+        self.pipette_pos = None       # 1.36: где пипетка (точки снимка), None: курсор вне снимка
+        self._flat_cache = None       # (ключ, картинка): снимок с пометками для пипетки
         self.erasing = None           # проход ластиком: {"changed": bool, "stroke": [...], "targets": {...}}
         self.erase_hover = None       # объект, который сотрётся целиком (подсветка)
         self.modified = False
@@ -161,6 +174,11 @@ class Canvas(QWidget):
         self.crop_start = None
         self.crop_rect = None
         self.words = []            # распознанные слова (ocr.Word, рамки в точках снимка), порядок чтения
+        self.band_mode = None      # 1.36: "open" / "hide": мышью обводится кусок («Открыть кусок», «Скрыть кусок»)
+        self.band = None           # [начало, конец] обводимого прямоугольника, точки снимка
+        self.band_done = None      # вызывается с прямоугольником после отпускания мыши
+        self.press_notify = None   # вызывается с точкой нажатия (связь снимка со списком «Личные данные»), ничего не гасит
+        self.highlight = []        # рамки подсветки (наведение на строку списка «Личные данные»)
         self.words_key = None      # для какого снимка распознано (cacheKey): после обрезки или отмены распознаём заново
         self.text_sel = set()      # выделенные маркером слова (номера в порядке чтения)
         self._text_drag = False
@@ -178,6 +196,12 @@ class Canvas(QWidget):
         self._editing_original = None
         self.form = forma.Form()   # 1.34: форма снимка; каждый новый снимок прямоугольный
         self.checker_dark = False  # шахматка за формой в цветах тёмного оформления
+        self.deco = ten_ramka.Deco()   # 1.36: тень, рамка и поля вокруг снимка; каждый новый снимок без них
+        self.background = QColor(forma.DEFAULT_BACKGROUND)   # цвет полей «цветом фона» и заливки за формой в JPG
+        self.sticker_id = stickers.EMOJI[0]   # 1.36: какой стикер ставит инструмент «Стикер»
+        self.sticker_text = ""         # текст выбранной плашки (на языке интерфейса в момент выбора)
+        self.sticker_color = None      # цвет, выбранный в палитре после выбора плашки; None: цвет плашки по умолчанию
+        self.sticker_placed = None     # вызывается с кодом поставленного стикера (недавние)
         self._form_drag = None     # круг тянут за поле вокруг него: [точка нажатия, центр круга в начале, шаг отмены записан]
         self._radius_drag = None   # маркер радиуса у левого верхнего угла тянут: [шаг отмены записан]
 
@@ -224,7 +248,7 @@ class Canvas(QWidget):
     # --- состояние и отмена ------------------------------------------------
 
     def _snapshot(self):
-        return (self.base, [s.copy() for s in self.shapes], self.form.copy())
+        return (self.base, [s.copy() for s in self.shapes], self.form.copy(), self.deco.copy())
 
     def push_undo(self):
         self.undo_stack.append(self._snapshot())
@@ -237,11 +261,15 @@ class Canvas(QWidget):
         if len(snapshot) > 2:
             self.form = snapshot[2].copy()   # форма снимка отменяется и повторяется вместе с остальным
             self.form_changed.emit()
+        if len(snapshot) > 3:
+            self.deco = snapshot[3].copy()   # и тень с рамкой и полями
+            self.deco_changed.emit()
         self.shapes = [s.copy() for s in shapes]
         self.select(None)
         self.cancel_crop()
         self._apply_size()
         self.resized.emit()
+        self.restored.emit()
         self.update()
 
     def undo(self):
@@ -278,6 +306,7 @@ class Canvas(QWidget):
             self.select(None)      # выделение остаётся для ластика: стирать части только выделенного
         self.eraser_pos = None
         self.erase_hover = None
+        self.pipette_pos = None
         self.update_cursor()
         self.update()
 
@@ -326,6 +355,8 @@ class Canvas(QWidget):
                 self.update()
             return False
         self.color = QColor(color)
+        if self.tool == STICKER:
+            self.sticker_color = QColor(color)   # цвет из палитры: следующие плашки и номера этого цвета
         if self.text_edit is not None:
             self._style_text_edit()
             if self._pen_saved is not None:
@@ -359,7 +390,7 @@ class Canvas(QWidget):
         if self.editing_object():
             if self.selected.size != size:
                 self.push_undo()
-                self.selected.size = size
+                self.selected.set_size(size)   # у стикера размер 1-5 меняет саму картинку
                 self.update()
             return False
         self.pen_size = size
@@ -477,6 +508,39 @@ class Canvas(QWidget):
         key = QColor(self.color if color is None else color).rgba()
         return 1 + max((s.number for s in self.shapes if s.kind == NUMBER and s.color.rgba() == key), default=0)
 
+    def flat_image(self) -> QImage:
+        """Снимок вместе с пометками, без формы: то, что видно на холсте (цвет для пипетки). Пересобирается, когда
+        меняются снимок или пометки."""
+        key = (self.base.cacheKey(), len(self.undo_stack), len(self.redo_stack), len(self.shapes))
+        if self._flat_cache is None or self._flat_cache[0] != key:
+            image = self.base.copy()
+            image.setDevicePixelRatio(self.base.devicePixelRatio())
+            p = QPainter(image)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            for shape in self.shapes:
+                shape.paint(p, self.base)
+            p.end()
+            self._flat_cache = (key, image)
+        return self._flat_cache[1]
+
+    def pipette_color(self, pos=None):
+        """Цвет под пипеткой (или под точкой pos в точках снимка); None, если пипетка вне снимка."""
+        pos = self.pipette_pos if pos is None else pos
+        if pos is None:
+            return None
+        return pipetka.pixel_at(self.flat_image(), pos.x(), pos.y())
+
+    def _paint_pipette(self, p):
+        if self.pipette_pos is None:
+            return
+        z = self.zoom
+        wp = QPointF(self.pipette_pos.x() * z, self.pipette_pos.y() * z)
+        p.save()
+        p.resetTransform()
+        pipetka.paint_loupe(p, self.flat_image(), self.pipette_pos.x(), self.pipette_pos.y(), wp,
+                            QRect(0, 0, self.width(), self.height()), bool(self.checker_dark))
+        p.restore()
+
     def render(self) -> QImage:
         self.commit_text()
         image = self.base.copy()
@@ -486,7 +550,8 @@ class Canvas(QWidget):
         for shape in self.shapes:
             shape.paint(p, self.base)
         p.end()
-        return forma.apply(image, self.form)   # 1.34: за формой прозрачно, пометки обрезаны вместе со снимком
+        shaped = forma.apply(image, self.form)   # 1.34: за формой прозрачно, пометки обрезаны вместе со снимком
+        return ten_ramka.apply(shaped, self.form, self.deco, self.background)   # 1.36: рамка, тень, поля
 
     # --- форма снимка (1.34) ----------------------------------------------------
 
@@ -514,6 +579,26 @@ class Canvas(QWidget):
         self.form = new
         self.form_changed.emit()
         self.update()
+
+    def set_deco(self, deco, record: bool = True):
+        """Тень, рамка, поля (1.36): новое оформление; record: отдельный шаг отмены (ползунки пишут шаг один раз)."""
+        if deco == self.deco:
+            return
+        if record:
+            self.commit_text()
+            self.push_undo()
+        self.deco = deco.copy()
+        self.deco_changed.emit()
+        self.update()
+
+    def deco_pad(self) -> int:
+        """Сколько вид добавляет вокруг холста под рамку, тень и поля (0 в режиме обрезки и без оформления)."""
+        return self.deco.pad() if self.tool != CROP else 0
+
+    def _paint_deco(self, p):
+        scale = max(self.zoom, 0.01) * (self.devicePixelRatioF() or 1.0)
+        checker = lambda q, path: forma.paint_checker(q, path, self.zoom, self.checker_dark)   # noqa: E731
+        ten_ramka.paint_backdrop(p, self.form, self.lw(), self.lh(), self.deco, scale, self.background, checker)
 
     def _over_radius_handle(self, pos) -> bool:
         """Курсор на маркере радиуса (середина дуги левого верхнего угла)."""
@@ -577,6 +662,8 @@ class Canvas(QWidget):
             preview.text = self.text_edit.toPlainText() or " "
             preview.text_color = self.text_color
             preview.paint(p, self.base)
+        if self.deco.active and self.tool != CROP:
+            self._paint_deco(p)
         if self.form_active():
             self._paint_form(p)
         if self.selected is not None:
@@ -587,11 +674,29 @@ class Canvas(QWidget):
             self._paint_words(p)
         if self.tool == ERASER:
             self._paint_eraser(p)
+        if self.tool == PIPETTE:
+            self._paint_pipette(p)
+        k = 1.0 / max(self.zoom, 0.01)
+        for r in self.highlight:   # наведение на строку списка «Личные данные»: рамка вокруг места на снимке
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.setPen(QPen(QColor(255, 255, 255), 4 * k))
+            p.drawRect(r)
+            p.setPen(QPen(QColor(0, 120, 255), 2 * k))
+            p.drawRect(r)
+        if self.band is not None:
+            r = QRectF(*self.band).normalized()
+            fill = QColor(0, 120, 255, 40)
+            p.fillRect(r, fill)
+            p.setPen(QPen(QColor(255, 255, 255), 3 * k))
+            p.drawRect(r)
+            p.setPen(QPen(QColor(0, 120, 255), 1.5 * k, Qt.PenStyle.DashLine))
+            p.drawRect(r)
 
     def _paint_form(self, p):
         """1.34: за формой шахматка, как прозрачность в графических программах; пометки за формой тоже скрыты.
         У скруглённых углов маркер радиуса на дуге левого верхнего угла: его можно тянуть мышью."""
-        forma.paint_checker(p, forma.outside(self.form, self.lw(), self.lh()), self.zoom, self.checker_dark)
+        if not (self.deco.active and self.tool != CROP):   # с оформлением шахматка и поля уже нарисованы _paint_deco
+            forma.paint_checker(p, forma.outside(self.form, self.lw(), self.lh()), self.zoom, self.checker_dark)
         if self.form.is_round and self.tool not in (OCR, TRANSLATE, ERASER):
             c = forma.radius_handle(self.form, self.lw(), self.lh())
             k = 1.0 / max(self.zoom, 0.01)
@@ -671,7 +776,25 @@ class Canvas(QWidget):
             p.setPen(QPen(shape.color, 1.5, Qt.PenStyle.DashLine))
             p.drawLine(pts[-1], pts[0])
 
+    def _paint_sticker_selection(self, p, shape):
+        """Рамка повёрнутого стикера по его контуру, ручки в углах и круглая ручка поворота над верхней стороной."""
+        corners = shape.sticker_corners()
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.setPen(QPen(QColor(0, 174, 255), 1, Qt.PenStyle.DashLine))
+        p.drawPolygon(QPolygonF(corners))
+        top = (corners[0] + corners[1]) / 2
+        knob = shape.rotate_handle()
+        p.drawLine(top, knob)
+        p.setPen(QPen(QColor(0, 120, 255), 1.5))
+        p.setBrush(Qt.GlobalColor.white)
+        for pt in corners:
+            p.drawRect(QRectF(pt.x() - HANDLE / 2, pt.y() - HANDLE / 2, HANDLE, HANDLE))
+        p.drawEllipse(knob, HANDLE / 2 + 1, HANDLE / 2 + 1)
+
     def _paint_selection(self, p, shape):
+        if shape.kind == STICKER:
+            self._paint_sticker_selection(p, shape)
+            return
         p.setPen(QPen(QColor(0, 174, 255), 1, Qt.PenStyle.DashLine))
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawRect(shape.bounding_rect())
@@ -880,7 +1003,9 @@ class Canvas(QWidget):
                     "tr": Qt.CursorShape.SizeBDiagCursor, "bl": Qt.CursorShape.SizeBDiagCursor}
 
     def update_cursor(self, pos=None):
-        if self._radius_drag is not None or (pos is not None and self._radius_drag is None and self._form_drag is None
+        if self.tool == PIPETTE:
+            self.setCursor(Qt.CursorShape.CrossCursor)
+        elif self._radius_drag is not None or (pos is not None and self._radius_drag is None and self._form_drag is None
                                              and self._handle_at(pos) is None and self._over_radius_handle(pos)):
             self.setCursor(Qt.CursorShape.SizeFDiagCursor)
         elif self._form_drag is not None:
@@ -919,10 +1044,23 @@ class Canvas(QWidget):
         if event.button() != Qt.MouseButton.LeftButton:
             return
         pos = self._ep(event)
+        if self.tool == PIPETTE:
+            self.pipette_pos = pos
+            color = self.pipette_color(pos)
+            if color is not None:
+                self.color_picked.emit(color)
+            self.update()
+            return
         ctrl = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
         if self.text_edit is not None:
             self.commit_text()
             return
+        if self.band_mode:
+            self.band = [pos, pos]   # обводка куска: размытие режется или добавляется после отпускания
+            self.update()
+            return
+        if self.press_notify is not None:
+            self.press_notify(pos)
 
         if self.tool == ERASER:
             self.erasing = {"changed": False, "stroke": [], "targets": {}}
@@ -1018,6 +1156,9 @@ class Canvas(QWidget):
             self.select(None)
             self.crop_start = pos
             self.crop_rect = None
+        elif self.tool == STICKER:
+            self.select(None)
+            self.current = self._new_sticker(pos)
         elif self.tool in DRAW_TOOLS:
             fresh = self.fresh if self.fresh is not None and self.fresh.hit(pos) else None
             self.select(None)
@@ -1028,6 +1169,46 @@ class Canvas(QWidget):
                 self.current.number = self.next_number(self.current.color)
                 self.current.text_color = QColor(self.text_color) if self.text_color is not None else None
         self.update()
+
+    # --- стикеры (1.36) -------------------------------------------------------------------------------------------
+
+    def set_sticker(self, sid: str):
+        """Что ставит инструмент «Стикер»: код из stickers.ALL; текст плашки берётся на языке интерфейса сейчас."""
+        if not stickers.valid(sid):
+            return
+        self.sticker_id = sid
+        self.sticker_text = stickers.plate_text(sid)
+        self.sticker_color = None
+
+    def _new_sticker(self, pos) -> Shape:
+        sid = self.sticker_id if stickers.valid(self.sticker_id) else stickers.EMOJI[0]
+        color = self.sticker_color if self.sticker_color is not None else stickers.default_color(sid, self.color)
+        shape = Shape(STICKER, color, self.pen_size, pos)
+        shape.sticker, shape.text = sid, self.sticker_text if stickers.kind(sid) == "plate" else ""
+        return shape
+
+    def _drag_new_sticker(self, shape, pos):
+        """Новый стикер тянут от угла нажатия: пропорции остаются, размер по большему из сдвигов."""
+        start = shape.points[0]
+        a = stickers.aspect(shape.sticker, shape.text)
+        d = pos - start
+        w = max(abs(d.x()), abs(d.y()) * a)
+        h = w / a
+        shape.points[-1] = QPointF(start.x() + math.copysign(w, d.x() or 1), start.y() + math.copysign(h, d.y() or 1))
+
+    def _finish_sticker(self, shape):
+        r = shape.rect()
+        if r.width() < 8 and r.height() < 8:
+            # щелчок без протяжки: стикер размера по кнопке 1-5, центр в точке щелчка
+            w, h = stickers.default_box(shape.sticker, shape.text, self.pen_size)
+            c = shape.points[0]
+            shape.points = [QPointF(c.x() - w / 2, c.y() - h / 2), QPointF(c.x() + w / 2, c.y() + h / 2)]
+        self.push_undo()
+        self.shapes.append(shape)
+        self.select(shape)
+        self.fresh = shape
+        if self.sticker_placed is not None:
+            self.sticker_placed(shape.sticker)
 
     def _arm_click_edit(self, shape, event):
         """Текст и сноска: щелчок без сдвига откроет правку, сдвиг больше 4 px превратит нажатие в перенос."""
@@ -1073,7 +1254,16 @@ class Canvas(QWidget):
 
     def mouseMoveEvent(self, event):
         pos = self._ep(event)
+        if self.tool == PIPETTE:
+            inside = 0 <= pos.x() < self.lw() and 0 <= pos.y() < self.lh()
+            self.pipette_pos = pos if inside else None
+            self.update()
+            return
         shift = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+        if self.band is not None:
+            self.band[1] = pos
+            self.update()
+            return
 
         if self._rpress is not None:
             # Правая кнопка зажата: до 5 px это ещё щелчок (меню), дальше перенос выбранного под курсором объекта
@@ -1123,7 +1313,9 @@ class Canvas(QWidget):
             self.drag_from = pos
         elif self.current is not None:
             shape = self.current
-            if shape.kind in FREEHAND_KINDS:
+            if shape.kind == STICKER:
+                self._drag_new_sticker(shape, pos)
+            elif shape.kind in FREEHAND_KINDS:
                 if shift:
                     shape.points = [shape.points[0], pos]
                 else:
@@ -1168,6 +1360,15 @@ class Canvas(QWidget):
             return
         if event.button() != Qt.MouseButton.LeftButton:
             return
+        if self.tool == PIPETTE:
+            return
+        if self.band is not None:
+            a, b = self.band
+            self.band = None
+            self.update()
+            if self.band_done is not None:
+                self.band_done(QRectF(a, b).normalized())
+            return
         if self._radius_drag is not None:
             self._drag_radius(self._ep(event))
             self._radius_drag = None
@@ -1201,7 +1402,9 @@ class Canvas(QWidget):
         grab, self._grab_on_click = self._grab_on_click, None
         if self.current is not None:
             shape, self.current = self.current, None
-            if shape.kind == CALLOUT:
+            if shape.kind == STICKER:
+                self._finish_sticker(shape)
+            elif shape.kind == CALLOUT:
                 self._start_callout(shape)
             elif shape.is_empty() and grab is not None and grab in self.shapes:
                 self.select(grab)    # щелчок по только что проведённой линии: теперь её можно тянуть
@@ -1256,13 +1459,19 @@ class Canvas(QWidget):
             size = max(1, min(5, shape.size + step))
             if size != shape.size:
                 self.push_undo()
-                shape.size = size
+                shape.set_size(size)
                 self.selection_changed.emit(shape)
                 self.size_wheeled.emit(size)
                 self.update()
             event.accept()
         else:
             super().wheelEvent(event)
+
+    def leaveEvent(self, event):
+        if self.tool == PIPETTE and self.pipette_pos is not None:
+            self.pipette_pos = None   # курсор ушёл с холста: лупа не остаётся висеть
+            self.update()
+        super().leaveEvent(event)
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Delete and self.selected is not None:
@@ -1501,6 +1710,8 @@ SOFT = {   # 1.32: «Копировать текст» и «Перевести»
     # 1.34: «С телефона» (просьба владельца 21.11.2026): мягкая малиновая, значок цвета плитки окна выделения #b4236e;
     # четвёртое значение: цвет значка (в тёмной теме светлее, чтобы значок читался на тёмной кнопке)
     "phone": (("#fbe9f2", "#8a1653", "#f6d5e6", "#b4236e"), ("#3a1f2d", "#f6c0da", "#4a2939", "#f07ab0")),
+    # 1.36: «QR» (код найден на снимке): мягкая синяя, текст 7:1 на подложке
+    "qr": (("#e6f0fd", "#0f3a7d", "#d6e7fc", "#1660d0"), ("#1e2f4a", "#c9defc", "#273c5c", "#7fb2ff")),
 }
 
 
@@ -1522,6 +1733,7 @@ def make_style(cfg) -> str:
     ocr_bg, ocr_fg, ocr_hover, ocr_on = soft_colors("ocr", dark)
     tr_bg, tr_fg, tr_hover, tr_on = soft_colors("tr", dark)
     ph_bg, ph_fg, ph_hover, _ph_icon = soft_colors("phone", dark)
+    qr_bg, qr_fg, qr_hover, _qr_icon = soft_colors("qr", dark)
     return f"""
 QMainWindow {{ background: transparent; }}
 #panel, #bottom, #titlebar, #modeHint {{ background: transparent; color: {P['t']}; }}
@@ -1537,6 +1749,9 @@ QToolButton#more:hover {{ background: {P['s3']}; }}
 QToolButton#phone {{ border: none; border-radius: 6px; padding: 0px {GROUP_ARROW_W + 6}px 0px 7px; background: {ph_bg}; color: {ph_fg};
     font-size: {font - 1}px; font-weight: 600; }}
 QToolButton#phone:hover {{ background: {ph_hover}; }}
+QToolButton#qrFound {{ border: none; border-radius: 6px; padding: 0px 9px 0px 7px; background: {qr_bg}; color: {qr_fg};
+    font-size: {font - 1}px; font-weight: 600; }}
+QToolButton#qrFound:hover {{ background: {qr_hover}; }}
 QToolButton#tool:checked, QToolButton#group:checked {{ background: {P['accs']}; }}
 QToolButton#action::menu-indicator, QToolButton#bell::menu-indicator {{ image: none; width: 0px; }}
 QToolButton#size {{ border: none; border-radius: 4px; padding: 0px 6px; background: transparent; }}
@@ -1978,9 +2193,9 @@ GROUP_PREFIX = "group:"   # в перетаскивании: «group:<код>» 
 GROUPS = (   # (код, ключ названия, инструменты в стандартном порядке)
     ("arrows", "editor.group_arrows", (ARROW, DARROW, FARROW, FLINE, LINE)),
     ("shapes", "editor.group_shapes", (RECT, ELLIPSE, FSHAPE)),
-    ("labels", "editor.group_labels", (CALLOUT, TEXT)),
-    ("draw", "editor.group_draw", (MARKER, PENCIL)),
-    ("hide", "editor.group_hide", (BLUR, ERASER)),
+    ("labels", "editor.group_labels", (CALLOUT, TEXT, STICKER)),
+    ("draw", "editor.group_draw", (MARKER, PENCIL, PIPETTE)),   # 1.36: пипетка в группе: отдельная кнопка делала окно шире на 38 px
+    ("hide", "editor.group_hide", (BLUR, ERASER, PRIVACY)),
     ("ocr", "editor.group_ocr", (OCR, TRANSLATE)),
 )
 GROUP_TOOLS = {code: tools for code, _key, tools in GROUPS}
@@ -2493,12 +2708,13 @@ def tool_order(cfg) -> list:
 
 
 MODE_TOOLS = {OCR, TRANSLATE, CROP}   # режимы со своей строкой сверху (1.29.1): по умолчанию не включаются и не запоминаются
-NO_DEFAULT_TOOLS = MODE_TOOLS
+NO_DEFAULT_TOOLS = MODE_TOOLS | {PRIVACY, PIPETTE}   # PRIVACY: действие, PIPETTE: временный режим; по умолчанию не включаются
 TOOL_ACCUSATIVE = {
     MOVE: "editor.acc_move",
     CALLOUT: "editor.acc_callout",
     TEXT: "editor.acc_text",
     NUMBER: "editor.acc_number",
+    STICKER: "editor.acc_sticker",
     ARROW: "editor.acc_arrow",
     DARROW: "editor.acc_darrow",
     FARROW: "editor.acc_farrow",
@@ -2543,6 +2759,7 @@ SHAPE_NAMES = {
     TEXT: "editor.shape_text",
     CALLOUT: "editor.shape_callout",
     NUMBER: "editor.shape_number",
+    STICKER: "editor.shape_sticker",
     BLUR: "editor.shape_blur",
     IMAGE: "editor.shape_image",
 }   # ключи каталога; название показывают через tr(SHAPE_NAMES[...])
@@ -2563,12 +2780,25 @@ def _color_icon(color) -> QIcon:
     return QIcon(pix)
 
 
-def ask_save_path(parent, cfg):
+SAVE_FILTERS = {"png": "PNG (*.png)", "jpg": "JPEG (*.jpg *.jpeg)", "pdf": "PDF (*.pdf)"}   # 1.36: PDF только вручную
+
+
+def _filter_ext(chosen: str, fallback: str) -> str:
+    low = (chosen or "").lower()
+    for key in ("pdf", "jpg", "png"):
+        if f"*.{key}" in low:
+            return key
+    return fallback
+
+
+def ask_save_path(parent, cfg, ext=None):
     """Куда сохранить снимок по кнопке «Сохранить»: окно выбора места (начинает с папки save_dir,
-    по умолчанию «Загрузки»). Без вопроса (save_ask выключен): сразу в save_dir. None: отмена."""
+    по умолчанию «Загрузки»). Без вопроса (save_ask выключен): сразу в save_dir. None: отмена.
+    1.36: в окне выбора есть формат PDF (ext="pdf": «Сохранить в PDF», он выбран сразу). Без вопроса формат PDF
+    не берётся: по настройке save_format, PDF только по явному выбору."""
     folder = os.path.expanduser(cfg.get("save_dir") or "~")
     os.makedirs(folder, exist_ok=True)
-    ext = "jpg" if cfg.get("save_format", "png") == "jpg" else "png"
+    ext = ext if ext in SAVE_FILTERS else ("jpg" if cfg.get("save_format", "png") == "jpg" else "png")
     stem = datetime.datetime.now().strftime("Screenshot_%Y-%m-%d_%H-%M-%S")
     name = f"{stem}.{ext}"
     if not cfg.get("save_ask", True):
@@ -2577,18 +2807,17 @@ def ask_save_path(parent, cfg):
             return hidpi.reserve_path(folder, stem, ext)
         except OSError:
             return os.path.join(folder, name)   # запись не удастся и скажет об этом
-    if cfg.get("save_ask", True):
-        filters = ["PNG (*.png)", "JPEG (*.jpg *.jpeg)"]
-        if ext == "jpg":
-            filters.reverse()
-        path, _ = QFileDialog.getSaveFileName(parent, tr("editor.save_dialog"), os.path.join(folder, name),
-                                              ";;".join(filters))
-        if not path:
-            return None
-    else:
-        path = os.path.join(folder, name)
+    keys = [ext] + [k for k in SAVE_FILTERS if k != ext]
+    filters = [SAVE_FILTERS[k] for k in keys]
+    path, chosen = QFileDialog.getSaveFileName(parent, tr("editor.save_dialog"), os.path.join(folder, name),
+                                               ";;".join(filters), filters[0])
+    if not path:
+        return None
+    picked = _filter_ext(chosen, ext)
     if not os.path.splitext(path)[1]:
-        path += "." + ext
+        path += "." + picked
+    elif picked != ext and os.path.basename(path) == name:
+        path = os.path.splitext(path)[0] + "." + picked   # формат сменили, имя оставили: расширение по формату
     return path
 
 
@@ -2878,6 +3107,32 @@ QPushButton#penHintButton:pressed {{ background: {HINT_BUTTON[self.dark][3]}; bo
         self._fit()
         self.raise_()
         self.timer.start(self.NUMBER_MS)
+
+    def show_picked(self, color):
+        """1.36: пипеткой выбран цвет: «Цвет #RRGGBB скопирован» и кнопка «Рисовать этим цветом» (становится цветом
+        пометок). Держится как подсказка про цвет; следующий щелчок по снимку (новая проба) обновляет её."""
+        name = QColor(color).name().lower()
+        self.kind = "picked"
+        self.target = None
+        self.pending = {"color": name}
+        title, sub, button = tr("pipetka.picked_title", color=name.upper()), tr("pipetka.picked_sub"), tr("pipetka.picked_button")
+        self.title.setText(title)
+        self.sub.setText(sub)
+        self.button.setText(button)
+        self.button.setAccessibleName(button)
+        self.button.setIcon(color_square_icon(name, self.dark))
+        self.button.setIconSize(QSize(23, 16))
+        self.button.setToolTip(name.upper())
+        self.button.show()
+        edge = "#6b7178" if self.dark else "#8a8f98"
+        self.title_sample.setStyleSheet(f"background: {name}; border: 1px solid {edge}; border-radius: 3px;")
+        self.title_sample.setToolTip(name.upper())
+        self.title_sample.show()
+        self.sample.hide()
+        self.setAccessibleName(f"{title}. {sub}")
+        self._fit()
+        self.raise_()
+        self.timer.start(self.SHOW_MS)
 
     MAX_W = 600   # карточка не шире (как в 1.33: не закрывает снимок); длинная строка переносится по словам
 
@@ -3193,8 +3448,32 @@ def _draw_notice_icon(p, kind, c, color):
         p.drawPoint(QPointF(x, y - 3.5))
 
 
+class DecoFrame(QFrame):
+    """Рамка вокруг холста (1.36): вокруг снимка остаётся место под тень, рамку и поля, и здесь они нарисованы тем
+    же кодом, что и в готовой картинке (ten_ramka.paint_backdrop). Холст и координаты пометок при этом не меняются."""
+
+    def __init__(self, canvas):
+        super().__init__()
+        self.canvas = canvas
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        c = self.canvas
+        if not c.deco.active or c.tool == CROP:
+            return
+        p = QPainter(self)
+        p.translate(c.pos())
+        p.scale(c.zoom, c.zoom)
+        scale = max(c.zoom, 0.01) * (self.devicePixelRatioF() or 1.0)
+        checker = lambda q, path: forma.paint_checker(q, path, c.zoom, c.checker_dark)   # noqa: E731
+        ten_ramka.paint_backdrop(p, c.form, c.lw(), c.lh(), c.deco, scale, c.background, checker)
+        p.end()
+
+
 class EditorWindow(QMainWindow):
     closed = pyqtSignal(object)
+    qr_ready = pyqtSignal(object, object)   # 1.36: (ключ картинки, найденные коды) из потока чтения кода
+    QR_DELAY_MS = 500                       # пауза после правки, потом снимок читается заново
 
     def __init__(self, image: QImage, ctx, origin: QPoint = None):
         super().__init__()
@@ -3222,6 +3501,12 @@ class EditorWindow(QMainWindow):
         self.canvas.eraser_size = int(cfg.get("eraser_size", 2))
         if cfg.get("text_color"):
             self.canvas.text_color = QColor(cfg["text_color"])
+        self.canvas.deco = ten_ramka.Deco.from_config(cfg)   # размеры и цвет прошлого раза; включается панелью
+        self.canvas.background = forma.background(cfg)
+        self.canvas.sticker_placed = self._sticker_placed
+        if stickers.valid(cfg.get("sticker_last")):
+            self.canvas.set_sticker(cfg["sticker_last"])
+        self.canvas.deco_changed.connect(self._sync_deco)
         self.canvas.resized.connect(self._canvas_resized)
         self.canvas.selection_changed.connect(self._selection_changed)
         self.canvas.changed.connect(self._canvas_changed)
@@ -3234,6 +3519,7 @@ class EditorWindow(QMainWindow):
         self.canvas.resized.connect(self._update_apart_button)
         self.canvas.size_wheeled.connect(lambda size: self._object_restyled(size=size))
         self.canvas.form_changed.connect(self._sync_form)
+        self.canvas.color_picked.connect(self._pipette_picked)
         self.canvas.checker_dark = palette(cfg)["dark"]
         self._pen_hint = None
         self._insert_hint = None     # 22.11.2026: «Вставлено в снимок · Открыть отдельно»
@@ -3246,11 +3532,21 @@ class EditorWindow(QMainWindow):
         self.canvas.text_edit_started.connect(self._text_edit_started)
         self._ocr_job = None
         self._zoom_fit_mode = False
+        # 1.36: чтение QR-кода и штрихкода (qr_read.py): после открытия и после правок снимка, в отдельном потоке
+        self._qr_key = None
+        self._qr_busy = False
+        self._qr_dirty = False
+        self._qr_timer = QTimer(self)
+        self._qr_timer.setSingleShot(True)
+        self._qr_timer.timeout.connect(self._qr_scan)
+        self.qr_ready.connect(self._qr_found)
+        self.canvas.changed.connect(self._qr_schedule)
+        self.canvas.resized.connect(self._qr_schedule)
 
         # Снимок в синей рамке на тёмном поле.
-        self.image_frame = QFrame()
+        self.image_frame = DecoFrame(self.canvas)
         self.image_frame.setObjectName("imageFrame")
-        frame_layout = QVBoxLayout(self.image_frame)
+        self.frame_layout = frame_layout = QVBoxLayout(self.image_frame)
         frame_layout.setContentsMargins(FRAME_WIDTH, FRAME_WIDTH, FRAME_WIDTH, FRAME_WIDTH)
         frame_layout.addWidget(self.canvas)
         stage = QWidget()
@@ -3272,7 +3568,23 @@ class EditorWindow(QMainWindow):
         layout.setSpacing(0)
         self.panel = self._build_panel()
         layout.addWidget(self.panel)
-        layout.addWidget(self.scroll, 1)
+        self.privacy_panel = PrivacyPanel()
+        self.privacy_panel.restyle(palette(cfg))
+        self.privacy_panel.cfg = cfg
+        self.privacy_panel.closed.connect(self._privacy_closed)
+        self.privacy_panel.manual_requested.connect(self._privacy_manual)
+        self.privacy_panel.hovered.connect(self._privacy_hover)
+        self.privacy_panel.tool_changed.connect(self._privacy_tool)
+        self.canvas.band_done = self._privacy_band
+        self.canvas.press_notify = self._privacy_press
+        self.privacy_session = None
+        self.canvas.restored.connect(self._privacy_restored)
+        middle = QHBoxLayout()   # снимок и справа от него панель «Личные данные» (когда открыта)
+        middle.setContentsMargins(0, 0, 0, 0)
+        middle.setSpacing(0)
+        middle.addWidget(self.scroll, 1)
+        middle.addWidget(self.privacy_panel)
+        layout.addLayout(middle, 1)
         # Подсказка режима текста и перевода: отдельная строка над нижней панелью, место под неё не берётся у снимка,
         # пока режима нет; уведомления («Текст скопирован…») тоже ложатся сюда, а не на текст снимка
         self.mode_hint = QLabel()
@@ -3314,6 +3626,7 @@ class EditorWindow(QMainWindow):
         notifications.register(ctx)
         notifications.first_run_seen(cfg)
         notifications.listen(self._sync_bell)
+        notifications.listen(self._notices_changed)
         self._sync_bell()
         self.scroll.viewport().installEventFilter(self)   # Ctrl+колесо над полем вокруг снимка
         self._update_info()
@@ -3405,7 +3718,7 @@ class EditorWindow(QMainWindow):
             button = DraggableToolButton(tool)
             self._style_tool_button(button, icons.icon(tool), self._tool_tip(tool))
             button.setChecked(tool == self.canvas.tool)
-            button.clicked.connect(lambda _c, t=tool: self.select_tool(t))
+            button.clicked.connect(lambda _c, t=tool: self.select_tool(t, open_palette=True))   # 1.36: «Стикер»: щелчок открывает палитру
             self.tool_group.addButton(button)
             self.tool_buttons[tool] = button
         # 1.32: группы (как в Office): значок = последний выбранный инструмент группы, ▾ = меню группы
@@ -3414,7 +3727,7 @@ class EditorWindow(QMainWindow):
             gb = GroupButton(code)
             self._style_tool_button(gb, icons.icon(self.group_current[code]), "", "group")
             gb.setFixedSize(GROUP_W, 36)
-            gb.clicked.connect(lambda _c, c=code: self.select_tool(self.group_current[c]))
+            gb.clicked.connect(lambda _c, c=code: self.select_tool(self.group_current[c], open_palette=True))
             gb.menu_requested.connect(self.show_group_menu)
             self.group_buttons[code] = gb
         self.tool_strip.setup(tool_order(self.ctx.config), self.tool_buttons, self.group_buttons, self._tool_available)
@@ -3486,6 +3799,24 @@ class EditorWindow(QMainWindow):
         self.phone_button = phone_b
         self._phone_icon()
         self._set_phone_label(not self.system_title)
+        # 1.36: «QR» появляется, только когда на снимке найден QR-код или штрихкод (чтение без интернета, qr_read.py)
+        qr_b = QToolButton()
+        qr_b.setObjectName("qrFound")
+        qr_b.setIcon(icons.icon("qr", soft_colors("qr", palette(self.ctx.config)["dark"])[3]))
+        qr_b.setIconSize(QSize(18, 18))
+        qr_b.setText("QR")
+        qr_b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        qr_b.setFixedHeight(30)
+        qr_b.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        qr_b.setCursor(Qt.CursorShape.PointingHandCursor)
+        qr_b.setToolTip(tr("qr_chtenie.tip"))
+        qr_b.setAccessibleName(tr("qr_chtenie.tip"))
+        qr_b.clicked.connect(self.show_qr)
+        qr_b.hide()
+        self.qr_button = qr_b
+        self.qr_codes = []
+        top_row.addWidget(qr_b)
+        top_row.addSpacing(6)
         top_row.addWidget(phone_b)
         top_row.addSpacing(8)
         bell = BellButton()
@@ -4020,8 +4351,9 @@ class EditorWindow(QMainWindow):
         self.text_top.setVisible(text)
         self.text_bottom.setVisible(text)
         self.crop_top.setVisible(crop)
-        for b in (self.save_button, self.copy_button, self.copy_close_button):
+        for b in (self.save_button, self.print_button, self.copy_button, self.copy_close_button):
             b.setVisible(not crop)   # обрезка: «Скопировать и закрыть», «Скопировать», «Сохранить» не путать с «Обрезать»
+        self.pin_button.setVisible(not crop and getattr(self, "_pin_shown", False))
         if translate or text:
             self.mode_hint.setVisible(False)
 
@@ -4033,7 +4365,7 @@ class EditorWindow(QMainWindow):
         bottom.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
         row = QHBoxLayout(bottom)
         row.setContentsMargins(10, 6, 6, 6)
-        row.setSpacing(8)
+        row.setSpacing(6)   # 1.36: с «Печать ▾» самый узкий вид нижней строки укладывается в 656 px и на широких шрифтах
         self.info = QLabel()
         self.info.setObjectName("info")
         self.info.setMinimumWidth(10)
@@ -4070,12 +4402,38 @@ class EditorWindow(QMainWindow):
         zoom_fit.clicked.connect(self.zoom_fit)
         self.zoom_fit_button = zoom_fit
         row.addSpacing(10)
+        pin = QPushButton(icons.icon("pin"), "")   # 1.36: закрепить снимок поверх окон: значок, подпись в подсказке
+        pin.setObjectName("light")
+        pin.setIconSize(QSize(18, 18))
+        pin.setFixedWidth(36)
+        pin.setStyleSheet("QPushButton { padding: 0px; }")
+        pin.setToolTip(tr("zakrepit.tip"))
+        pin.setAccessibleName(tr("zakrepit.button"))
+        pin.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        pin.clicked.connect(self.pin_image)
+        self.pin_button = pin
+        self._pin_shown = False   # показывается, только когда в строке есть свободное место (_adapt_rows): прежние пороги сохраняются
+        pin.hide()
         save = QPushButton(icons.icon("save"), "  " + tr("editor.save"))
         save.setObjectName("light")   # 1.32: «Сохранить» и «Скопировать» лёгкие, без рамки
         save.setIconSize(QSize(18, 18))
         save.setToolTip(tr("editor.save_tip"))
         save.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         save.clicked.connect(self.save_and_close)
+        # 1.36: «Печать ▾» (Печать…, Предпросмотр…, Сохранить в PDF…), Ctrl+P
+        prn = QPushButton(icons.icon("print"), "  " + tr("editor.print"))
+        prn.setObjectName("light")
+        prn.setIconSize(QSize(18, 18))
+        prn.setToolTip(tr("editor.print_tip"))
+        prn.setAccessibleName(tr("editor.print"))
+        prn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        prn_menu = QMenu(prn)
+        style_menu(prn_menu, self.ctx.config)
+        for key, slot in (("editor.print_item", self.print_image), ("editor.print_preview", self.print_preview),
+                          ("editor.save_pdf", self.save_pdf)):
+            prn_menu.addAction(tr(key)).triggered.connect(lambda _c=False, f=slot: f())
+        prn.setMenu(prn_menu)
+        self.print_button, self.print_menu = prn, prn_menu
         copy = QPushButton(icons.icon("copy"), "  " + tr("editor.copy"))
         copy.setObjectName("light")
         copy.setIconSize(QSize(18, 18))
@@ -4165,7 +4523,9 @@ class EditorWindow(QMainWindow):
         self.panel_row2.addSpacing(6)
         self.panel_row2.addWidget(block)
         row.addSpacing(6)
+        row.addWidget(pin)
         row.addWidget(save)
+        row.addWidget(prn)
         row.addWidget(copy)
         row.addSpacing(10)
         row.addWidget(copy_close)
@@ -4193,17 +4553,22 @@ class EditorWindow(QMainWindow):
                         self._key_slots.setdefault(seq[0].toCombined(), slot)
 
         for tool, _glyph, _tip, key in TOOLS:
-            bind([key], lambda t=tool: self.select_tool(t))
+            # 1.36: клавиша S включает «Стикер» с прошлым выбором, повторное S открывает палитру (клавиши палитры не мешают другим)
+            bind([key], lambda t=tool: self.select_tool(t, open_palette=(t == STICKER and self.canvas.tool == STICKER)))
         for level in range(1, 6):
             bind([str(level)], lambda lv=level: self.select_size(lv))
         bind([QKeySequence.StandardKey.Undo], self.canvas.undo)
         bind(["Ctrl+Y", "Ctrl+Shift+Z"], self.canvas.redo)   # повтор одинаково в Windows и Linux, без StandardKey
         bind([QKeySequence.StandardKey.Save], self.save_and_close)
+        bind([QKeySequence.StandardKey.Print], self.print_image)   # 1.36: Ctrl+P
+        bind(["Ctrl+Shift+P"], self.save_pdf)                      # 1.36: «Сохранить в PDF»
         bind([QKeySequence.StandardKey.Copy], self.copy_shortcut)
         bind([QKeySequence.StandardKey.SelectAll], self.select_all_shortcut)
         bind(["Return", "Enter"], self.enter_pressed)
         bind(["Ctrl+Return", "Ctrl+Enter"], self.copy_and_close)
         bind(["Shift+Y"], self.translate_all)
+        bind(["U"], lambda: self._privacy_piece_key("open"))        # 1.36: «Открыть кусок» (когда открыта панель «Личные данные»)
+        bind(["Shift+U"], lambda: self._privacy_piece_key("hide"))   # 1.36: «Скрыть кусок»
         bind(["Escape"], self.escape)
         bind(["Ctrl+D"], self.canvas.duplicate_selected)
         bind(["Ctrl+,"], self.open_settings)
@@ -4212,6 +4577,7 @@ class EditorWindow(QMainWindow):
         bind(["Ctrl+0"], lambda: self.set_zoom(1.0))
         bind(["Ctrl+9"], self.zoom_fit)
         bind(["F1"], self.start_tour)
+        bind(["F3"], self.pin_image)   # 1.36: закрепить снимок поверх окон
         bind([QKeySequence.StandardKey.Paste], lambda: self.paste_image(True))   # Ctrl+V: всегда в этот снимок
         bind(["Shift+Delete"], self.canvas.delete_selected)
         if sys.platform == "win32":
@@ -4271,7 +4637,7 @@ class EditorWindow(QMainWindow):
         self.ctx.save_config()
 
     _BACK_ATTR = {OCR: "_tool_before_text", TRANSLATE: "_tool_before_translate", CROP: "_tool_before_crop",
-                  ERASER: "_tool_before_eraser"}
+                  ERASER: "_tool_before_eraser", PIPETTE: "_tool_before_pipette"}
 
     def _real_tool_before(self, prev):
         """Инструмент, к которому вернёт выход: если вошли из другого режима, то тот, что был до него (по цепочке),
@@ -4284,7 +4650,13 @@ class EditorWindow(QMainWindow):
             prev = getattr(self, self._BACK_ATTR[prev], None)
         return prev or MOVE
 
-    def select_tool(self, tool):
+    def select_tool(self, tool, open_palette=False):
+        if tool == PRIVACY:
+            if self._tool_available(PRIVACY):
+                self.hide_personal()
+            if getattr(self, "tool_buttons", None):
+                self.tool_buttons[self.canvas.tool].setChecked(True)   # действие, а не режим: прежний инструмент остаётся
+            return
         if tool == OCR and not self.ctx.config.get("ocr_enabled", True):
             return   # распознавание выключено в настройках
         if tool == TRANSLATE and not self.ctx.config.get("translate_enabled", True):
@@ -4309,15 +4681,17 @@ class EditorWindow(QMainWindow):
         if hasattr(self, "text_color_button"):
             self._sync_controls()
         self.tool_buttons[tool].setChecked(True)
-        if tool in TOOL_GROUP and getattr(self, "group_buttons", None):   # 1.32: инструмент встаёт на значок своей группы
+        if tool in TOOL_GROUP and tool != PIPETTE and getattr(self, "group_buttons", None):   # 1.32: инструмент встаёт на значок своей группы
             self.group_current[TOOL_GROUP[tool]] = tool
             last = dict(self.ctx.config.get("tool_group_last") or {})
             last[TOOL_GROUP[tool]] = tool
             self.ctx.config["tool_group_last"] = last
         self._sync_groups()
-        if tool not in MODE_TOOLS:   # режимы (текст, перевод, обрезка) не запоминаются: следующий снимок открывается обычным видом
+        if tool not in MODE_TOOLS and tool != PIPETTE:   # режимы (текст, перевод, обрезка) и пипетка не запоминаются: следующий снимок открывается обычным видом
             self.ctx.config["tool"] = tool
             self.ctx.save_config()   # выбор сразу запоминается для следующего снимка
+        if tool == STICKER and open_palette and self.isVisible() and type(self.ctx).__name__ != "TrainCtx":
+            QTimer.singleShot(0, self.show_sticker_palette)   # 1.36: выбор стикера (щелчок по кнопке или клавиша S)
 
     def select_color(self, color):
         """Ничего не выделено: цвет следующих линий (запоминается). Выделен объект: перекрашивается только он,
@@ -4512,9 +4886,15 @@ class EditorWindow(QMainWindow):
         """«Рисовать дальше…»: новое значение объекта становится текущим для следующих линий и запоминается."""
         hint = self._pen_hint
         pending = dict(hint.pending) if hint is not None else {}
+        picked = hint is not None and hint.kind == "picked"
         if hint is not None:
             hint.dismiss()
         if not pending:
+            return
+        if picked and "color" in pending:   # 1.36: цвет из пипетки встаёт в палитру образцом и становится цветом пометок
+            self.remember_own_color(pending["color"])
+            self.select_color(pending["color"])
+            self.exit_pipette_mode()
             return
         kw = {k: pending[k] for k in ("color", "size") if k in pending}
         if "text_color" in pending:
@@ -4864,6 +5244,88 @@ class EditorWindow(QMainWindow):
         self.ctx.config["tool_order"] = order
         self.ctx.save_config()
 
+    # --- 1.36: стикеры, тень и рамка -------------------------------------------------------------------------------
+
+    def show_sticker_palette(self):
+        """Палитра стикеров под кнопкой инструмента (или у верха снимка, если кнопки в ряду нет)."""
+        old = getattr(self, "_sticker_palette", None)
+        if old is not None:
+            old.close()
+        pal = StickerPalette(self, self.ctx.config, palette(self.ctx.config)["dark"], self.canvas.sticker_id)
+        pal.color = QColor(self.canvas.sticker_color or self.canvas.color)
+        pal._rebuild()
+        pal.chosen.connect(self._sticker_chosen)
+        self._sticker_palette = pal
+        button = self.tool_buttons.get(STICKER)
+        if button is not None and button.isVisible():
+            at = button.mapToGlobal(QPoint(0, button.height() + 4))
+        else:
+            at = self.mapToGlobal(QPoint(60, 120))
+        area = (QGuiApplication.screenAt(at) or QGuiApplication.primaryScreen()).availableGeometry()
+        pal.adjustSize()
+        at = QPoint(min(at.x(), area.right() - pal.width() - 4), min(at.y(), area.bottom() - pal.height() - 4))
+        pal.popup_at(at)
+        return pal
+
+    def _sticker_chosen(self, sid):
+        self.canvas.set_sticker(sid)
+        self.ctx.config["sticker_last"] = sid
+        self.ctx.save_config()
+        if self.canvas.tool != STICKER:
+            self.select_tool(STICKER, open_palette=False)
+        self.canvas.setFocus()
+
+    def _sticker_placed(self, sid):
+        stickers.remember(self.ctx.config, sid)
+        self.ctx.save_config()
+
+    def show_deco_panel(self):
+        old = getattr(self, "_deco_panel", None)
+        if old is not None:
+            old.close()
+        cfg = self.ctx.config
+        panel = DecoPanel(self, self.canvas.deco, PALETTE + self._own_colors(), palette(cfg)["dark"], self.form_note())
+        panel.changed.connect(self._deco_edited)
+        self._deco_panel = panel
+        button = getattr(self, "form_button", None)
+        if button is not None and button.isVisible():
+            at = button.mapToGlobal(QPoint(0, button.height() + 4))
+        else:
+            at = self.mapToGlobal(QPoint(60, 120))
+        area = (QGuiApplication.screenAt(at) or QGuiApplication.primaryScreen()).availableGeometry()
+        panel.adjustSize()
+        at = QPoint(min(at.x(), area.right() - panel.width() - 4), min(at.y(), area.bottom() - panel.height() - 4))
+        panel.popup_at(at)
+        return panel
+
+    def _deco_edited(self, deco, record):
+        self.canvas.set_deco(deco, record)
+        deco.remember(self.ctx.config)
+        self.ctx.save_config()
+
+    def _deco_pad_px(self) -> int:
+        return math.ceil(self.canvas.deco_pad() * self.canvas.zoom)
+
+    def _sync_deco_margins(self):
+        """Вокруг холста место под тень, рамку и поля (по масштабу вида): рисует его DecoFrame."""
+        m = FRAME_WIDTH + self._deco_pad_px()
+        layout = getattr(self, "frame_layout", None)
+        if layout is not None and layout.contentsMargins().left() != m:
+            layout.setContentsMargins(m, m, m, m)
+        self.image_frame.update()
+
+    def _sync_deco(self):
+        """Тень, рамка или поля сменились (панель, отмена, повтор): поля вокруг холста, размер окна, строка размера."""
+        panel = getattr(self, "_deco_panel", None)
+        if panel is not None and panel.isVisible() and panel.deco != self.canvas.deco:
+            panel.load(self.canvas.deco)
+        self._sync_deco_margins()
+        self.image_frame.adjustSize()
+        self.fit_size()
+        self._update_info()
+        if self._zoom_fit_mode:
+            QTimer.singleShot(0, self.zoom_fit)
+
     # --- 1.34: форма снимка ---------------------------------------------------------------------
 
     def last_form(self) -> str:
@@ -5038,6 +5500,8 @@ class EditorWindow(QMainWindow):
             action.triggered.connect(lambda _c=False, c=code: self.set_form(c))
             if code == forma.RECT:
                 menu.addSeparator()
+        menu.addSeparator()
+        menu.addAction(icons.icon("deco"), tr("deco.menu")).triggered.connect(self.show_deco_panel)   # 1.36
         note = self.form_note()
         if note:
             # одной строкой под списком: в JPG за формой будет фон, а не прозрачность. Подпись, а не неактивный пункт:
@@ -5099,6 +5563,8 @@ class EditorWindow(QMainWindow):
             return bool(self.ctx.config.get("ocr_enabled", True))
         if tool == TRANSLATE:
             return bool(self.ctx.config.get("translate_enabled", True))
+        if tool == PRIVACY:
+            return bool(self.ctx.config.get("ocr_enabled", True))   # работает на распознавании текста
         return True
 
     def _initial_group_tools(self) -> dict:
@@ -5122,6 +5588,8 @@ class EditorWindow(QMainWindow):
     def _group_tool(self, code):
         """Инструмент на значке группы с учётом выключенных в настройках."""
         tool = self.group_current.get(code, GROUP_MAIN[code])
+        if self.canvas.tool == PIPETTE and PIPETTE in GROUP_TOOLS[code]:
+            return PIPETTE   # пока пипетка включена, значок группы показывает её; настоящий последний инструмент группы помнится
         if self._tool_available(tool):
             return tool
         avail = [t for t in GROUP_TOOLS[code] if self._tool_available(t)]
@@ -5184,7 +5652,7 @@ class EditorWindow(QMainWindow):
                 f = act.font()
                 f.setBold(True)
                 act.setFont(f)
-            act.triggered.connect(lambda _c=False, t=tool: self.select_tool(t))
+            act.triggered.connect(lambda _c=False, t=tool: self.select_tool(t, open_palette=True))
         if code == "ocr" and self._tool_available(TRANSLATE):
             act = menu.addAction(icons.icon("translate_all"), tr("editor.menu_translate_all") + "\tShift+Y")
             act.triggered.connect(self.translate_all)
@@ -5218,6 +5686,9 @@ class EditorWindow(QMainWindow):
         b = getattr(self, "phone_button", None)
         if b is not None:
             b.setIcon(icons.icon("phone", soft_colors("phone", palette(self.ctx.config)["dark"])[3]))
+        q = getattr(self, "qr_button", None)
+        if q is not None:
+            q.setIcon(icons.icon("qr", soft_colors("qr", palette(self.ctx.config)["dark"])[3]))
 
     def _set_phone_label(self, on: bool):
         """«С телефона» с подписью или (системный заголовок, слишком узкая шапка) только значок."""
@@ -5329,7 +5800,7 @@ class EditorWindow(QMainWindow):
                     row = ToolRow(tool, name, keys.get(tool, ""), self._badged_icon(tool) if tool == default
                                   else icons.icon(tool), current=tool == self.canvas.tool, tokens=t)
                     row.clicked.connect(lambda _c=False, tl=tool: (menu.close(), self.translate_all() if tl == "translate_all"
-                                                                   else self.select_tool(tl)))
+                                                                   else self.select_tool(tl, open_palette=True)))
                     if tool != "translate_all":
                         row.context.connect(lambda tl, pos: (menu.close(), self.build_tool_menu(tl).exec(pos)))
                     self.all_tools_rows[tool] = row
@@ -5346,6 +5817,10 @@ class EditorWindow(QMainWindow):
         forms.setIcon(icons.icon("form_" + forma.icon_code(self._last_form_obj() if self.canvas.form.is_rect
                                                             else self.canvas.form)))
         menu.addMenu(forms)
+        pin = menu.addAction(icons.icon("pin"), tr("zakrepit.menu_pin"))   # 1.36: в узком окне кнопки «Закрепить» внизу нет
+        pin.setShortcut("F3")
+        pin.triggered.connect(self.pin_image)
+        self.all_tools_pin = pin
         self._all_tools_menu = menu
         return menu
 
@@ -5424,15 +5899,23 @@ class EditorWindow(QMainWindow):
         # нижняя строка: подписи «Вписать», «Сохранить», «Скопировать» или значки
         bl = self.bottom.layout()
         was = getattr(self, "_bottom_compact", False)
+        was_pin = getattr(self, "_pin_shown", False)
+        self._set_pin_shown(False)   # пороги подписей считаются без «Закрепить» (1.36): он появляется, только если место есть
         self._set_bottom_compact(False)
         bl.invalidate()
         full = bl.minimumSize().width()
+        self._set_pin_shown(True)
+        bl.invalidate()
+        full_pin = bl.minimumSize().width()
+        self._set_pin_shown(False)
         self._set_bottom_compact(True)
         bl.invalidate()
         compact = bl.minimumSize().width()
         self._set_bottom_compact(was)
+        self._set_pin_shown(was_pin)
         bl.invalidate()
         self._need_bottom = (full, compact)
+        self._need_bottom_pin = full_pin
         self._stage = self._row2_state = self._bottom_state = None   # вид выбирается заново при следующей подгонке
 
     def min_content_width(self) -> int:
@@ -5477,6 +5960,8 @@ class EditorWindow(QMainWindow):
         self._bottom_state = low
         if (low == 1) != getattr(self, "_bottom_compact", False):
             self._set_bottom_compact(low == 1)
+        shown = getattr(self, "_pin_shown", False)   # 1.36: «Закрепить» значком, когда после подписей ещё остаётся место
+        self._set_pin_shown(low == 0 and width >= self._need_bottom_pin + (0 if shown else COLLAPSE_SLACK))
         self._fit_phone_label(width)
 
     def _set_row2_compact(self, level):
@@ -5488,6 +5973,10 @@ class EditorWindow(QMainWindow):
             self.ocr_button.setVisible(level < 2 and self.ctx.config.get("ocr_enabled", True))
         if getattr(self, "tr_block", None) is not None:
             self.tr_block.setVisible(level < 1 and self.ctx.config.get("translate_enabled", True))
+
+    def _set_pin_shown(self, on: bool):
+        self._pin_shown = bool(on)
+        self.pin_button.setVisible(self._pin_shown and self.canvas.tool != CROP)
 
     def _set_bottom_compact(self, on: bool):
         """Узкое окно: «Вписать», «Сохранить», «Скопировать» значками с подсказкой; «Скопировать и закрыть» с подписью."""
@@ -5502,7 +5991,7 @@ class EditorWindow(QMainWindow):
             fit.setIcon(QIcon())
             fit.setText(tr("editor.zoom_fit"))
             fit.setFixedWidth(max(76, fit.fontMetrics().horizontalAdvance(fit.text()) + 22))
-        for b, key in ((self.save_button, "editor.save"), (self.copy_button, "editor.copy")):
+        for b, key in ((self.save_button, "editor.save"), (self.print_button, "editor.print"), (self.copy_button, "editor.copy")):
             if on:
                 b.setText("")
                 b.setFixedWidth(36)
@@ -5553,8 +6042,6 @@ class EditorWindow(QMainWindow):
         title.setStyleSheet(f"font-weight: bold; font-size: 15px; color: {pal['t']}; padding: 6px 8px 4px 8px;")
         head.addWidget(title)
         head.addStretch(1)
-        items = notifications.items(cfg)
-        done = notifications.read_ids(cfg)
         read_all = QPushButton(tr("notifications.read_all"))
         read_all.setObjectName("bellLink")
         read_all.setFlat(True)
@@ -5562,23 +6049,17 @@ class EditorWindow(QMainWindow):
         read_all.setStyleSheet(f"QPushButton#bellLink {{ border: none; background: transparent; color: {pal['link']};"
                                f" font-size: 13px; padding: 0 8px; min-height: 24px; }}"
                                f" QPushButton#bellLink:disabled {{ color: {pal['t2']}; }}")
-        read_all.setEnabled(any(it["id"] not in done and not it.get("history") for it in items))
-        read_all.clicked.connect(lambda: (notifications.mark_read(cfg, [it["id"] for it in items], self.ctx.save_config),
-                                          menu.close()))
+        read_all.clicked.connect(lambda: (notifications.mark_read(
+            cfg, [it["id"] for it in notifications.items(cfg)], self.ctx.save_config), menu.close()))
         head.addWidget(read_all)
         col.addLayout(head)
-        self.notice_rows = {}
-        if not items:
-            empty = QLabel(tr("notifications.empty"))
-            empty.setStyleSheet(f"color: {pal['t2']}; padding: 14px 10px 16px 10px; font-size: 13px;")
-            col.addWidget(empty)
-        for it in items:
-            row = NoticeRow(it, it["id"] not in done and not it.get("history"), pal)
-            row.clicked.connect(lambda _c=False, item=it: (menu.close(), self.open_notice(item)))
-            if row.action_button is not None:
-                row.action_button.clicked.connect(lambda _c=False, item=it: (menu.close(), self.open_notice(item)))
-            self.notice_rows[it["id"]] = row
-            col.addWidget(row)
+        rows = QWidget()   # пункты: перерисовываются, пока список открыт (_refill_notices, 1.36)
+        rows_col = QVBoxLayout(rows)
+        rows_col.setContentsMargins(0, 0, 0, 0)
+        rows_col.setSpacing(2)
+        col.addWidget(rows)
+        self._notice_parts = (menu, holder, rows_col, read_all, pal)
+        self._refill_notices()
         check = QPushButton(tr("updater.menu.check"))
         check.setObjectName("bellLink")
         check.setFlat(True)
@@ -5596,14 +6077,67 @@ class EditorWindow(QMainWindow):
         self._notices_menu = menu
         return menu
 
+    def _refill_notices(self):
+        """Пункты списка по текущим настройкам. Зовётся при построении и при изменении списка в открытом
+        колокольчике (пришёл ответ канала: «Доступна версия X» появляется без переоткрытия)."""
+        from . import notifications
+        parts = getattr(self, "_notice_parts", None)
+        if parts is None:
+            return
+        menu, holder, rows_col, read_all, pal = parts
+        cfg = self.ctx.config
+        items = notifications.items(cfg)
+        done = notifications.read_ids(cfg)
+        while rows_col.count():
+            w = rows_col.takeAt(0).widget()
+            if w is not None:
+                w.setParent(None)
+                w.deleteLater()
+        read_all.setEnabled(any(it["id"] not in done and not it.get("history") for it in items))
+        self.notice_rows = {}
+        if not items:
+            empty = QLabel(tr("notifications.empty"))
+            empty.setStyleSheet(f"color: {pal['t2']}; padding: 14px 10px 16px 10px; font-size: 13px;")
+            rows_col.addWidget(empty)
+        for it in items:
+            row = NoticeRow(it, it["id"] not in done and not it.get("history"), pal)
+            row.clicked.connect(lambda _c=False, item=it: (menu.close(), self.open_notice(item)))
+            if row.action_button is not None:
+                row.action_button.clicked.connect(lambda _c=False, item=it: (menu.close(), self.open_notice(item)))
+            self.notice_rows[it["id"]] = row
+            rows_col.addWidget(row)
+
+    def _notices_changed(self):
+        """Список уведомлений изменился (notifications.listen): открытый колокольчик перерисовывается на месте."""
+        menu = getattr(self, "_notices_menu", None)
+        try:
+            if menu is None or not menu.isVisible():
+                return
+            self._refill_notices()
+            holder = self._notice_parts[1]
+            holder.adjustSize()
+            menu.resize(menu.sizeHint())
+            anchor = getattr(self, "_notices_right", None)
+            if anchor is not None:
+                menu.move(anchor - menu.width(), menu.y())
+        except RuntimeError:   # окно или меню уже удалены Qt
+            return
+
     def show_notifications(self):
         menu = self.build_notifications_menu()
         b = self.bell_button
         b.setDown(True)
         try:
+            from . import updater
+            updater.get_updater(self.ctx).bell_check()   # 1.36: старше 30 минут: тихая проверка, ответ дополнит список
+        except Exception:   # noqa: BLE001 — колокольчик открывается и без проверки
+            pass
+        try:
             pos = b.mapToGlobal(QPoint(b.width(), b.height() + 2))
+            self._notices_right = pos.x()
             menu.exec(QPoint(pos.x() - menu.sizeHint().width(), pos.y()))
         finally:
+            self._notices_right = None
             b.setDown(False)
 
     def open_notice(self, item):
@@ -5665,6 +6199,11 @@ class EditorWindow(QMainWindow):
         from . import otlozhit
         step = self.tour.index if self.tour is not None else 0
         self.tour = None
+        if key == otlozhit.NEVER:   # «Не показывать знакомство»: пройденным; «Ознакомление» и «?» остаются в меню
+            self.ctx.config["tour_done"] = True
+            otlozhit.clear(self.ctx.config, "tour")
+            self.ctx.save_config()
+            return
         otlozhit.snooze(self.ctx.config, "tour", key, step=step)
         self.ctx.save_config()
         schedule = getattr(self.ctx, "schedule_otlozhit", None)
@@ -5824,6 +6363,25 @@ class EditorWindow(QMainWindow):
             back = getattr(self, "_tool_before_crop", None)
             self.select_tool(back if back not in (None, CROP) else MOVE)
 
+    def exit_pipette_mode(self):
+        """Выйти из пипетки к инструменту, что был до неё."""
+        if self.canvas.tool == PIPETTE:
+            back = getattr(self, "_tool_before_pipette", None)
+            self.select_tool(back if back not in (None, PIPETTE) else MOVE)
+
+    def _pipette_picked(self, color):
+        """Щелчок пипеткой: код цвета (#RRGGBB) в буфер обмена, подсказка «Рисовать этим цветом»."""
+        from . import ocr
+        name = pipetka.hex_of(color)
+        ocr.copy_text(name, self)
+        hint = self._pen_hint
+        if hint is None:
+            hint = self._pen_hint = PenHint(self)
+            hint.apply_theme(palette(self.ctx.config)["dark"])
+            hint.adopt.connect(self._adopt_pending)
+        hint.show_picked(color)
+        self._place_pen_hint()
+
     def exit_eraser_mode(self):
         if self.canvas.tool == ERASER:
             back = getattr(self, "_tool_before_eraser", None)
@@ -5855,6 +6413,137 @@ class EditorWindow(QMainWindow):
         layer = getattr(self, "tr_layer", None)
         if layer is not None:
             layer.tr_translate_all(layer.rect())
+
+    # --- 1.36: «Скрыть личные данные» ------------------------------------------------------------------
+
+    def hide_personal(self):
+        """Кнопка «Скрыть личные данные»: распознанный текст снимка (готовый или новый запуск) -> поиск телефонов,
+        почты, карт, IBAN и ссылок с ключами -> размытие найденного одним шагом «Отменить» и панель с галочками."""
+        from . import ocr
+        if not self._tool_available(PRIVACY):
+            return
+        session = getattr(self, "privacy_session", None)
+        if session is not None and session.alive() and self.privacy_panel.isVisible():
+            self.privacy_panel.setFocus()
+            return
+        self.canvas.commit_text()
+        if self.canvas.has_words():
+            self._privacy_run(list(self.canvas.words))
+            return
+        if self._ocr_job is not None:
+            self.show_toast(tr("editor.ocr_busy"))
+            return
+        from .busy import BusySpinner
+        spinner = BusySpinner(self.scroll.viewport(), tr("editor.ocr_busy"))
+        spinner.start()
+        self._ocr_spinner = spinner
+        key = self.canvas.base.cacheKey()
+
+        def done(text, error, help=None):
+            from PyQt6 import sip
+            if sip.isdeleted(self) or self._ocr_job is not job:
+                return
+            self._ocr_job = None
+            if getattr(self, "_ocr_spinner", None) is not None:
+                self._ocr_spinner.stop()
+                self._ocr_spinner = None
+            self._ocr_used = getattr(job, "used", "")
+            self._ocr_help = help
+            if error:
+                self._ocr_dialog = ocr.show_result("", error, self, help)   # нет Tesseract или языка: как в окне текста
+                return
+            if self.canvas.base.cacheKey() != key:
+                return   # снимок успели обрезать или отменить
+            self.canvas.set_words(getattr(job, "words", []), self.canvas.base.devicePixelRatio())
+            if help is not None:
+                self._ocr_dialog = ocr.show_result("", tr("editor.ocr_no_ru"), self, help)
+            self._privacy_run(list(self.canvas.words))
+        job = ocr.start(self.canvas.base.copy(), done, ocr.resolve_langs(self.ctx.config.get("ocr_langs")),
+                        self.ctx.config.get("ocr_quality", "accurate"))
+        self._ocr_job = job
+
+    def _privacy_run(self, words):
+        from . import privacy
+        found = privacy.find(words)
+        fresh = []
+        probe = PrivacySession(self.canvas, words, found)
+        for i, f in enumerate(found):
+            if not already_hidden(self.canvas, probe.rects_for(i)):
+                fresh.append(f)
+        if not found:
+            self.privacy_panel.show_empty()
+            self.privacy_session = None
+        elif not fresh:
+            self.privacy_panel.show_empty(tr("privacy.already"))
+            self.privacy_session = None
+        else:
+            session = PrivacySession(self.canvas, words, fresh)
+            session.on_change = self._privacy_autosave
+            session.apply()
+            self.privacy_session = session
+            self.privacy_panel.show_session(session)
+        self._after_panel()
+
+    def _after_panel(self):
+        self._update_info()
+        self._refit_after_panel()
+
+    def _refit_after_panel(self):
+        """Панель появилась или ушла: поле снимка стало уже или шире; окно не меняется, снимок остаётся вписанным."""
+        if getattr(self, "_zoom_fit_mode", False):
+            QTimer.singleShot(0, self.zoom_fit)
+
+    def _privacy_autosave(self):
+        """Скрытое сразу уходит и в автосохранение: оригинал с открытыми данными в папке снимков не остаётся."""
+        if getattr(self, "autosave_path", None):
+            self._update_autosave(self.render_image())
+
+    def _privacy_hover(self, index: int, on: bool):
+        """Наведение на строку списка: место на снимке в рамке."""
+        s = getattr(self, "privacy_session", None)
+        self.canvas.highlight = s.rect_union(index) if (on and s is not None) else []
+        self.canvas.update()
+
+    def _privacy_tool(self, tool: str):
+        """«Открыть кусок» / «Скрыть кусок»: обводка мышью вместо обычных инструментов, пока кнопка нажата."""
+        self.canvas.band_mode = tool or None
+        self.canvas.band = None
+        self.canvas.setCursor(Qt.CursorShape.CrossCursor if tool else Qt.CursorShape.ArrowCursor)
+        if tool:
+            self.canvas.select(None)
+
+    def _privacy_band(self, rect):
+        s = getattr(self, "privacy_session", None)
+        if s is None or not self.canvas.band_mode:
+            return
+        if s.cut(rect, self.canvas.band_mode):
+            self.privacy_panel.refresh_rows()
+
+    def _privacy_press(self, pos):
+        """Щелчок по размытому месту на снимке: строка в списке выделена и показана."""
+        s = getattr(self, "privacy_session", None)
+        if s is not None and self.privacy_panel.isVisible():
+            i = s.finding_at(pos)
+            self.privacy_panel.select_row(i)
+
+    def _privacy_piece_key(self, tool: str):
+        if self.privacy_panel.isVisible() and getattr(self, "privacy_session", None) is not None:
+            self.privacy_panel.set_tool("" if self.privacy_panel.tool == tool else tool, emit=True)
+
+    def _privacy_closed(self):
+        self.canvas.highlight = []
+        self.privacy_session = None
+        self._refit_after_panel()
+        self.canvas.setFocus()
+
+    def _privacy_restored(self):
+        session = getattr(self, "privacy_session", None)
+        if session is not None and not session.alive() and self.privacy_panel.isVisible():
+            self.privacy_panel.close_panel()   # «Отменить» убрало размытие: панель с галочками больше не про этот снимок
+
+    def _privacy_manual(self):
+        self.privacy_panel.close_panel()
+        self.select_tool(BLUR)
 
     def exit_text_mode(self):
         """Выйти из режима текста к тому инструменту, что был до него, и дальше работать со снимком."""
@@ -5961,12 +6650,17 @@ class EditorWindow(QMainWindow):
 
     def escape(self):
         """Esc: сначала отменить рамку обрезки, потом снять выделение, потом закрыть окно."""
-        if self.canvas.tool == CROP:
+        if self.privacy_panel.isVisible() and self.canvas.tool not in (CROP, OCR, TRANSLATE, ERASER) \
+                and not self.canvas.crop_pending:
+            self.privacy_panel.close_panel()   # 1.36: Esc закрывает панель «Личные данные», размытие остаётся
+        elif self.canvas.tool == CROP:
             self.exit_crop_mode()   # Esc: рамка отменена и режим обрезки завершён
         elif self.canvas.crop_pending:
             self.canvas.cancel_crop()
         elif self.canvas.tool == ERASER:
             self.exit_eraser_mode()
+        elif self.canvas.tool == PIPETTE:
+            self.exit_pipette_mode()
         elif self.canvas.tool == OCR:
             self.exit_text_mode()   # выйти из режима текста к прежнему инструменту
         elif self.canvas.tool == TRANSLATE:
@@ -6058,7 +6752,7 @@ class EditorWindow(QMainWindow):
         colors.addSeparator()
         colors.addAction(tr("editor.ctx_other")).triggered.connect(self.pick_custom_color)
         if shape.kind != IMAGE:
-            sizes = menu.addMenu(tr("editor.ctx_size") if shape.kind in (TEXT, CALLOUT, NUMBER) else tr("editor.ctx_thickness"))
+            sizes = menu.addMenu(tr("editor.ctx_size") if shape.kind in (TEXT, CALLOUT, NUMBER, STICKER) else tr("editor.ctx_thickness"))
             style_menu(sizes, self.ctx.config)
             for level in range(1, 6):
                 act = sizes.addAction(icons.size_icon(level), f"{level}")
@@ -6200,7 +6894,8 @@ class EditorWindow(QMainWindow):
         for button, name in ((self.undo_button, "undo"), (self.redo_button, "redo"),
                              (self.insert_button, "insert"), (self.help_button, "help"), (self.bell_button, "bell"),
                              (self.settings_button, "settings"), (self.language_button, "globe"),
-                             (self.save_button, "save"),
+                             (self.pin_button, "pin"),
+                             (self.save_button, "save"), (self.print_button, "print"),
                              (self.copy_button, "copy")):
             button.setIcon(icons.icon(name))
         for level in range(1, 6):
@@ -6296,7 +6991,8 @@ class EditorWindow(QMainWindow):
         self._fit_tr_top()
 
     def _update_info(self):
-        size = f"{self.canvas.base.width()} × {self.canvas.base.height()} px"
+        pad = 2 * round(self.canvas.deco.pad() * self._ratio())   # 1.36: размер готовой картинки с рамкой, тенью и полями
+        size = f"{self.canvas.base.width() + pad} × {self.canvas.base.height() + pad} px"
         if getattr(self, "crop_ok_button", None) is not None:
             self.crop_ok_button.setEnabled(self.canvas.crop_pending)   # «Обрезать» доступно, когда есть рамка
             self.crop_top.findChild(QLabel, "trSub").setText(
@@ -6372,6 +7068,7 @@ class EditorWindow(QMainWindow):
         self.zoom_label.setText(f"{round(canvas.zoom * 100)}%")
         if abs(canvas.zoom - old) < 1e-6:
             return
+        self._sync_deco_margins()
         self.image_frame.adjustSize()
 
         def keep_point():
@@ -6395,7 +7092,8 @@ class EditorWindow(QMainWindow):
     def zoom_fit(self):
         """Весь снимок в окне, но не крупнее 100%."""
         vp = self.scroll.viewport().size()
-        w, h = self.canvas.lw() + 2 * FRAME_WIDTH + 6, self.canvas.lh() + 2 * FRAME_WIDTH + 6
+        pad = 2 * self.canvas.deco_pad()   # тень, рамка и поля тоже должны поместиться
+        w, h = self.canvas.lw() + pad + 2 * FRAME_WIDTH + 6, self.canvas.lh() + pad + 2 * FRAME_WIDTH + 6
         self.set_zoom(min(1.0, vp.width() / w, vp.height() / h), fit=True)
 
     def _auto_fit(self):
@@ -6416,6 +7114,7 @@ class EditorWindow(QMainWindow):
             self.tr_layer.clear()   # снимок изменился (обрезка, отмена): старые переводы уже не на своём месте
         if self.canvas.tool == OCR and not self.canvas.has_words():
             QTimer.singleShot(0, self.start_text_mode)   # снимок изменился (отмена, вставка): распознать заново
+        self._sync_deco_margins()
         self.image_frame.adjustSize()
         self._update_info()
         self.fit_size()
@@ -6434,8 +7133,9 @@ class EditorWindow(QMainWindow):
         rim_w, rim_h = self._rim()
         self._measure_rows()
         min_w = self.min_content_width() + rim_w
-        image_w = self.canvas.lw() + 2 * FRAME_WIDTH + rim_w      # размер окна считается по снимку 100%, масштаб вида его не меняет
-        image_h = self.canvas.lh() + 2 * FRAME_WIDTH + rim_h
+        pad = 2 * self.canvas.deco_pad()
+        image_w = self.canvas.lw() + pad + 2 * FRAME_WIDTH + rim_w      # размер окна считается по снимку 100%, масштаб вида его не меняет
+        image_h = self.canvas.lh() + pad + 2 * FRAME_WIDTH + rim_h
         want_w = min(max(image_w, min_w), area.width() - 20)
         self._adapt_rows(want_w - rim_w)
         self.panel.layout().activate()
@@ -6495,6 +7195,7 @@ class EditorWindow(QMainWindow):
         self.canvas.setFocus()
         QTimer.singleShot(0, self._auto_fit)
         QTimer.singleShot(60, self._align_to_origin)
+        self._qr_schedule()
         from . import novoe
         novoe.attach_editor(self)   # 1.34: метка «Новое» на кнопках, новых в этой версии (после обновления)
 
@@ -6546,14 +7247,36 @@ class EditorWindow(QMainWindow):
 
     def copy_to_clipboard(self):
         """Скопировать снимок с пометками; окно остаётся открытым, всплывает сообщение."""
-        image = self.canvas.render()
+        image = self.render_image()
         self._copy_image(image)
         self._update_autosave(image)
         self.exported = True          # без новых правок окно закроется без вопроса
         self.show_toast(tr("editor.copied_toast"))
 
+    def pin_image(self):
+        """«Закрепить» и F3: снимок с пометками повисает отдельным окошком поверх всех окон рядом с редактором.
+        Редактор остаётся открытым. В учебном редакторе (окно «Ознакомление») ничего не закрепляется."""
+        from . import ocr
+        if ocr.training_owner(self):
+            self.show_toast(tr("zakrepit.training"))
+            return None
+        self.canvas.commit_text()
+        image = self.render_image()
+        self._update_autosave(image)
+        spot = None   # окошко рядом с редактором (справа, если там есть место), а не поверх него; иначе в центр экрана
+        screen = self.screen()
+        if screen is not None and self.isVisible():
+            frame, area = self.frameGeometry(), screen.availableGeometry()
+            size = zakrepit.logical_size(image)
+            if frame.right() + 16 + size.width() <= area.right() and frame.top() + size.height() <= area.bottom():
+                spot = QPoint(frame.right() + 16, frame.top())
+        win = zakrepit.pin(self.ctx, image, spot)
+        if win is not None:
+            self.show_toast(tr("zakrepit.pinned_toast"))
+        return win
+
     def copy_and_close(self):
-        image = self.canvas.render()
+        image = self.render_image()
         self._copy_image(image)
         self._update_autosave(image)
         self.exported = True
@@ -6567,9 +7290,74 @@ class EditorWindow(QMainWindow):
     def _canvas_changed(self):
         self.exported = False
 
-    def save_and_close(self):
-        image = self.canvas.render()
-        path = ask_save_path(self, self.ctx.config)
+    # --- 1.36: QR-код и штрихкод на снимке ---------------------------------------------------------
+
+    def _qr_schedule(self, *_):
+        # ocr здесь не импортируем: обычное открытие снимка не должно подгружать распознавание (light_test)
+        if not qr_read.available() or getattr(self, "_qr_timer", None) is None or getattr(self, "training", False) is True:
+            return
+        self._qr_timer.start(self.QR_DELAY_MS)
+
+    def _qr_scan(self, sync: bool = False):
+        """Прочитать коды на снимке (вместе с пометками: закрытое размытием не читается). Читает отдельный поток, окно
+        не ждёт; повторно ту же картинку не читаем. sync=True: прямо здесь (для проверки)."""
+        if not qr_read.available() or getattr(self, "closing", False):
+            return
+        image = self.canvas.flat_image()
+        key = image.cacheKey()
+        if key == self._qr_key:
+            return
+        if self._qr_busy and not sync:
+            self._qr_dirty = True
+            return
+        self._qr_key = key
+        if sync:
+            self._qr_apply(qr_read.find_codes(image))
+            return
+        self._qr_busy = True
+        import threading
+
+        def work(img=QImage(image), k=key):
+            codes = qr_read.find_codes(img)
+            try:
+                self.qr_ready.emit(k, codes)
+            except RuntimeError:   # окно закрыли, пока читалось
+                pass
+        threading.Thread(target=work, name="clipsd-qr", daemon=True).start()
+
+    def _qr_found(self, key, codes):
+        self._qr_busy = False
+        if key == self._qr_key:
+            self._qr_apply(codes)
+        if self._qr_dirty:
+            self._qr_dirty = False
+            self._qr_schedule()
+
+    def _qr_apply(self, codes):
+        """Кнопка «QR» в шапке есть только пока на снимке найден код."""
+        self.qr_codes = list(codes)
+        shown = bool(self.qr_codes)
+        if self.qr_button.isHidden() == shown:
+            self.qr_button.setVisible(shown)
+            self._refit_width()
+
+    def show_qr(self):
+        """Кнопка «QR»: окно «Код на снимке» с текстом кода, «Открыть ссылку» и «Скопировать текст кода»."""
+        if not self.qr_codes:
+            return None
+        from .qr_ui import QrDialog
+        self.qr_dialog = QrDialog(self, self.qr_codes)
+        self.qr_dialog.show()
+        return self.qr_dialog
+
+    def render_image(self) -> QImage:
+        """Готовая картинка: пометки, форма снимка, рамка, тень и поля (цвет полей и JPG берётся из настроек сейчас)."""
+        self.canvas.background = forma.background(self.ctx.config)
+        return self.canvas.render()
+
+    def save_and_close(self, ext=None):
+        image = self.render_image()
+        path = ask_save_path(self, self.ctx.config, ext if isinstance(ext, str) else None)
         if not path:
             return
         if not hidpi.save_image(image, path, self.export_config()):
@@ -6579,9 +7367,30 @@ class EditorWindow(QMainWindow):
             card.exec()
             return
         self.ctx.config["save_dir"] = os.path.dirname(path)
+        self._update_autosave(image)
         self.ctx.notify(tr("editor.saved", path=path))
         self.exported = True
         self.close()
+
+    def save_pdf(self):
+        """«Сохранить в PDF» (1.36): окно выбора места с форматом PDF, как «Сохранить»; размер страницы по настройке."""
+        self.save_and_close("pdf")
+
+    def print_image(self):
+        """«Печать…» (Ctrl+P, 1.36): системное окно печати; снимок с пометками вписан в страницу. Окно остаётся."""
+        from . import pechat
+        image = self.render_image()
+        self._update_autosave(image)
+        result = pechat.print_image(self, image, self.ctx.config, save_pdf=self.save_pdf)
+        if result == "printed":
+            self.show_toast(tr("pechat.sent"))
+        elif result == "failed":
+            self.show_toast(tr("pechat.failed"))
+
+    def print_preview(self):
+        """«Предпросмотр…» (1.36): окно предпросмотра печати с кнопкой печати."""
+        from . import pechat
+        pechat.preview_image(self, self.render_image(), self.ctx.config)
 
     def closeEvent(self, event):
         if self.canvas.text_edit is not None:

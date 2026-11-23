@@ -1,0 +1,18 @@
+{
+  "novoe.qr_chtenie_text": "Если на снимке есть QR-код или штрихкод, в шапке редактора появится кнопка «QR»: открыть ссылку или скопировать текст кода. Читается без интернета.",
+  "novoe.qr_chtenie_title": "Чтение QR-кода",
+  "ozn.qr_chtenie_text": "QR-код со снимка",
+  "qr_chtenie.close": "Закрыть",
+  "qr_chtenie.confirm_no": "Не открывать",
+  "qr_chtenie.confirm_note": "Адрес взят из кода на снимке и не проверен. Открывайте только то, чему доверяете.",
+  "qr_chtenie.confirm_text": "Программа откроет этот адрес в браузере:",
+  "qr_chtenie.confirm_title": "Открыть ссылку?",
+  "qr_chtenie.confirm_yes": "Открыть",
+  "qr_chtenie.copied": "Текст кода скопирован",
+  "qr_chtenie.copy": "Скопировать текст кода",
+  "qr_chtenie.not_link": "Это не ссылка: открываются только адреса http и https. Текст можно скопировать.",
+  "qr_chtenie.open": "Открыть ссылку",
+  "qr_chtenie.tip": "На снимке найден QR-код или штрихкод. Нажмите: открыть ссылку или скопировать текст кода",
+  "qr_chtenie.title_many": "Коды на снимке: {n}",
+  "qr_chtenie.title_one": "Код на снимке"
+}

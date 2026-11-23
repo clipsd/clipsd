@@ -1,0 +1,18 @@
+{
+  "novoe.qr_chtenie_text": "If the screenshot has a QR code or a barcode, a QR button appears in the editor header: open the link or copy the code text. It is read without the internet.",
+  "novoe.qr_chtenie_title": "Reading a QR code",
+  "ozn.qr_chtenie_text": "A QR code from a screenshot",
+  "qr_chtenie.close": "Close",
+  "qr_chtenie.confirm_no": "Do not open",
+  "qr_chtenie.confirm_note": "The address comes from the code in the screenshot and has not been checked. Open only what you trust.",
+  "qr_chtenie.confirm_text": "The program will open this address in the browser:",
+  "qr_chtenie.confirm_title": "Open the link?",
+  "qr_chtenie.confirm_yes": "Open",
+  "qr_chtenie.copied": "Code text copied",
+  "qr_chtenie.copy": "Copy code text",
+  "qr_chtenie.not_link": "This is not a link: only http and https addresses can be opened. The text can be copied.",
+  "qr_chtenie.open": "Open link",
+  "qr_chtenie.tip": "A QR code or barcode was found in the screenshot. Click to open the link or copy the code text",
+  "qr_chtenie.title_many": "Codes in the screenshot: {n}",
+  "qr_chtenie.title_one": "Code in the screenshot"
+}

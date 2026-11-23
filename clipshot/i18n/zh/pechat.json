@@ -1,0 +1,10 @@
+{
+  "pechat.dialog_title": "打印截图",
+  "pechat.failed": "无法打印截图",
+  "pechat.none_close": "关闭",
+  "pechat.none_pdf": "保存为 PDF",
+  "pechat.none_text": "这台电脑没有设置打印机。可以把截图保存为 PDF，稍后或在另一台电脑上打印。",
+  "pechat.none_title": "未找到打印机",
+  "pechat.preview_title": "打印预览",
+  "pechat.sent": "已发送到打印机"
+}

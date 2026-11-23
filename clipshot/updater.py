@@ -8,12 +8,13 @@ Trust (keys, signature, expiry, rollback) lives in update_channel.py; this modul
 anything that did not pass update_channel.load_verified().
 
 Schedule (the owner's decisions 02.11.2026 and 03.11.2026): the channel is asked quietly at most once
-per 24 h (first time 60 s after start when 24 h have passed); an ordinary "version N is available"
+per 6 h (1.36, owner 23.11.2026; first time 60 s after start when 6 h have passed; also after the computer
+wakes, and when the bell is opened if the last request is older than 30 min); an ordinary "version N is available"
 window appears at most once per 7 days; "Check for updates" in the tray asks right away. An urgent
 security fix ("critical": true, trusted only from the signed document) is offered on the check that
 finds it, again 60 s after every start of the program until it is installed, and once a day while
 the program keeps running (at most one automatic attempt per day and run, at most one automatic
-request to the channel per 24 h); "Later" postpones it, "Skip this version" is not offered for it. While a
+request to the channel per 6 h); "Later" postpones it, "Skip this version" is not offered for it. While a
 security fix is pending, every newer version found is offered the same way (it contains the fix).
 The signed document of the pending fix is kept in data_dir()/critical-<channel>.json (+ .sig) and
 re-verified each time it is used; a copy that fails the signature check is deleted. Turning
@@ -117,12 +118,16 @@ from .i18n import tr
 
 log = logging.getLogger("clipsd.updater")
 
-CHECK_INTERVAL = timedelta(days=1)       # quiet request to the channel (03.11.2026)
+CHECK_INTERVAL = timedelta(hours=6)      # quiet request to the channel (03.11.2026: a day; 23.11.2026: 6 h, the bell must light up soon)
+BELL_CHECK_INTERVAL = timedelta(minutes=30)   # opening the bell: a quiet request if the last one is older than this
+WAKE_GAP = timedelta(minutes=5)          # the wake watch: no look at the clock for longer than this = the computer slept
+WAKE_POLL_MS = 60_000                    # how often the wake watch looks at the clock
+WAKE_DELAY_MS = 20_000                   # after waking: wait for the network before asking the channel
 NOTIFY_INTERVAL = timedelta(days=7)      # ordinary update window (02.11.2026)
 CRITICAL_REMIND = timedelta(days=1)      # security fix: reminder while the program keeps running
 SWITCH_TIMEOUT = timedelta(minutes=10)
 STARTUP_DELAY_MS = 60_000
-TICK_MS = 3_600_000                 # hourly look at the schedule; the schedule itself is 24 h
+TICK_MS = 3_600_000                 # hourly look at the schedule; the schedule itself is 6 h (CHECK_INTERVAL)
 CRITICAL_FILE = "critical-{channel}.json"   # signed document of a pending security fix (+ .sig)
 PREVIOUS_CLEANUP_DELAY_MS = 60_000
 DEFERRED_POLL_MS = 5_000            # deferred update: how often to look whether quitting is possible
@@ -150,7 +155,7 @@ REPORT_LOG_LINES = 30               # last lines of the helper's update.log in a
 STORE_PRODUCT_ID = ""
 
 CONFIG_DEFAULTS = {
-    "update_check": True,           # quiet automatic check once per 24 h
+    "update_check": True,           # quiet automatic check once per 6 h (1.36)
     "update_channel": "stable",     # not read by a release build (always stable); kept for config compatibility
     "last_update_check": "",        # ISO UTC of the last request to the channel
     "update_last_notified": "",     # ISO UTC of the last "version N is available" window
@@ -232,8 +237,9 @@ def telemetry_event(name: str, **fields) -> None:
 
 # --- schedule (pure, tested with a fake clock) ------------------------------
 
-def should_check(config: dict, now: datetime, manual: bool = False) -> bool:
-    """May the channel be asked now? Manual = the person pressed "Check for updates"."""
+def should_check(config: dict, now: datetime, manual: bool = False, interval: timedelta = None) -> bool:
+    """May the channel be asked now? Manual = the person pressed "Check for updates".
+    interval: the shortest gap since the last request (default CHECK_INTERVAL; the bell uses BELL_CHECK_INTERVAL)."""
     if manual:
         return True
     if not cfg(config, "update_check"):
@@ -241,7 +247,7 @@ def should_check(config: dict, now: datetime, manual: bool = False) -> bool:
     last = _time(cfg(config, "last_update_check"))
     if last is None or last > now + uc.CLOCK_TOLERANCE:   # never, or clock moved back a lot
         return True
-    return now - last >= CHECK_INTERVAL
+    return now - last >= (interval or CHECK_INTERVAL)
 
 
 def should_notify(config: dict, version: str, now: datetime, manual: bool = False,
@@ -1042,13 +1048,13 @@ def mail_url(subject: str, body: str, limit: int = MAIL_URL_LIMIT) -> str:
     return _fit(make, body, limit)
 
 
-def send_report(report: str, title: str, endpoint: str = "", opener=None) -> bool:
+def send_report(report: str, title: str, endpoint: str = "", opener=None, kind: str = "update_failure") -> bool:
     """POST the report to the receiver (REPORT_ENDPOINT, https only). Only when the person presses "Send" in the
     report window, which shows exactly this text. True when the receiver answered 2xx."""
     endpoint = endpoint or REPORT_ENDPOINT
     if not endpoint or urllib.parse.urlparse(endpoint).scheme != "https":
         return False
-    data = json.dumps({"kind": "update_failure", "title": title, "report": report,
+    data = json.dumps({"kind": kind, "title": title, "report": report,
                        "version": __version__}, ensure_ascii=False).encode("utf-8")
     request = urllib.request.Request(endpoint, data=data, method="POST",
                                      headers={"Content-Type": "application/json", "User-Agent": f"ClipSD/{__version__}"})
@@ -1266,6 +1272,7 @@ class Updater(QObject):
         self._quiet_since = None
         self._deferred_soon = None     # one timer for "an editor was closed" (Clipshot._editor_closed)
         self._failure_open = False     # the failure window is on the screen (Retry / Close)
+        self._wake_seen = None         # clock at the last look of the wake watch (wake_tick)
         self._checking = False         # a request to the channel is running
         self._checking_manual = False  # "Check for updates" was pressed during a silent check: its result as a window
         self._deferred_timer = None
@@ -1304,7 +1311,7 @@ class Updater(QObject):
 
     # checking --------------------------------------------------------------
     def tick(self):
-        """Timer: a pending security fix first (each start, then once a day), else the 24 h check."""
+        """Timer: a pending security fix first (each start, then once a day), else the 6 h check."""
         if self.kind not in ("windows", "linux") or self.busy:
             return
         now = self.clock()
@@ -1313,7 +1320,7 @@ class Updater(QObject):
             # turn into a request every hour (review R04b P1-2)
             self._critical_tried_at = now
             if cfg(self.config, "update_check") and should_check(self.config, now):
-                self.check_now(manual=False)        # the 24 h request is due: newest document, then the offer
+                self.check_now(manual=False)        # the 6 h request is due: newest document, then the offer
             else:
                 self._offer_saved_critical(now)     # no request: the verified saved copy
             return
@@ -1347,7 +1354,7 @@ class Updater(QObject):
         self._present(manifest, "notify", True, now)
         return True
 
-    def check_now(self, manual: bool = True, auto: bool = False) -> bool:
+    def check_now(self, manual: bool = True, auto: bool = False, interval: timedelta = None) -> bool:
         """Returns True when a request to the channel was started. auto ("Retry" after a failure): a newer
         version found is installed at once, without the "version N is available" window."""
         if self.kind == "store":
@@ -1379,7 +1386,7 @@ class Updater(QObject):
                         show()
             return False
         now = self.clock()
-        if not should_check(self.config, now, manual):
+        if not should_check(self.config, now, manual, interval):
             return False
         self.busy = True
         self._checking = True
@@ -1421,6 +1428,7 @@ class Updater(QObject):
             return
         manifest, document, signature = signed
         remember_seen(self.config, manifest.version, channel)
+        self._refresh_bell()   # 1.36: the dot lights up as soon as the channel showed the version, whatever the window rules say
         # "critical" comes only from this verified document or from the verified saved copy
         pending = self._pending_critical(now, fresh=False)
         if manifest.critical and uc.is_newer(manifest, self.installed) and (
@@ -1439,6 +1447,33 @@ class Updater(QObject):
             action = "none"   # already shown in this run less than a day ago
         self._save()
         self._present(manifest, action, critical, now)
+
+    @staticmethod
+    def _refresh_bell() -> None:
+        try:
+            from . import notifications
+            notifications.refresh()
+        except Exception:   # noqa: BLE001 — the bell must never break the update
+            log.exception("bell refresh failed")
+
+    def bell_check(self) -> bool:
+        """The bell was opened (editor, tray): a quiet request when the last one is older than BELL_CHECK_INTERVAL.
+        The answer refreshes the bell (_on_checked). True when a request was started."""
+        if self.kind not in ("windows", "linux") or self.busy:
+            return False
+        return self.check_now(manual=False, interval=BELL_CHECK_INTERVAL)
+
+    def wake_tick(self) -> bool:
+        """Timer (WAKE_POLL_MS): the clock jumped forward by more than WAKE_GAP since the last look = the computer
+        slept (Qt has no wake signal). Then, if CHECK_INTERVAL has passed, a quiet request after WAKE_DELAY_MS
+        (the network needs time). True when a wake was seen."""
+        now = self.clock()
+        last, self._wake_seen = self._wake_seen, now
+        if last is None or now - last <= WAKE_GAP:
+            return False
+        if self.kind in ("windows", "linux") and should_check(self.config, now):
+            QTimer.singleShot(WAKE_DELAY_MS, self.tick)
+        return True
 
     def _present(self, manifest: Manifest, action: str, critical: bool, now) -> None:
         auto, self._auto_update = self._auto_update, False
@@ -2088,6 +2123,11 @@ class Updater(QObject):
         self.timer.setInterval(TICK_MS)
         self.timer.timeout.connect(self.tick)
         self.timer.start()
+        self._wake_seen = self.clock()
+        self._wake_timer = QTimer(self)
+        self._wake_timer.setInterval(WAKE_POLL_MS)
+        self._wake_timer.timeout.connect(self.wake_tick)
+        self._wake_timer.start()
         from . import update_prompt
         update_prompt.start(self)   # отложенное окно-предложение ждёт спокойной минуты
 

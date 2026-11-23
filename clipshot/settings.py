@@ -848,6 +848,14 @@ class SettingsDialog(QDialog):
         grid.addWidget(self.snapshot_size_hint, 6, 1, 1, 2)
         self.clip_html = self._check(grid, 7, tr("settings.clip_html"), hidpi.html_enabled(config))
         self.clip_html.setToolTip(tr("settings.clip_html_tip"))
+        # 1.36: PDF только вручную («Сохранить» с форматом PDF, «Сохранить в PDF»); автосохранение остаётся PNG/JPEG
+        grid.addWidget(QLabel(tr("settings.pdf_page")), 8, 0)
+        self.pdf_page = QComboBox()
+        self.pdf_page.addItem(tr("settings.pdf_page_image"), "image")
+        self.pdf_page.addItem(tr("settings.pdf_page_a4"), "a4")
+        self.pdf_page.setCurrentIndex(1 if config.get("pdf_page", "image") == "a4" else 0)
+        self.pdf_page.setToolTip(tr("settings.pdf_page_tip"))
+        grid.addWidget(self.pdf_page, 8, 1, 1, 2)
 
         # Оформление
         from .editor import THEME_DEFAULTS, theme
@@ -1068,19 +1076,19 @@ class SettingsDialog(QDialog):
     # --- разделы и поиск (1.32) --------------------------------------------
 
     SECTIONS = (("general", "settings.nav_general", "settings"), ("shot", "settings.nav_shot", "region"),
-                ("editor", "settings.nav_editor", "pencil"), ("text", "settings.nav_text", "translate"),
+                ("editor", "settings.nav_editor", "pipette"), ("text", "settings.nav_text", "translate"),
                 ("updates", "settings.nav_updates", "update"), ("about", "settings.nav_about", "info"))
     # английские слова для поиска: находят раздел и карточку и на русском интерфейсе
     SYNONYMS = {
         "language": "language lang locale", "updates": "update upgrade version check release new whats news features highlight",
         "hotkeys": "hotkey shortcut keyboard key combination alt ctrl shift win", "tray": "tray icon click notification area",
         "start": "startup autostart launch login boot", "select": "selection area zoom magnifier size remember region capture",
-        "save": "save folder directory format png jpg jpeg file autosave size scale scaling resolution dpi hidpi clipboard", "theme": "theme style appearance color dark light frame border editor",
+        "save": "save folder directory format png jpg jpeg pdf page a4 print file autosave size scale scaling resolution dpi hidpi clipboard", "theme": "theme style appearance color dark light frame border editor",
         "ocr": "ocr text recognition tesseract languages", "translate": "translate translation engine google mymemory email key limit",
         "about": "about license version tour intro help gpl site telegram news channel trademark name icon terms",
     }
     SECTION_WORDS = {"general": "main general language hotkeys tray startup", "shot": "screenshot capture save folder format",
-                     "editor": "editor theme style appearance", "text": "text ocr translate translation recognition",
+                     "editor": "editor theme style appearance look design color colors dark light", "text": "text ocr translate translation recognition",
                      "updates": "updates update version", "about": "about license tour"}
 
     @property
@@ -1360,6 +1368,7 @@ class SettingsDialog(QDialog):
             "auto_save": self.auto_save.isChecked(),
             "auto_save_dir": self.auto_save_dir.text().strip() or self.config.get("auto_save_dir", ""),
             "snapshot_size": self.snapshot_size.currentData(),
+            "pdf_page": self.pdf_page.currentData(),
             "clip_html": self.clip_html.isChecked(),
             "autostart": self.autostart.isChecked(),
             "update_check": self.update_check.isChecked(),

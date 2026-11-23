@@ -5,3 +5,5 @@ python-xlib>=0.33; sys_platform == "linux"
 fonttools>=4.40; sys_platform == "linux"
 # signature check of the update channel (clipshot/update_channel.py)
 cryptography>=41
+# reading QR codes and barcodes from a screenshot (clipshot/qr_read.py, 1.36); optional: without it the QR button just never appears
+zxing-cpp>=2.2

@@ -1,0 +1,10 @@
+{
+  "pechat.dialog_title": "Imprimir captura",
+  "pechat.failed": "No se pudo imprimir la captura",
+  "pechat.none_close": "Cerrar",
+  "pechat.none_pdf": "Guardar como PDF",
+  "pechat.none_text": "Este equipo no tiene ninguna impresora configurada. La captura se puede guardar como PDF e imprimir más tarde o en otro equipo.",
+  "pechat.none_title": "No se encontró ninguna impresora",
+  "pechat.preview_title": "Vista previa de impresión",
+  "pechat.sent": "Enviado a la impresora"
+}

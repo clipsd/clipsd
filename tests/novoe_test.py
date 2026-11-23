@@ -464,9 +464,10 @@ dlg.novoe_enabled.setChecked(False)
 check(dlg.values()["novoe_enabled"] is False, "values() отдаёт настройку")
 dlg.deleteLater()
 menu = a._build_tray_menu()
-texts = [x.text() for x in menu.actions()]
-check("Что нового" in texts and texts.index("Что нового") + 2 == texts.index(tr("app.menu_tour")),
-      f"меню значка: «Что нового» перед «Знакомство с программой» ({texts})")
+learn_sub = next(x.menu() for x in menu.actions() if x.menu() is not None and x.menu().title() == tr("app.menu_learn"))
+texts = [x.text() for x in learn_sub.actions()]
+check("Что нового" in texts and texts.index("Что нового") + 1 == texts.index(tr("app.menu_tour")),
+      f"меню значка: «Что нового» перед «Знакомство с программой» в подменю «Обучение» ({texts})")
 
 # --- 7. вид окна: темы, языки, контраст ----------------------------------------------------------------------------
 check(ratio("#ffffff", novoe.BADGE_BG) >= 4.5, f"белый на метке {ratio('#ffffff', novoe.BADGE_BG):.1f}:1")

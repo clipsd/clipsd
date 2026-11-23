@@ -64,6 +64,10 @@ def _selfcheck(report_path):
         lines = i18n.selfcheck_lines()   # translation catalogs of all 12 languages are inside the build
         if not lines[0].startswith("i18n ok"):
             raise AssertionError("\n".join(lines))
+        from clipshot import stickers
+        problems = stickers.selfcheck()   # 1.36: emoji of the Sticker tool (Twemoji SVG files + QtSvg) are inside the build
+        if problems:
+            raise AssertionError("\n".join(problems))
         text = (f"ClipSD {clipshot.__version__} selfcheck ok (PyQt6 {PYQT_VERSION_STR}, cryptography {crypto},"
                 f" signature ok, certifi {certs})\n" + "\n".join(lines) + f"\nbuild: {kind}\n")   # build.ps1 and the workflows check it
         code = 0

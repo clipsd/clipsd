@@ -1,0 +1,18 @@
+{
+  "novoe.qr_chtenie_text": "Enthält der Screenshot einen QR-Code oder Barcode, erscheint in der Kopfleiste des Editors der Knopf „QR“: Link öffnen oder Text des Codes kopieren. Gelesen wird ohne Internet.",
+  "novoe.qr_chtenie_title": "QR-Code lesen",
+  "ozn.qr_chtenie_text": "QR-Code aus dem Screenshot",
+  "qr_chtenie.close": "Schließen",
+  "qr_chtenie.confirm_no": "Nicht öffnen",
+  "qr_chtenie.confirm_note": "Die Adresse stammt aus dem Code im Screenshot und wurde nicht geprüft. Öffnen Sie nur, was Sie kennen und dem Sie vertrauen.",
+  "qr_chtenie.confirm_text": "Das Programm öffnet diese Adresse im Browser:",
+  "qr_chtenie.confirm_title": "Link öffnen?",
+  "qr_chtenie.confirm_yes": "Öffnen",
+  "qr_chtenie.copied": "Text des Codes kopiert",
+  "qr_chtenie.copy": "Text des Codes kopieren",
+  "qr_chtenie.not_link": "Das ist kein Link: Es werden nur http- und https-Adressen geöffnet. Der Text lässt sich kopieren.",
+  "qr_chtenie.open": "Link öffnen",
+  "qr_chtenie.tip": "Im Screenshot wurde ein QR-Code oder Barcode gefunden. Klicken: Link öffnen oder Text des Codes kopieren",
+  "qr_chtenie.title_many": "Codes im Screenshot: {n}",
+  "qr_chtenie.title_one": "Code im Screenshot"
+}

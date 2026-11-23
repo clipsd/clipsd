@@ -1,0 +1,23 @@
+{
+  "novoe.zakrepit_text": "Görüntü, yapışkan not gibi tüm pencerelerin üstünde durur: sürükleyin, tekerlek boyutu, Ctrl+tekerlek saydamlığı değiştirir. Düzenleyicide ve seçim penceresinde “Sabitle” düğmesi, F3 tuşu.",
+  "novoe.zakrepit_title": "Görüntüyü pencerelerin üstüne sabitle",
+  "ozn.zakrepit_text": "Tüm pencerelerin üstünde görüntü",
+  "zakrepit.button": "Sabitle",
+  "zakrepit.copied": "Kopyalandı",
+  "zakrepit.menu_close": "Kapat",
+  "zakrepit.menu_close_all": "Sabitlenenlerin hepsini kapat",
+  "zakrepit.menu_copy": "Kopyala",
+  "zakrepit.menu_editor": "Düzenleyicide aç",
+  "zakrepit.menu_opacity": "Saydamlık",
+  "zakrepit.menu_pin": "Görüntüyü pencerelerin üstüne sabitle",
+  "zakrepit.menu_save": "Kaydet…",
+  "zakrepit.pinned_toast": "Görüntü pencerelerin üstüne sabitlendi",
+  "zakrepit.save_failed": "Kaydedilemedi",
+  "zakrepit.saved": "Kaydedildi: {name}",
+  "zakrepit.tile_sub": "pencerelerin üstüne",
+  "zakrepit.tile_title": "Sabitle",
+  "zakrepit.tip": "Ekran görüntüsünü pencerelerin üstüne sabitle (F3)\nGörüntü ayrı küçük bir pencerede asılı kalır. Fareyle sürükleyin, tekerlek boyutu, Ctrl+tekerlek saydamlığı değiştirir, çift tık veya Esc kapatır, sağ tuş menü açar",
+  "zakrepit.training": "Alıştırma görüntüsü: pencerelerin üstüne sabitlenmez.",
+  "zakrepit.wayland_hint": "Bu masaüstü pencereyi üstte tutmayabilir. Diğerlerinin altına inerse: Alt+Boşluk, sonra “Her zaman üstte”.",
+  "zakrepit.window_name": "Sabitlenmiş görüntü"
+}

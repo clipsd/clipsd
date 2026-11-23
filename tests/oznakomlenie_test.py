@@ -107,10 +107,20 @@ def answer(attr, timeout_ms=4000):
 # --- 1. открытие ----------------------------------------------------------------------------------------------
 fresh()
 menu = a._build_tray_menu()
-acts = [x for x in menu.actions() if x.text() == tr("ozn.menu")]
-names = [x.text() for x in menu.actions()]
-check(len(acts) == 1 and names.index(tr("ozn.menu")) == names.index(tr("novoe.menu")) + 1,
-      "меню значка: пункт «Ознакомление» сразу после «Что нового»")
+# 1.36: «Ознакомление» и «Что нового» в подменю «Обучение» меню значка (feat/menyu-tray)
+def _all_actions(m):
+    out = []
+    for x in m.actions():
+        out.append((m, x))
+        if x.menu() is not None:
+            out.extend(_all_actions(x.menu()))
+    return out
+pairs = _all_actions(menu)
+acts = [x for _m, x in pairs if x.text() == tr("ozn.menu")]
+owner = next((m for m, x in pairs if x.text() == tr("ozn.menu")), None)
+names = [x.text() for x in owner.actions()] if owner is not None else []
+check(len(acts) == 1 and tr("novoe.menu") in names and names.index(tr("ozn.menu")) < names.index(tr("novoe.menu")),
+      "меню значка: «Ознакомление» и «Что нового» в одном подменю, «Ознакомление» первым")
 acts[0].trigger()
 settle(200)
 win = getattr(a, "_ozn_window", None)
@@ -154,7 +164,9 @@ cfg_old = dict(appmod.DEFAULTS, novoe_from="1.30.0", novoe_version=V)
 check(oznakomlenie.new_ids(cfg_old) == new, "после обновления: новинки с прежней версии")
 new135 = [it[1] for it in novoe.ITEMS if it[0] == "1.35.0"]
 check(oznakomlenie.new_ids(dict(appmod.DEFAULTS), "1.35.5") == new135 and len(new135) == 7, "новая версия без своих новинок: новинки самой свежей версии таблицы (1.35)")
-check(oznakomlenie.new_ids(dict(appmod.DEFAULTS), "1.36.0") == new135, "версия без своих новинок: показываются новинки самой свежей из таблицы")
+new136 = [it[1] for it in novoe.ITEMS if it[0] == "1.36.0"]
+check(oznakomlenie.new_ids(dict(appmod.DEFAULTS), "1.36.0") == new136 and set(new136) == {"pechat", "pdf", "stikery", "ten_ramka", "zakrepit", "qr_chtenie", "pipetka"}, "версия 1.36: свои новинки (печать, PDF, стикеры, тень и рамка, закрепить, QR, пипетка)")
+check(oznakomlenie.new_ids(dict(appmod.DEFAULTS), "1.37.0") == new136, "версия без своих новинок: показываются новинки самой свежей из таблицы")
 
 # --- 3. обучение: затемнение, показ, «Теперь вы», «Получилось» ---------------------------------------------------------
 from clipshot import ozn_lesson  # noqa: E402
@@ -846,7 +858,7 @@ for lang in i18n.LANGUAGES:
 i18n.set_language("ru")
 
 # --- 16. В4: новинки 1.35 -------------------------------------------------------------------------------------------------
-check(novoe.ITEMS[-7:] == tuple(it for it in novoe.ITEMS if it[0] == "1.35.0") and len(new135) == 7, "в novoe.ITEMS семь строк 1.35.0")
+check(len(new135) == 7, "в novoe.ITEMS семь строк 1.35.0")
 check(all(i in oznakomlenie.BY_ID for i in new135), "каждая новинка 1.35 есть в списке «Ознакомления»")
 clipshot.__version__ = "1.35.0"
 novoe.__version__ = "1.35.0"
@@ -908,6 +920,56 @@ close_all()
 from clipshot import ocr as ocrmod  # noqa: E402
 safe = ocrmod._log_safe("OCR_ERROR=Сбой C:\\Users\\Ivan\\AppData\\Local\\Temp\\x.png и /home/ivan/.cache/clipsd/a.png конец")
 check("Ivan" not in safe and "ivan" not in safe and "<путь>" in safe, f"ocr.log: пути с именем пользователя не пишутся ({safe})")
+
+# --- 16. М8 проверки 1.36: у каждого пункта «Следующая функция ›»; «Отложить ▾» и «Готово» не в ряду кнопок подсказки ---------
+from PyQt6.QtWidgets import QPushButton  # noqa: E402
+kinds = {}
+for c in oznakomlenie.CATALOG:
+    kinds.setdefault(c[3], c[0])
+for lang in i18n.LANGUAGES:
+    i18n.set_language(lang)
+    for (w_, h_) in ((1240, 740), (910, 472), (1366 - 456, 728)):
+        fresh()
+        win = a.open_oznakomlenie()
+        settle(80)
+        win.resize(w_, h_)
+        settle(80)
+        bad = []
+        for kind, ident in kinds.items():
+            win.select(ident)
+            settle(60)
+            row = [b for b in win.hint.findChildren(QPushButton) if b.isVisible()]
+            if not win.next_button.isVisible() or win.next_button not in row:
+                bad.append(f"{kind}: нет «Следующая функция»")
+            if win.done_button in row or win.snooze_button in win.hint.findChildren(type(win.snooze_button)):
+                bad.append(f"{kind}: «Готово»/«Отложить» в ряду подсказки")
+            for b in row:
+                if b.width() < b.sizeHint().width() - 1:
+                    bad.append(f"{kind}: «{b.text()}» обрезана ({b.width()} < {b.sizeHint().width()})")
+                if not win.rect().contains(b.mapTo(win, b.rect().bottomRight())):
+                    bad.append(f"{kind}: «{b.text()}» вне окна")
+        check(not bad, f"{lang} {w_}x{h_}: у каждого вида пункта есть «Следующая функция ›», кнопки целы {bad[:3]}")
+        close_all()
+i18n.set_language("ru")
+fresh()
+win = a.open_oznakomlenie()
+settle(100)
+first = win.order[0]
+win.select(first)
+settle(60)
+seen_ids = [win.current]
+for _ in range(5):
+    win.next_button.click()
+    settle(120)
+    seen_ids.append(win.current)
+check(win.isVisible() and seen_ids == win.order[:6], f"«Следующая функция ›» шесть раз подряд: окно открыто, пункты по порядку {seen_ids}")
+check(win.next_button.text().endswith("›") and not win.hint.isAncestorOf(win.done_button) and win.left_w.isAncestorOf(win.snooze_button),
+      "«Готово» и «Отложить ▾» стоят под списком, не в подсказке")
+last = win.order[-1]
+win.select(last)
+settle(60)
+check(not win.next_button.isVisible(), "у последнего пункта «Следующая функция» не нужна")
+close_all()
 
 print("\nИТОГ:", "ВСЁ ХОРОШО" if not failures else f"{len(failures)} проверок не прошло")
 for f in failures:

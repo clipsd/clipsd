@@ -286,7 +286,13 @@ class RegionSelector(TranslateMixin, QWidget):
         """«Отложить ▾» в знакомстве с окном выделения: оно не считается показанным и придёт при выделении после срока."""
         from . import otlozhit
         cfg = self.tr_cfg if isinstance(getattr(self, "tr_cfg", None), dict) else None
-        if cfg is not None:
+        if cfg is not None and key == otlozhit.NEVER:
+            cfg["tour_selector_done"] = True
+            otlozhit.clear(cfg, "tour_selector")
+            save = getattr(self, "tr_save", None)
+            if callable(save):
+                save()
+        elif cfg is not None:
             cfg["tour_selector_done"] = False
             otlozhit.snooze(cfg, "tour_selector", key)
             save = getattr(self, "tr_save", None)
@@ -670,6 +676,7 @@ class RegionSelector(TranslateMixin, QWidget):
                    ("full", "selector.btn_full_shot", "Ctrl+A"),
                    ("ocr", "selector.btn_ocr", "Ctrl+T"),
                    ("phone", "phone.tile_title", "phone.tile_tip"),   # те же ключи у кнопки «С телефона» в редакторе
+                   ("pin", "zakrepit.tile_title", "F3"),             # 1.36: закрепить область поверх окон
                    ("translate", "selector.btn_translate", "Ctrl+L"),
                    ("translate_pick", "selector.btn_translate_pick", "Ctrl+P"),
                    ("save", "selector.btn_save", "Ctrl+S"),
@@ -679,7 +686,7 @@ class RegionSelector(TranslateMixin, QWidget):
     # 1.29.1: сверху пять плиток, снизу четыре кнопки справа налево по частоте: «Скопировать и закрыть», «Выделить заново»,
     # «Редактировать», «Сохранить»; ширина по тексту, чем правее, тем шире; слева значок в цветном квадрате.
     # 1.34 (просьба владельца 21.11.2026): шестая плитка «С телефона», тот же приём фото, что пункт меню значка у часов
-    BAR_TOP = ("record", "full", "ocr", "phone", "translate", "translate_pick")
+    BAR_TOP = ("record", "full", "ocr", "phone", "pin", "translate", "translate_pick")
     BAR_BOTTOM = ("save", "edit", "manual", "copy")
     BAR_WEIGHTS = {"save": 1.0, "edit": 1.2, "manual": 1.4, "copy": 1.65}
 
@@ -692,14 +699,15 @@ class RegionSelector(TranslateMixin, QWidget):
         return {"save": tr("selector.sub_save_file"), "edit": tr("selector.sub_edit_frame"),
                 "manual": tr("selector.sub_retake_empty"), "copy": tr("selector.sub_copy_clipboard"),
                 "translate": tr("selector.sub_translate"), "translate_pick": tr("selector.sub_translate_pick"),
-                "phone": tr("phone.tile_sub")}
+                "phone": tr("phone.tile_sub"), "pin": tr("zakrepit.tile_sub")}
     BAR_ICONS = {"full": "fullscreen", "edit": "pencil", "copy": "copy", "save": "save", "record": "record",
                  "manual": "region", "ocr": "ocr", "translate": "translate", "translate_pick": "translate_pick",
-                 "phone": "phone"}
+                 "phone": "phone", "pin": "pin"}
     # цвет у главных кнопок фоном, у плиток только значком
     BAR_ICON_COLORS = {"record": "#d92d20", "full": "#2a6df4", "save": "#5a6270", "ocr": "#7c3aed",
                        "translate": "#0d9488", "translate_pick": "#0d9488", "edit": "#0b6fd6", "manual": "#0b4fb3",
-                       "copy": "#f4fff8", "phone": "#b4236e"}
+                       "copy": "#f4fff8", "phone": "#b4236e", "pin": "#1660d0"}
+    BAR_PIN_W = 36   # ширина плитки «Закрепить» (только значок) на широком и среднем размерах панели
     BAR_SQUARE = {"save": ("#e3e6eb", "#5a6270"), "edit": ("#d6e7fc", "#0b6fd6"),   # цвет квадрата и значка нижних кнопок
                   "manual": ("#1e6fe0", "#ffffff"), "copy": ("#4fc487", "#ffffff")}
 
@@ -713,6 +721,8 @@ class RegionSelector(TranslateMixin, QWidget):
             if key == "ocr" and not getattr(self, "ocr_enabled", True):
                 continue
             if key in ("translate", "translate_pick") and not self.translate_enabled():
+                continue
+            if key == "pin" and getattr(self, "_no_pin", False):
                 continue
             out.append((key, tr(b[1]), tr(b[2]) if b[2].startswith(("selector.", "phone.")) else i18n_keys(b[2])))
         return out
@@ -875,13 +885,19 @@ class RegionSelector(TranslateMixin, QWidget):
         gap, pad = self.BAR_GAP, 14
         texts = {b[0]: b[1] for b in self._bar_buttons()}
         if lv["text"]:
-            words = max([fm_l.horizontalAdvance(w) for k in top for w in texts[k].split()] or [0]) + 16
+            # 1.36: «Закрепить» узкая плитка с одним значком (подпись в подсказке): седьмая плитка с подписью не
+            # помещалась на экране 800 px, подписи остальных пришлось бы убрать
+            txt_top = [k for k in top if k != "pin"]
+            words = max([fm_l.horizontalAdvance(w) for k in txt_top for w in texts[k].split()] or [0]) + 16
             sub = max([fm_s.horizontalAdvance(self.BAR_SUB[k]) + 14 for k in ("translate", "translate_pick", "phone")
-                       if k in top] or [0])
+                       if k in txt_top] or [0])
             tile_min = max(lv["tile_min"], words, sub)
             # 1.34: плиток шесть; если равные не помещаются, каждая не уже своего самого длинного слова и пояснения
             tile_mins = {}
             for k in top:
+                if k == "pin":
+                    tile_mins[k] = self.BAR_PIN_W
+                    continue
                 own = max([fm_l.horizontalAdvance(w) for w in texts[k].split()] or [0]) + 16
                 if k in ("translate", "translate_pick", "phone"):
                     own = max(own, fm_s.horizontalAdvance(self.BAR_SUB[k]) + 14)
@@ -900,7 +916,8 @@ class RegionSelector(TranslateMixin, QWidget):
             for k in ("manual", "copy"):
                 mins[k] = 2 * pad + lv["icon"] + 8 + fm_l.horizontalAdvance(self._bar_label(k, texts[k], lv))
         self._tile_mins = tile_mins
-        top_w = len(top) * tile_min + gap * max(0, len(top) - 1)
+        n_pin = 1 if (lv["text"] and "pin" in top) else 0
+        top_w = (len(top) - n_pin) * tile_min + n_pin * self.BAR_PIN_W + gap * max(0, len(top) - 1)
         bottom_w = sum(mins.values()) + (len(mins) - 1) * gap
         if self._choice(lv):
             big, small = self._choice_mins(lv, texts)
@@ -983,10 +1000,21 @@ class RegionSelector(TranslateMixin, QWidget):
             else:
                 side_room = (r.left() - gapx) - (area.left() + 8)
             room = side_room
-        for lv in self.BAR_LEVELS:
-            inner, mins, top_keys = self._bar_sizes(lv, room)
-            if inner + 2 * bp <= room:
-                break
+        def pick_level(space):
+            for cand in self.BAR_LEVELS:
+                sizes = self._bar_sizes(cand, space)
+                if sizes[0] + 2 * bp <= space:
+                    break
+            return cand, sizes
+        # 1.36: плитка «Закрепить» стоит, только если от неё панель не становится мельче (и остаётся запас 12 px под
+        # крестик у угла): на узком экране (800 px) подписи и размер панели важнее седьмой плитки, а закрепить можно
+        # клавишей F3 и кнопкой редактора
+        self._no_pin = True
+        lv, _sizes0 = pick_level(room)
+        self._no_pin = False
+        lv_pin, _sizes1 = pick_level(room - 12)
+        self._no_pin = self.BAR_LEVELS.index(lv_pin) != self.BAR_LEVELS.index(lv)
+        inner, mins, top_keys = self._bar_sizes(lv, room)
         self.bar_level = lv
         label_font, small_font = self._bar_fonts(lv)
         fm_s = QFontMetrics(small_font)
@@ -1114,12 +1142,19 @@ class RegionSelector(TranslateMixin, QWidget):
         n = len(top_keys)
         avail_t = inner - gap * (n - 1) if n else 0
         tmins = getattr(self, "_tile_mins", {})
-        if n and any(avail_t / n < tmins.get(k, 0) for k in top_keys):
+        pin_w = self.BAR_PIN_W if (lv["text"] and "pin" in top_keys) else 0   # 1.36: «Закрепить» узкая плитка со значком
+        share = [k for k in top_keys if not (pin_w and k == "pin")]
+        m = len(share)
+        avail_s = avail_t - pin_w
+        if m and any(avail_s / m < tmins.get(k, 0) for k in share):
             # равные плитки не помещаются: каждой свой минимум, остаток поровну
-            extra = max(0.0, avail_t - sum(tmins.get(k, 0) for k in top_keys)) / n
-            tws = [tmins.get(k, 0) + extra for k in top_keys]
+            extra = max(0.0, avail_s - sum(tmins.get(k, 0) for k in share)) / m
+            widths = {k: tmins.get(k, 0) + extra for k in share}
         else:
-            tws = [avail_t / n] * n if n else []
+            widths = {k: avail_s / m for k in share} if m else {}
+        if pin_w:
+            widths["pin"] = pin_w
+        tws = [widths[k] for k in top_keys]
         ty = y + bp + title_h
         acc = 0.0
         for i, key in enumerate(top_keys):
@@ -1360,7 +1395,9 @@ class RegionSelector(TranslateMixin, QWidget):
             blocked = self.translate_mode and key in self.BAR_DISABLED_IN_TR
             p.setOpacity(0.38 if blocked else 1.0)   # режим перевода: эти кнопки не работают, рисуются бледными
             if hover:
-                hovered_text = self.BAR_TR_BLOCKED if blocked else (f"{text} · {short}" if key == "phone" else f"{text} ({short})")
+                hovered_text = self.BAR_TR_BLOCKED if blocked else (
+                    f"{text} · {short}" if key == "phone" else
+                    f"{text} {self.BAR_SUB[key]} ({short})" if key == "pin" else f"{text} ({short})")
                 if choice and not blocked and key in ("edit", "manual"):   # пояснение, убранное с кнопки, остаётся в подсказке
                     hovered_text += " · " + self.BAR_SUB[key]
             if choice and key in self.BAR_BOTTOM:
@@ -1406,7 +1443,7 @@ class RegionSelector(TranslateMixin, QWidget):
             isize = lv["icon"] + (4 if key == "phone" else 0)
             ic = icons.icon(self.BAR_ICONS[key], narrow_icon or (self.BAR_SQUARE[key][1] if (lv["text"] and not tile)
                                                                    else self.BAR_ICON_COLORS[key]))
-            if tile and not lv["text"]:
+            if tile and (not lv["text"] or key == "pin"):
                 ic.paint(p, QRect(rect.center().x() - isize // 2, rect.center().y() - isize // 2, isize, isize))
                 continue
             if tile:
@@ -2273,6 +2310,9 @@ class RegionSelector(TranslateMixin, QWidget):
         if action == "phone":
             self.open_phone()
             return
+        if action == "pin":
+            self.pin_here()
+            return
         if action == "full":
             self.show_full_screen()
             return
@@ -2516,6 +2556,12 @@ class RegionSelector(TranslateMixin, QWidget):
                 and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
             self.start_translate_all()   # Ctrl+Shift+L и в режиме «выделите кусок»: переход на весь экран
             return
+        if event.key() == Qt.Key.Key_P and event.modifiers() & Qt.KeyboardModifier.ControlModifier \
+                and event.modifiers() & Qt.KeyboardModifier.ShiftModifier and self.kept is not None \
+                and self.start is None and self.pending is None and not self.translate_mode:
+            if not event.isAutoRepeat():
+                self.print_here()   # 1.36: Ctrl+Shift+P печатает выделенную область (Ctrl+P здесь «Перевести выделенное»)
+            return
         if self._tr_key(event):
             return
         if event.key() == Qt.Key.Key_L and event.modifiers() & Qt.KeyboardModifier.ControlModifier \
@@ -2531,6 +2577,16 @@ class RegionSelector(TranslateMixin, QWidget):
             return
         if event.key() == Qt.Key.Key_Escape:
             self._finish(None)
+        elif event.key() == Qt.Key.Key_F3 and not event.isAutoRepeat() and self.kept is not None \
+                and self.start is None and self.pending is None:
+            self._do("pin")   # F3: закрепить область поверх окон
+        elif event.key() in (Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_Up, Qt.Key.Key_Down) and self.kept is not None \
+                and self.start is None and self.pending is None and not self.full_mode \
+                and not event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier):
+            step = 10 if event.modifiers() & Qt.KeyboardModifier.ShiftModifier else 1
+            dx = {Qt.Key.Key_Left: -step, Qt.Key.Key_Right: step}.get(event.key(), 0)
+            dy = {Qt.Key.Key_Up: -step, Qt.Key.Key_Down: step}.get(event.key(), 0)
+            self.nudge(dx, dy, resize=bool(event.modifiers() & Qt.KeyboardModifier.AltModifier))
         elif (event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace) or self._is_r_key(event)) and self.kept is not None \
                 and self.start is None and self.pending is None:
             self.clear_kept()
@@ -2594,6 +2650,21 @@ class RegionSelector(TranslateMixin, QWidget):
             ocr.toast(self, tr("selector.save_failed"), mark=False, ms=2600)
         self.update()
 
+    def print_here(self):
+        """Ctrl+Shift+P (1.36): снимок рамки на печать (системное окно), окно выделения остаётся, как после «Сохранить».
+        Окно печати открывается, пока окно выделения спрятано. Программы нет (тесты): ничего не делает."""
+        hook = getattr(self.lang_ctx, "print_from_selector", None)
+        if self._done or self.kept is None or hook is None:
+            return
+        if self.desktop is None or self._lift is not None:
+            from . import ocr
+            ocr.toast(self, tr("selector.preparing"), mark=False)
+            return
+        pixmap = self._crop(QRect(self.kept))
+        self.hover_button = None
+        hook(self, pixmap)
+        self.update()
+
     @staticmethod
     def _save_key(rect, pixmap):
         """Чем снимок для «Сохранить» отличается от прошлого: рамка и сами точки (окно, плёнка, содержимое)."""
@@ -2605,6 +2676,41 @@ class RegionSelector(TranslateMixin, QWidget):
             ptr.setsize(img.sizeInBytes())
             digest.update(bytes(ptr))
         return (rect.x(), rect.y(), rect.width(), rect.height(), img.width(), img.height(), digest.hexdigest())
+
+    def pin_here(self):
+        """Плитка «Закрепить» и F3 (1.36): область закрепляется поверх окон на своём месте, окно выделения закрывается.
+        Редактор не открывается, снимок автосохраняется, как при любом другом снимке (app._region_done)."""
+        if self._done or self.kept is None:
+            return
+        if self.desktop is None or self._lift is not None:   # снимок или содержимое окна ещё не пришли
+            from . import ocr
+            ocr.toast(self, tr("selector.preparing"), mark=False)
+            return
+        self.action = "pin"
+        self._finish(self.kept)
+
+    def nudge(self, dx: int, dy: int, resize: bool = False) -> bool:
+        """Точная подгонка рамки (1.36): стрелки двигают рамку на 1 точку, Shift на 10; Alt+стрелки меняют размер
+        (правый и нижний край: вправо/вниз больше, влево/вверх меньше). Рамка остаётся в пределах экрана, не меньше
+        8 x 8. True: рамка изменилась."""
+        if self.kept is None or self.start is not None or self.pending is not None or self.full_mode:
+            return False
+        r = QRect(self.kept)
+        W, H = self.width(), self.height()
+        if resize:
+            w = max(8, min(W - r.x(), r.width() + dx))
+            h = max(8, min(H - r.y(), r.height() + dy))
+            new = QRect(r.x(), r.y(), w, h)
+        else:
+            x = max(0, min(W - r.width(), r.x() + dx))
+            y = max(0, min(H - r.height(), r.y() + dy))
+            new = QRect(x, y, r.width(), r.height())
+        if new == r:
+            return False
+        self.kept = new
+        self.moved = True
+        self.update()
+        return True
 
     def open_phone(self):
         """Плитка «С телефона»: окно выделения закрывается без снимка, открывается то же окно приёма, что у пункта

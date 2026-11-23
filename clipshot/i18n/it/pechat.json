@@ -1,0 +1,10 @@
+{
+  "pechat.dialog_title": "Stampa screenshot",
+  "pechat.failed": "Impossibile stampare lo screenshot",
+  "pechat.none_close": "Chiudi",
+  "pechat.none_pdf": "Salva come PDF",
+  "pechat.none_text": "Su questo computer non è configurata nessuna stampante. Lo screenshot si può salvare come PDF e stampare più tardi o su un altro computer.",
+  "pechat.none_title": "Nessuna stampante trovata",
+  "pechat.preview_title": "Anteprima di stampa",
+  "pechat.sent": "Inviato alla stampante"
+}

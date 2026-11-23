@@ -503,10 +503,11 @@ def test_menus_and_app():
 
     fake = FakeApp()
     menu = fake._build_tray_menu()
-    texts = [a.text() for a in menu.actions()]
+    helpm = next(a for a in menu.actions() if a.text() == tr("app.menu_help")).menu()   # 1.36: пункт в подменю «Справка»
+    texts = [a.text() for a in helpm.actions()]
     check(tr("feedback.rate_title") in texts, f"меню значка: «Оценить ClipSD» ({texts})")
     check(texts.index(tr("feedback.rate_title")) == texts.index(tr("app.menu_about")) - 1, "сразу над «О программе»")
-    next(a for a in menu.actions() if a.text() == tr("feedback.rate_title")).trigger()
+    next(a for a in helpm.actions() if a.text() == tr("feedback.rate_title")).trigger()
     check(fake.rated == 1, "пункт меню значка открывает оценку")
 
     # меню «?» редактора

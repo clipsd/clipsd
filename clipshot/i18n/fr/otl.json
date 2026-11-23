@@ -4,6 +4,10 @@
   "otl.h3": "Pour 3 heures",
   "otl.m15": "Pour 15 minutes",
   "otl.more": "Choisir la durée du report",
+  "otl.never_ask": "Ne plus demander",
+  "otl.never_novoe": "Ne pas montrer les nouveautés",
+  "otl.never_ozn": "Ne pas ouvrir seule",
+  "otl.never_tour": "Ne pas montrer la visite",
   "otl.tip": "Reporter d’une heure",
   "otl.tomorrow": "Jusqu’à demain",
   "otl.week": "Pour une semaine"

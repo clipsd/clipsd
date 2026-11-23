@@ -299,7 +299,7 @@ appmod.CONFIG_PATH = __import__("pathlib").Path(tempfile.mkdtemp(prefix="clipsd-
 fake = FakeApp()
 fake.save_config = appmod.Clipshot.save_config.__get__(fake)
 tray_menu = fake._build_tray_menu()
-sub = next(a.menu() for a in tray_menu.actions() if a.menu() is not None)
+sub = next(a.menu() for a in tray_menu.actions() if a.menu() is not None and a.menu().title() == "Език · Language")
 check(sub.title() == "Език · Language", f"меню у часов: «{sub.title()}»")
 uk = next(a for a in sub.actions() if a.data() == "uk")
 uk.trigger()

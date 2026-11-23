@@ -1,0 +1,9 @@
+{
+  "errlog.close": "Fechar",
+  "errlog.copied": "Relatório copiado",
+  "errlog.copy": "Copiar relatório",
+  "errlog.menu_open": "Abrir o registo de erros",
+  "errlog.send": "Enviar relatório",
+  "errlog.text": "Ocorreu um erro inesperado. O trabalho continua: as capturas e as definições não foram perdidas. Os detalhes ficaram no registo de erros. Se se repetir, copie ou envie o relatório: não tem o seu texto nem capturas e só é enviado quando carregar no botão.",
+  "errlog.title": "Algo correu mal"
+}

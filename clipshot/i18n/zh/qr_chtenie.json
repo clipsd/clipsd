@@ -1,0 +1,18 @@
+{
+  "novoe.qr_chtenie_text": "如果截图中有二维码或条形码，编辑器顶部会出现“QR”按钮：可打开链接或复制码中的文字。无需联网即可识别。",
+  "novoe.qr_chtenie_title": "识别二维码",
+  "ozn.qr_chtenie_text": "识别截图中的二维码",
+  "qr_chtenie.close": "关闭",
+  "qr_chtenie.confirm_no": "不打开",
+  "qr_chtenie.confirm_note": "此地址取自截图中的码，未经验证。请只打开您信任的地址。",
+  "qr_chtenie.confirm_text": "程序将在浏览器中打开此地址：",
+  "qr_chtenie.confirm_title": "要打开链接吗？",
+  "qr_chtenie.confirm_yes": "打开",
+  "qr_chtenie.copied": "已复制码中的文字",
+  "qr_chtenie.copy": "复制码中的文字",
+  "qr_chtenie.not_link": "这不是链接：只能打开 http 和 https 地址。文字可以复制。",
+  "qr_chtenie.open": "打开链接",
+  "qr_chtenie.tip": "在截图中发现二维码或条形码。点击可打开链接或复制码中的文字",
+  "qr_chtenie.title_many": "截图中的码：{n}",
+  "qr_chtenie.title_one": "截图中的码"
+}

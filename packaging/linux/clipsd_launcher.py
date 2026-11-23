@@ -82,6 +82,10 @@ def _selfcheck():
     if not lines[0].startswith("i18n ok"):
         print("\n".join(lines))
         raise AssertionError(lines[0])
+    from clipshot import stickers
+    problems = stickers.selfcheck()   # 1.36: emoji of the Sticker tool (Twemoji SVG files + QtSvg) are inside the build
+    if problems:
+        raise AssertionError("\n".join(problems))
     print("ClipSD", clipshot.__version__, f"selfcheck ok (PyQt6 {PYQT_VERSION_STR}, cryptography {crypto},"
           f" signature ok, certifi {certs})")
     print("\n".join(lines))

@@ -1,0 +1,18 @@
+{
+  "novoe.qr_chtenie_text": "Jeśli na zrzucie jest kod QR lub kod kreskowy, w nagłówku edytora pojawi się przycisk „QR”: otwórz link lub skopiuj tekst kodu. Odczyt działa bez internetu.",
+  "novoe.qr_chtenie_title": "Odczyt kodu QR",
+  "ozn.qr_chtenie_text": "Kod QR ze zrzutu",
+  "qr_chtenie.close": "Zamknij",
+  "qr_chtenie.confirm_no": "Nie otwieraj",
+  "qr_chtenie.confirm_note": "Adres pochodzi z kodu na zrzucie i nie został sprawdzony. Otwieraj tylko to, czemu ufasz.",
+  "qr_chtenie.confirm_text": "Program otworzy ten adres w przeglądarce:",
+  "qr_chtenie.confirm_title": "Otworzyć link?",
+  "qr_chtenie.confirm_yes": "Otwórz",
+  "qr_chtenie.copied": "Tekst kodu skopiowany",
+  "qr_chtenie.copy": "Kopiuj tekst kodu",
+  "qr_chtenie.not_link": "To nie link: otwierane są tylko adresy http i https. Tekst można skopiować.",
+  "qr_chtenie.open": "Otwórz link",
+  "qr_chtenie.tip": "Na zrzucie znaleziono kod QR lub kod kreskowy. Kliknij: otwórz link lub skopiuj tekst kodu",
+  "qr_chtenie.title_many": "Kody na zrzucie: {n}",
+  "qr_chtenie.title_one": "Kod na zrzucie"
+}
