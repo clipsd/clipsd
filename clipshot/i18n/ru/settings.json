@@ -122,5 +122,9 @@
   "settings.tray_region": "Снимок области",
   "settings.update_check": "Проверять обновления автоматически",
   "settings.update_check_tip": "Каждые 6 часов ClipSD проверяет на странице clipsd.github.io, есть ли новая версия, и предлагает её установить.",
-  "settings.version_line": "Версия ClipSD {version}"
+  "settings.version_line": "Версия ClipSD {version}",
+  "settings.store_updates": "Обновления приходят через Microsoft Store, ClipSD сам их не скачивает. Кнопка «Проверить обновления» открывает страницу ClipSD в Microsoft Store.",
+  "settings.autostart_store_open": "Открыть автозагрузку Windows",
+  "settings.autostart_store_user": "Автозапуск ClipSD выключен в параметрах Windows. Включить его можно только там: «Параметры → Приложения → Автозагрузка».",
+  "settings.autostart_store_policy": "Автозапуском ClipSD управляет администратор этого компьютера."
 }

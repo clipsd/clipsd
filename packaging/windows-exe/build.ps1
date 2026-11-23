@@ -5,9 +5,12 @@
 # Runs inside the folder made by packaging/stage_windows.py (CI and build_dist.sh).
 # Needs: Python 3.12 x64, Visual Studio 2022+ or Build Tools with "Desktop development with C++" (cl.exe, rc.exe),
 #        Inno Setup 6 (winget install JRSoftware.InnoSetup); without it the build fails.
-# Run:   powershell -ExecutionPolicy Bypass -File packaging\build.ps1
+# Run:   powershell -ExecutionPolicy Bypass -File packaging\build.ps1 [-AppOnly]
 # Result: dist\ClipSD-app\ClipSD-app.exe (program), dist\launcher\ClipSD.exe (launcher),
 #         dist\ClipSD-<version>-Setup.exe (installer)
+# -AppOnly: only the program and its selfcheck (the Microsoft Store package of packaging/windows-store needs
+#           neither the launcher nor the installer: Windows starts ClipSD-app.exe and the Store updates it).
+param([switch]$AppOnly)
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $Venv = Join-Path $Root ".venv-build"
@@ -66,9 +69,16 @@ if (-not $proc.WaitForExit(120000)) { $proc.Kill(); throw "selfcheck не зав
 $env:QT_QPA_PLATFORM = $QtPlatform
 if (Test-Path $Report) { Get-Content $Report -Encoding utf8 | Write-Host }
 if ($proc.ExitCode -ne 0 -or -not (Test-Path $Report)) { throw "selfcheck собранной программы не прошёл (код $($proc.ExitCode))" }
-# The built program must be exactly the kind of these sources: preview only with clipshot\_preview_build.py
-$Want = if (Test-Path (Join-Path $Root "clipshot\_preview_build.py")) { "build: preview" } else { "build: release" }
+# The built program must be exactly the kind of these sources: preview only with clipshot\_preview_build.py,
+# Microsoft Store only with clipshot\_store_build.py (packaging/stage_windows.py --store)
+$Want = if (Test-Path (Join-Path $Root "clipshot\_preview_build.py")) { "build: preview" }
+        elseif (Test-Path (Join-Path $Root "clipshot\_store_build.py")) { "build: store" }
+        else { "build: release" }
 if (-not ((Get-Content $Report -Encoding utf8) -contains $Want)) { throw "selfcheck: ожидали '$Want'" }
+if ($AppOnly) {
+    Write-Host "==> Готово (только программа): dist\ClipSD-app\ClipSD-app.exe" -ForegroundColor Green
+    exit 0
+}
 
 # --- launcher (C, MSVC) ---------------------------------------------------------------------------------
 function Enter-Msvc {

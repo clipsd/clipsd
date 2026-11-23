@@ -77,6 +77,10 @@ Interfaces with other parts:
   bound failure result, or still the old version 10 minutes after a not deferred attempt ->
   "update_failed", message, staging removed.
 - telemetry_event(name, **fields) only writes to the log: nothing is sent anywhere.
+- Microsoft Store builds (install_kind() "store": build_info.STORE or an MSIX package identity, see store.py)
+  never ask the channel and never install: the Store updates them. "Check for updates" opens the product page
+  in the Store app (store.store_url(), the website when unknown); the result of an attempt of another copy of
+  ClipSD (Setup.exe) on the same computer is left alone.
 - Preview builds (build_info.PREVIEW, the owner's own tests before the channel exists) use only the
   channel "proba": a local folder proba_dir() with latest.json, latest.json.sig and the package
   files named in it. The same signature, expiry, rollback, size and sha256 checks apply; only the
@@ -151,8 +155,6 @@ SUPPORT_EMAIL = "clipsd.app@gmail.com"
 ISSUE_URL_LIMIT = 7_000             # whole address of the issue page (GitHub refuses about 8 KB)
 MAIL_URL_LIMIT = 1_800              # whole mailto: address (mail programs cut long ones)
 REPORT_LOG_LINES = 30               # last lines of the helper's update.log in a report
-# TODO(store): product id from Partner Center once the Store listing exists.
-STORE_PRODUCT_ID = ""
 
 CONFIG_DEFAULTS = {
     "update_check": True,           # quiet automatic check once per 6 h (1.36)
@@ -360,22 +362,10 @@ def mark_dir() -> Path:
 
 
 def is_store_package() -> bool:
-    """Windows: the process has an MSIX package identity (installed from Microsoft Store)."""
-    try:
-        from .store import is_store_build   # optional module of the Store work
-        return bool(is_store_build())
-    except ImportError:
-        pass
-    if os.name != "nt":
-        return False
-    try:
-        import ctypes
-        from ctypes import wintypes
-        length = wintypes.UINT(0)
-        rc = ctypes.windll.kernel32.GetCurrentPackageFullName(ctypes.byref(length), None)
-    except (AttributeError, OSError):
-        return False
-    return rc in (0, 122)   # 0 / ERROR_INSUFFICIENT_BUFFER: packaged; 15700: APPMODEL_ERROR_NO_PACKAGE
+    """A Microsoft Store build (build_info.STORE) or a process with an MSIX package identity: the Store
+    updates it, never this module (a Setup.exe started from the package would install a second copy)."""
+    from . import store
+    return store.is_store_build()
 
 
 def install_kind() -> str:
@@ -1358,9 +1348,9 @@ class Updater(QObject):
         """Returns True when a request to the channel was started. auto ("Retry" after a failure): a newer
         version found is installed at once, without the "version N is available" window."""
         if self.kind == "store":
-            if manual:
-                self.ui.open_url(f"ms-windows-store://pdp/?productid={STORE_PRODUCT_ID}"
-                                 if STORE_PRODUCT_ID else SITE_URL)
+            if manual:   # the product page in the Store app: it shows "Update" when a new version is there
+                from . import store
+                self.ui.open_url(store.store_url() or SITE_URL)
             return False
         if self.kind not in ("windows", "linux"):
             if manual:
@@ -2011,6 +2001,10 @@ class Updater(QObject):
     # previous attempt ------------------------------------------------------
     def check_previous_attempt(self) -> str:
         """At start (and 10 min after starting an install): result of the last attempt."""
+        if self.kind == "store":
+            # %LOCALAPPDATA%\ClipSD may hold the attempt of a Setup.exe copy of ClipSD on the same computer:
+            # not ours to finish, show or delete
+            return "none"
         record = read_attempt(attempt_path())
         if record is None:
             return "failed" if self._show_saved_failure() else "none"

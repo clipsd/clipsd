@@ -281,7 +281,17 @@ def _xdg_autostart() -> Path:
     return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "autostart/clipsd.desktop"
 
 
+def _store_startup() -> bool:
+    """Microsoft Store package: the start at login is the StartupTask of the package (store.py), a shortcut
+    in the Startup folder would land in the private folder of the package and never run."""
+    from . import store
+    return store.has_package_identity()
+
+
 def autostart_enabled() -> bool:
+    if _store_startup():
+        from . import store
+        return store.startup_enabled()
     if sys.platform == "win32":
         return _startup_lnk().exists()
     unit = _systemd_unit()
@@ -291,6 +301,12 @@ def autostart_enabled() -> bool:
 
 
 def set_autostart(enabled: bool):
+    """Raises store.StartupError in a Store package when Windows keeps another state (turned off by the
+    person in Windows Settings, a policy)."""
+    if _store_startup():
+        from . import store
+        store.set_startup(enabled)
+        return
     if sys.platform == "win32":
         lnk = _startup_lnk()
         if not enabled:
@@ -670,7 +686,8 @@ class SettingsDialog(QDialog):
         grid.addWidget(self.language, 0, 1, 1, 2)
 
         # Обновления (1.31.1): отдельный заметный блок: версия, «Проверить обновления», автопроверка
-        from . import build_info
+        from . import build_info, updater
+        self.store_build = updater.install_kind() == "store"   # Microsoft Store: обновляет Store, не ClipSD
         grid = self._card(pg["updates"], tr("settings.sec_updates"), "updates")
         self.version_label = QLabel(tr("settings.version_line", version=build_info.version_label(__version__)))
         self.version_label.setObjectName("versionLine")
@@ -678,8 +695,17 @@ class SettingsDialog(QDialog):
         self.check_updates = QPushButton(tr("updater.menu.check"))
         self.check_updates.clicked.connect(self._check_updates_now)
         grid.addWidget(self.check_updates, 0, 2, Qt.AlignmentFlag.AlignRight)
-        self.update_check = self._check(grid, 1, tr("settings.update_check"), bool(config.get("update_check", True)))
-        self.update_check.setToolTip(tr("settings.update_check_tip"))
+        if self.store_build:
+            # своей проверки нет: честно говорим, откуда приходят обновления (кнопка открывает страницу в Store)
+            self.update_check = None
+            self.store_note = QLabel(tr("settings.store_updates"))
+            self.store_note.setObjectName("hint")
+            self.store_note.setWordWrap(True)
+            grid.addWidget(self.store_note, 1, 0, 1, 3)
+        else:
+            self.update_check = self._check(grid, 1, tr("settings.update_check"),
+                                            bool(config.get("update_check", True)))
+            self.update_check.setToolTip(tr("settings.update_check_tip"))
         # 1.34: окно «Новое в версии» и метки «Новое» после обновления (novoe.py)
         self.novoe_enabled = self._check(grid, 2, tr("settings.novoe_enabled"), bool(config.get("novoe_enabled", True)))
         self.novoe_enabled.setToolTip(tr("settings.novoe_enabled_tip"))
@@ -907,6 +933,27 @@ class SettingsDialog(QDialog):
         # Запуск
         grid = self._card(pg["general"], tr("settings.sec_start"), "start")
         self.autostart = self._check(grid, 0, tr("settings.autostart"), autostart_enabled())
+        row = 1
+        self.autostart_state = ""
+        if _store_startup():
+            # Microsoft Store: автозапуск = StartupTask пакета; человек управляет им и в параметрах Windows
+            from . import store
+            self.autostart_state = store.startup_state()
+            blocked = {"disabled_by_user": "settings.autostart_store_user",
+                       "disabled_by_policy": "settings.autostart_store_policy",
+                       "enabled_by_policy": "settings.autostart_store_policy"}.get(self.autostart_state)
+            if blocked:
+                hint = QLabel(tr(blocked))
+                hint.setObjectName("hint")
+                hint.setWordWrap(True)
+                grid.addWidget(hint, row, 0, 1, 3)
+                row += 1
+                if self.autostart_state != "disabled_by_user":
+                    self.autostart.setEnabled(False)   # решает политика, а не ClipSD
+            self.startup_settings = QPushButton(tr("settings.autostart_store_open"))
+            self.startup_settings.clicked.connect(store.open_startup_settings)
+            grid.addWidget(self.startup_settings, row, 0, 1, 3, Qt.AlignmentFlag.AlignLeft)
+            row += 1
         # О программе: версия, лицензия, ссылка, оба знакомства
         grid = self._card(pg["about"], tr("settings.nav_about"), "about")
         self.want_tour = False
@@ -1247,7 +1294,8 @@ class SettingsDialog(QDialog):
         return editor
 
     def _check_updates_now(self):
-        """«Проверить обновления»: тот же путь, что у пункта меню значка (из исходников: сообщение updater.disabled.dev)."""
+        """«Проверить обновления»: тот же путь, что у пункта меню значка (из исходников: сообщение updater.disabled.dev,
+        Microsoft Store: страница ClipSD в Store)."""
         if self.update_ctx is None:
             return
         from . import updater
@@ -1371,7 +1419,8 @@ class SettingsDialog(QDialog):
             "pdf_page": self.pdf_page.currentData(),
             "clip_html": self.clip_html.isChecked(),
             "autostart": self.autostart.isChecked(),
-            "update_check": self.update_check.isChecked(),
+            "update_check": (self.update_check.isChecked() if self.update_check is not None
+                             else bool(self.config.get("update_check", True))),
             "novoe_enabled": self.novoe_enabled.isChecked(),
             "ui_accent": self.colors["ui_accent"].property("color"),
             "ui_panel": self.colors["ui_panel"].property("color"),

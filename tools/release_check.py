@@ -13,7 +13,9 @@
    version (always an error).
 3. Preview builds never become releases: clipshot/_preview_build.py (packaging/preview_build.py)
    must not exist, and the proba public key (packaging/proba-public-key.txt) must not be listed in
-   STABLE_PUBLIC_KEYS or TEST_PUBLIC_KEYS (always an error).
+   STABLE_PUBLIC_KEYS or TEST_PUBLIC_KEYS (always an error). The same for the Microsoft Store mark
+   clipshot/_store_build.py (packaging/stage_windows.py --store writes it into the staged copy only):
+   in the repository it would turn every build into a Store build without self-updates.
 4. Urgency: CHANGELOG/<version>/CRITICAL (written by tools/release.sh --critical) makes the build log
    start with "СРОЧНО (исправление безопасности)" as a GitHub warning, so it is seen before signing.
 5. Name and icon (GPLv3 section 7): TRADEMARKS.md and TRADEMARKS.ru.md exist and every source file with the GPL
@@ -95,6 +97,9 @@ def preview_problems(root: Path) -> list:
     problems = []
     if (root / "clipshot" / "_preview_build.py").exists():
         problems.append("clipshot/_preview_build.py exists: this tree is a preview build (packaging/preview_build.py)")
+    if (root / "clipshot" / "_store_build.py").exists():
+        problems.append("clipshot/_store_build.py exists: this tree is a Microsoft Store build "
+                        "(packaging/stage_windows.py --store writes it only into the staged copy)")
     key_file = root / "packaging" / "proba-public-key.txt"
     file_keys = set()
     if key_file.is_file():

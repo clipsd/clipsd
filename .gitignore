@@ -10,3 +10,5 @@ __pycache__/
 /.venv-build*/
 # пробная сборка (packaging/preview_build.py пишет его только в отдельную копию исходников)
 clipshot/_preview_build.py
+# сборка для Microsoft Store (packaging/stage_windows.py --store пишет его только в разложенную копию)
+clipshot/_store_build.py

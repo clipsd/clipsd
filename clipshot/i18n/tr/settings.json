@@ -122,5 +122,9 @@
   "settings.tray_region": "Alan yakala",
   "settings.update_check": "Güncellemeleri otomatik olarak denetle",
   "settings.update_check_tip": "ClipSD 6 saatte bir clipsd.github.io sayfasına yeni sürüm olup olmadığını sorar ve yüklemeyi önerir.",
-  "settings.version_line": "ClipSD sürümü {version}"
+  "settings.version_line": "ClipSD sürümü {version}",
+  "settings.store_updates": "Güncellemeler Microsoft Store üzerinden gelir; ClipSD bunları kendisi indirmez. “Güncellemeleri denetle” düğmesi ClipSD'nin Microsoft Store sayfasını açar.",
+  "settings.autostart_store_open": "Windows başlangıç uygulamalarını aç",
+  "settings.autostart_store_user": "ClipSD'nin Windows ile başlaması Windows ayarlarında kapatılmış. Yalnızca orada açılabilir: “Ayarlar → Uygulamalar → Başlangıç”.",
+  "settings.autostart_store_policy": "ClipSD'nin Windows ile başlamasını bu bilgisayarın yöneticisi yönetir."
 }

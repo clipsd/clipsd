@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ClipSD for Microsoft Store: package manifest of the MSIX package (template).
+  Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко). SPDX-License-Identifier: GPL-3.0-or-later
+  Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
+
+  make_msix_layout.py fills @NAME@, @PUBLISHER@, @PUBLISHER_DISPLAY_NAME@ (store-identity.json, values from
+  Partner Center), @VERSION@ (clipshot/__init__.py + ".0": the fourth part belongs to the Store) and
+  @RESOURCES@ (the 12 languages of the program). Images and the localized description come from resources.pri
+  (build_msix.ps1, makepri).
+
+  - runFullTrust: ClipSD is a classic desktop program (PyQt6) that runs as the user, outside an app container:
+    global hotkey (RegisterHotKey), screen capture (BitBlt through Qt), tray icon, Windows OCR / Tesseract.
+  - StartupTask: start at login (the Store build has no shortcut in the Startup folder). Enabled="false": the
+    program turns it on itself after the person's consent (Store policy 10.2.8): the first start shows a card
+    with "Start ClipSD with Windows", ticked (clipshot/store_welcome.py), as the Setup.exe installer shows its
+    ticked option; the checkbox in ClipSD settings and Windows Settings > Apps > Startup change it later
+    (owner's decision 19.11.2026). TaskId = STARTUP_TASK_ID in clipshot/store.py.
+  - clipsd.exe: command line alias with the options of the program (region, full, open, quit), for scripts and
+    the Run window; CI starts the packaged program through it.
+  - No unvirtualizedResources: AppData stays virtualized (see msix-itog.md, "Пути").
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap3 uap5 desktop rescap">
+
+  <Identity Name="@NAME@" Publisher="@PUBLISHER@" Version="@VERSION@" ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>ClipSD</DisplayName>
+    <PublisherDisplayName>@PUBLISHER_DISPLAY_NAME@</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+@RESOURCES@
+  </Resources>
+
+  <Applications>
+    <Application Id="ClipSD" Executable="ClipSD-app.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements DisplayName="ClipSD" Description="ms-resource:AppDescription" BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png" Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" ShortName="ClipSD">
+          <uap:ShowNameOnTiles>
+            <uap:ShowOn Tile="square150x150Logo" />
+            <uap:ShowOn Tile="wide310x150Logo" />
+          </uap:ShowNameOnTiles>
+        </uap:DefaultTile>
+      </uap:VisualElements>
+      <Extensions>
+        <uap5:Extension Category="windows.startupTask" Executable="ClipSD-app.exe" EntryPoint="Windows.FullTrustApplication">
+          <uap5:StartupTask TaskId="ClipSDStartup" Enabled="false" DisplayName="ClipSD" />
+        </uap5:Extension>
+        <uap3:Extension Category="windows.appExecutionAlias" Executable="ClipSD-app.exe" EntryPoint="Windows.FullTrustApplication">
+          <uap3:AppExecutionAlias>
+            <desktop:ExecutionAlias Alias="clipsd.exe" />
+          </uap3:AppExecutionAlias>
+        </uap3:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

@@ -122,5 +122,9 @@
   "settings.tray_region": "Capturer une zone",
   "settings.update_check": "Rechercher automatiquement les mises à jour",
   "settings.update_check_tip": "Toutes les 6 heures, ClipSD demande à clipsd.github.io s’il existe une nouvelle version et propose de l’installer.",
-  "settings.version_line": "Version de ClipSD {version}"
+  "settings.version_line": "Version de ClipSD {version}",
+  "settings.store_updates": "Les mises à jour arrivent par le Microsoft Store : ClipSD ne les télécharge pas lui-même. « Rechercher des mises à jour » ouvre la page de ClipSD dans le Microsoft Store.",
+  "settings.autostart_store_open": "Ouvrir les applications de démarrage de Windows",
+  "settings.autostart_store_user": "Le lancement de ClipSD au démarrage est désactivé dans les paramètres de Windows. Il ne peut être réactivé que là : « Paramètres → Applications → Démarrage ».",
+  "settings.autostart_store_policy": "Le lancement de ClipSD au démarrage est géré par l’administrateur de cet ordinateur."
 }

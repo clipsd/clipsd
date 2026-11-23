@@ -122,5 +122,9 @@
   "settings.tray_region": "Zrzut obszaru",
   "settings.update_check": "Automatycznie sprawdzaj aktualizacje",
   "settings.update_check_tip": "Co 6 godzin ClipSD pyta stronę clipsd.github.io, czy jest nowa wersja, i proponuje jej instalację.",
-  "settings.version_line": "Wersja ClipSD {version}"
+  "settings.version_line": "Wersja ClipSD {version}",
+  "settings.store_updates": "Aktualizacje przychodzą przez Microsoft Store, ClipSD sam ich nie pobiera. „Sprawdź aktualizacje” otwiera stronę ClipSD w Microsoft Store.",
+  "settings.autostart_store_open": "Otwórz ustawienia uruchamiania Windows",
+  "settings.autostart_store_user": "Autostart ClipSD jest wyłączony w ustawieniach Windows. Można go włączyć tylko tam: „Ustawienia → Aplikacje → Uruchamianie”.",
+  "settings.autostart_store_policy": "Autostartem ClipSD zarządza administrator tego komputera."
 }
