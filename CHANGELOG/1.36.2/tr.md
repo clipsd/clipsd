@@ -1,0 +1,1 @@
+- Windows. HDR açıkken ekran görüntüleri artık soluk çıkmıyor: görüntüdeki renkler ekrandakiyle aynı.

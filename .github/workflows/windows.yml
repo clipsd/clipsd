@@ -138,7 +138,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { $failed += "test_windows_hidpi" }
           foreach ($t in "smoke_test", "features_test", "ocr_test", "translate_test", "light_test",
                          "updater_test", "update_app_test", "channel_sign_test", "okna_imya_test",
-                         "ocr_win_encoding_test") {
+                         "ocr_win_encoding_test", "hdr_win_test", "hdr_test") {
             Write-Host "::group::$t"
             if ($t -in "smoke_test", "features_test", "ocr_test", "translate_test", "light_test", "updater_test") {
               & $py -X utf8 "tests\$t.py" . "$outDir\$t"

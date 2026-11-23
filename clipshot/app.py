@@ -1988,6 +1988,9 @@ def main() -> int:
     from . import themes
     themes.apply_app(qapp, app.config)
     app.start(server_name, command)
+    if sys.platform == "win32":
+        from .grab import prewarm_hdr
+        QTimer.singleShot(3000, prewarm_hdr)   # HDR-мониторы: видеокарта и шейдер готовы к первому снимку
     errorlog.set_loop_running(True)
     rc = qapp.exec()
     errorlog.set_loop_running(False)

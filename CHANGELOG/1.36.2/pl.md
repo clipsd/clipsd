@@ -1,0 +1,1 @@
+- Windows. Zrzuty ekranu przy włączonym HDR nie wychodzą już wyblakłe: kolory na zrzucie są takie jak na ekranie.

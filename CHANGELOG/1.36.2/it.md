@@ -1,0 +1,1 @@
+- Windows. Le schermate non escono più sbiadite con l'HDR attivo: i colori della schermata sono quelli dello schermo.

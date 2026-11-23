@@ -1,0 +1,1 @@
+- Windows. Les captures d'écran ne sont plus délavées quand le HDR est activé : les couleurs de la capture sont celles de l'écran.

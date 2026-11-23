@@ -1,0 +1,1 @@
+- Windows. Screenshots no longer come out washed out when HDR is on: the colors in the screenshot match the screen.

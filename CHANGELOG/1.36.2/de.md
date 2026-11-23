@@ -1,0 +1,1 @@
+- Windows. Bildschirmfotos sind bei eingeschaltetem HDR nicht mehr blass: Die Farben im Bildschirmfoto entsprechen dem Bildschirm.

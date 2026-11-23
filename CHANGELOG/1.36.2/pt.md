@@ -1,0 +1,1 @@
+- Windows. As capturas de tela já não saem desbotadas com o HDR ligado: as cores da captura são as mesmas da tela.
