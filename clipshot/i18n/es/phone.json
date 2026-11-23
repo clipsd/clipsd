@@ -141,5 +141,8 @@
   "phone.wifi_text": "El teléfono y el equipo deben estar conectados a la misma red Wi-Fi. Con datos móviles la foto no llegará.",
   "phone.tile_title": "Del teléfono",
   "phone.tile_sub": "cámara o imagen",
-  "phone.tile_tip": "Haga una foto o envíe una imagen desde el teléfono"
+  "phone.tile_tip": "Haga una foto o envíe una imagen desde el teléfono",
+  "phone.zoom": "Ampliar",
+  "phone.zoom_caption": "Apunte la cámara del teléfono al código",
+  "phone.zoom_tip": "Mostrar el código en grande"
 }

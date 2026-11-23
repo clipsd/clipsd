@@ -141,5 +141,8 @@
   "phone.wifi_text": "The phone and the computer must be on the same Wi-Fi network. Over mobile data the photo will not arrive.",
   "phone.tile_title": "From phone",
   "phone.tile_sub": "camera or picture",
-  "phone.tile_tip": "Take a photo or send a picture from your phone"
+  "phone.tile_tip": "Take a photo or send a picture from your phone",
+  "phone.zoom": "Enlarge",
+  "phone.zoom_caption": "Point the phone’s camera at the code",
+  "phone.zoom_tip": "Show the code big"
 }

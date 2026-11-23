@@ -1,4 +1,4 @@
-ClipSD 1.34.2: снимки экрана с редактором
+ClipSD 1.35.0: снимки экрана с редактором
 Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко). Лицензия GNU GPL v3 или новее:
   на русском простыми словами в файле LICENSE.ru.txt, официальный английский текст в файле LICENSE.
   Название ClipSD и значок программы: изменённые версии других авторов называются иначе и не используют
@@ -142,6 +142,7 @@ Copyright (C) 2026 Sergey Dayneko (Сергей Дайнеко). Лицензи�
 
 ## Политика подписи кода (Code signing policy)
 
-Free code signing provided by SignPath.io, certificate by SignPath Foundation.
-Бесплатную подпись кода предоставляет SignPath.io, сертификат выдан SignPath Foundation.
+Установщик с сайта пока не подписан: Windows при первом запуске может показать окно SmartScreen.
+Версия из Microsoft Store подписана Microsoft и ставится без предупреждения.
+Заявка на бесплатную подпись в SignPath Foundation отклонена 21.11.2026 (проект пока мало известен), повторная заявка позже.
 Роли, что подписывается, конфиденциальность: https://clipsd.github.io/ru/code-signing.html#policy

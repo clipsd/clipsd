@@ -1080,6 +1080,7 @@ WAIT_KEYS = {   # why the update waits (Clipshot.quit_blocker): a whole sentence
     "text": "updater.wait.text",
     "selector": "updater.wait.selector",
     "dialog": "updater.wait.dialog",
+    "phone": "updater.wait.phone",
 }
 
 
@@ -1158,6 +1159,11 @@ class UpdaterUI:
         """Non-modal: the update waits (editor open); "Restart now" tries again at once."""
         from .update_windows import waiting_card
         self.progress_close()
+        from PyQt6 import sip
+        old = getattr(self, "_notice", None)
+        if old is not None and not sip.isdeleted(old):
+            old.close()   # never two waiting windows: the new one replaces the old one (a repeated "Restart now")
+            old.deleteLater()
         box = closable(waiting_card(text, lambda: QTimer.singleShot(0, on_restart)))
         box.setWindowModality(Qt.WindowModality.NonModal)
         self._notice = box
@@ -1802,6 +1808,11 @@ class Updater(QObject):
         record = read_attempt(attempt_path())
         if record is None or not record.get("deferred"):
             return False
+        # the person asked explicitly: a window of the phone reception that hides after a photo does not hold the
+        # update for 120 s (Clipshot.restart_requested), otherwise the invisible window can never be closed
+        asked = getattr(self.ctx, "restart_requested", None)
+        if asked is not None:
+            asked()
         reason = self._quit_blocker()
         if reason:
             self._show_wait(wait_text(reason, str(record.get("to", ""))))

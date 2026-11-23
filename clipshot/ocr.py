@@ -20,10 +20,10 @@ import sys
 import tempfile
 import threading
 
-from PyQt6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QRect, QRectF, QThread, QTimer, Qt, pyqtSignal
+from PyQt6.QtCore import QEasingCurve, QObject, QPoint, QProcess, QPropertyAnimation, QRect, QRectF, QThread, QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFontMetrics, QGuiApplication, QImage, QPainter, QTextOption
-from PyQt6.QtWidgets import (QFrame, QGraphicsOpacityEffect, QLabel, QPushButton, QSizePolicy, QTextEdit,
-                             QVBoxLayout)
+from PyQt6.QtWidgets import (QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel, QPushButton, QSizePolicy,
+                             QTextEdit, QVBoxLayout)
 
 from .dialogs import ClipDialog, icon_pixmap, link_colored
 from .i18n import tr
@@ -85,14 +85,15 @@ class InstallHelp:
     """Что поставить, чтобы распознавание заработало: объяснение, команда (если есть) и ссылка на инструкцию."""
 
     def __init__(self, what: str, command: str = None, url: str = None, url_title: str = "",
-                 settings_url: str = None, ocr_capability: str = None):
+                 settings_url: str = None, ocr_capability: str = None, install_langs=None):
         self.what, self.command, self.url, self.url_title = what, command, url, url_title
+        self.install_langs = tuple(install_langs or ())   # Linux: языки (коды Tesseract) для кнопки «Установить распознавание»
         self.settings_url = settings_url   # Windows: кнопка «Открыть параметры языка»
         self.ocr_capability = ocr_capability   # Windows: кнопка «Установить распознавание» (тег, напр. ru-RU)
 
 
 def linux_family() -> str:
-    """debian (Ubuntu, Mint…), fedora, arch или пусто: по /etc/os-release."""
+    """debian (Ubuntu, Mint…), fedora, arch, opensuse или пусто: по /etc/os-release."""
     try:
         with open("/etc/os-release", encoding="utf-8") as fh:
             data = dict(line.rstrip("\n").split("=", 1) for line in fh if "=" in line)
@@ -100,7 +101,8 @@ def linux_family() -> str:
         return ""
     ids = (data.get("ID", "") + " " + data.get("ID_LIKE", "")).replace('"', "").lower().split()
     for family, names in (("debian", ("debian", "ubuntu", "linuxmint", "pop")), ("fedora", ("fedora", "rhel", "centos")),
-                          ("arch", ("arch", "manjaro", "endeavouros"))):
+                          ("arch", ("arch", "manjaro", "endeavouros")),
+                          ("opensuse", ("opensuse", "opensuse-leap", "opensuse-tumbleweed", "suse", "sles"))):
         if any(n in ids for n in names):
             return family
     return ""
@@ -111,6 +113,68 @@ LINUX_COMMANDS = {
     "fedora": ("sudo dnf install tesseract tesseract-langpack-rus", "sudo dnf install tesseract-langpack-rus"),
     "arch": ("sudo pacman -S tesseract tesseract-data-rus tesseract-data-eng", "sudo pacman -S tesseract-data-rus"),
 }
+
+
+# 1.36: установка одной кнопкой (Linux). Только фиксированные имена пакетов из этой таблицы: ни одна строка от человека
+# (ни язык, ни путь) в командную строку не попадает; неизвестный код языка просто пропускается.
+SYSTEM_PATH = "/usr/sbin:/usr/bin:/sbin:/bin"   # apt-get, dnf, zypper и pkexec лежат здесь; PATH человека может их не знать
+PKEXEC_DECLINED = (126, 127)   # pkexec: окно пароля закрыли / нет права
+_TESS_LANGS = tuple(TESS_CODES.values())   # rus eng bul ukr deu fra spa ita por pol tur chi_sim
+_SUSE_NAMES = {"rus": "russian", "eng": "english", "bul": "bulgarian", "ukr": "ukrainian", "deu": "german",
+               "fra": "french", "spa": "spanish", "ita": "italian", "por": "portuguese", "pol": "polish",
+               "tur": "turkish", "chi_sim": "chinese_simplified"}
+LINUX_PACKAGES = {
+    "debian": {"manager": "apt-get", "flags": ("install", "-y"), "base": ("tesseract-ocr",),
+               "langs": {c: "tesseract-ocr-" + c.replace("_", "-") for c in _TESS_LANGS}},
+    "fedora": {"manager": "dnf", "flags": ("install", "-y"), "base": ("tesseract",),
+               "langs": {c: "tesseract-langpack-" + c for c in _TESS_LANGS}},
+    "arch": {"manager": "pacman", "flags": ("-S", "--noconfirm", "--needed"), "base": ("tesseract",),
+             "langs": {c: "tesseract-data-" + c for c in _TESS_LANGS}},
+    "opensuse": {"manager": "zypper", "flags": ("--non-interactive", "install"), "base": ("tesseract-ocr",),
+                 "langs": {c: "tesseract-ocr-traineddata-" + _SUSE_NAMES[c] for c in _TESS_LANGS}},
+}
+
+
+def in_sandbox() -> bool:
+    """Flatpak и Snap: изнутри песочницы pkexec систему не меняет, остаётся команда для терминала."""
+    return bool(os.environ.get("FLATPAK_ID") or os.environ.get("SNAP") or os.path.exists("/.flatpak-info"))
+
+
+def linux_install_packages(codes, family: str = None) -> list:
+    """Пакеты для установки: программа распознавания + английский + языки из codes (только известные из таблицы)."""
+    spec = LINUX_PACKAGES.get(family if family is not None else linux_family())
+    if spec is None:
+        return []
+    out = list(spec["base"])
+    for code in ["eng"] + list(codes or []):
+        pkg = spec["langs"].get(code) if isinstance(code, str) else None
+        if pkg and pkg not in out:
+            out.append(pkg)
+    return out
+
+
+def linux_install_argv(codes, family: str = None, which=shutil.which):
+    """argv для pkexec: [pkexec, менеджер пакетов, ключи, пакеты] или None (не Linux, песочница, семейство не
+    известно, нет pkexec или менеджера). Полные пути из системных папок, без shell и без сценария; меняются только
+    пакеты, и только из таблицы LINUX_PACKAGES (образец: phone.firewall_allow_argv)."""
+    if sys.platform == "win32" or in_sandbox():
+        return None
+    family = family if family is not None else linux_family()
+    spec = LINUX_PACKAGES.get(family)
+    if spec is None:
+        return None
+    pkexec = which("pkexec", path=SYSTEM_PATH)
+    manager = which(spec["manager"], path=SYSTEM_PATH)
+    if not pkexec or not manager or not os.path.isabs(pkexec) or not os.path.isabs(manager):
+        return None
+    return [pkexec, manager, *spec["flags"], *linux_install_packages(codes, family)]
+
+
+def install_outcome(code) -> str:
+    """Код выхода pkexec: «ok», «declined» (окно пароля закрыли) или «failed»."""
+    if code == 0:
+        return "ok"
+    return "declined" if code in PKEXEC_DECLINED else "failed"
 
 
 LANG_PACKAGES = {"debian": "sudo apt install tesseract-ocr-{pkg}", "fedora": "sudo dnf install tesseract-langpack-{pkg}",
@@ -141,14 +205,29 @@ def install_help(kind: str = "missing", lang: str = "") -> InstallHelp:
     family = linux_family()
     full, rus_only = LINUX_COMMANDS.get(family, (None, None))
     if kind == "no_rus":
-        return InstallHelp(tr("ocr.no_rus_need"),
-                           rus_only, TESSERACT_GUIDE, tr("ocr.guide_title"))
-    if kind == "no_lang":
-        pkg = lang.replace("_", "-") if family == "debian" else lang
+        langs = ("rus",)
+    elif kind == "no_lang":
+        langs = (lang,)
+    else:
+        langs = tuple(c for c in resolve_langs(None).split("+") if c)
+    pkg = lang.replace("_", "-") if family == "debian" else lang
+    if family == "opensuse":
+        command = "sudo zypper install " + " ".join(linux_install_packages(langs, family))
+    elif kind == "no_lang":
         command = LANG_PACKAGES[family].format(pkg=pkg) if family in LANG_PACKAGES else None
-        return InstallHelp(tr("ocr.no_lang_need", lang=_lang_title(lang)), command, TESSERACT_GUIDE, tr("ocr.guide_title"))
-    return InstallHelp(tr("ocr.missing_need_command") if full else tr("ocr.missing_need_guide"),
-                       full, TESSERACT_GUIDE, tr("ocr.guide_title"))
+    elif kind == "no_rus":
+        command = rus_only
+    else:
+        command = full
+    one_click = linux_install_argv(langs, family) is not None   # 1.36: есть pkexec: ставит сама программа
+    if kind == "no_rus" or kind == "no_lang":
+        what = (tr("ocr.lin_no_lang_need", lang=_lang_title(langs[0])) if one_click
+                else tr("ocr.no_rus_need") if kind == "no_rus"
+                else tr("ocr.no_lang_need", lang=_lang_title(lang)))
+    else:
+        what = (tr("ocr.lin_missing_need") if one_click
+                else tr("ocr.missing_need_command") if command else tr("ocr.missing_need_guide"))
+    return InstallHelp(what, command, TESSERACT_GUIDE, tr("ocr.guide_title"), install_langs=langs)
 
 
 class OcrError(Exception):
@@ -593,6 +672,150 @@ def _forget_install(job):
     job.deleteLater()
 
 
+# 1.36: установка распознавания на Linux одной кнопкой. pkexec показывает системное окно пароля, дальше менеджер
+# пакетов ставит tesseract и языки из таблицы. Без shell и без сценария, аргументы списком (linux_install_argv).
+PROCESS_FACTORY = None   # тесты подменяют: вместо настоящего QProcess (с pkexec) заглушка
+_linux_installs = []   # идущая установка переживает своё окно: объект нельзя отдавать сборщику мусора
+LINUX_INSTALL_TIMEOUT = 20 * 60 * 1000   # мс: скачивание пакетов на медленной сети
+
+
+def _missing_after_install(codes):
+    """Языки из codes, которых после установки всё ещё нет у Tesseract (пусто: всё стало на место)."""
+    exe = find_tesseract()
+    if not exe:
+        return ["tesseract"]
+    have = tesseract_langs(exe)
+    return [c for c in codes if c and c not in have]
+
+
+class LinuxInstall(QObject):
+    """pkexec <менеджер пакетов> install ... в фоне, окно не замирает. done(outcome, код, подробность):
+    outcome «ok», «declined» (окно пароля закрыли) или «failed»; подробность: последняя строка вывода менеджера."""
+    done = pyqtSignal(str, int, str)
+
+    def __init__(self, argv, codes=(), process_factory=None, verify=None):
+        super().__init__()
+        self.argv, self.codes, self.verify = list(argv), tuple(codes), verify or _missing_after_install
+        self.process = (process_factory or PROCESS_FACTORY or QProcess)()
+        self.process.finished.connect(self._finished)
+        self.process.errorOccurred.connect(self._error)
+        self._tail = b""
+        self._over = False
+        try:
+            self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+            self.process.readyReadStandardOutput.connect(self._read)
+        except (AttributeError, TypeError):
+            pass
+
+    def start(self):
+        _linux_installs.append(self)
+        self.process.start(self.argv[0], self.argv[1:])
+        self.process.closeWriteChannel()
+        QTimer.singleShot(LINUX_INSTALL_TIMEOUT, self._timeout)
+
+    def _read(self):
+        try:
+            self._tail = (self._tail + bytes(self.process.readAllStandardOutput()))[-4000:]
+        except (AttributeError, TypeError):
+            pass
+
+    def _timeout(self):
+        if not self._over:
+            try:
+                self.process.kill()
+            except (AttributeError, RuntimeError):
+                pass
+
+    def _error(self, error):
+        if error == QProcess.ProcessError.FailedToStart:
+            self._end("failed", -1)
+
+    def _detail(self) -> str:
+        lines = [ln.strip() for ln in self._tail.decode("utf-8", "replace").replace("\r", "\n").splitlines()
+                 if ln.strip()]
+        return lines[-1][:200] if lines else ""
+
+    def _finished(self, code, status):
+        self._read()
+        crashed = status != QProcess.ExitStatus.NormalExit
+        self._end("failed" if crashed else install_outcome(code), code)
+
+    def _end(self, outcome, code):
+        if self._over:
+            return
+        self._over = True
+        detail = self._detail()
+        if outcome == "ok":
+            missing = self.verify(self.codes)
+            if missing:
+                outcome, detail = "failed", ",".join(missing)
+        if self in _linux_installs:
+            _linux_installs.remove(self)
+        try:
+            self.done.emit(outcome, code, detail)
+        except RuntimeError:
+            pass
+        self.deleteLater()
+
+
+def linux_error_text(code, detail: str) -> str:
+    """Понятная причина неудачи установки на Linux."""
+    low = (detail or "").lower()
+    if any(k in low for k in ("unable to locate", "no match", "target not found", "not found: ", "no package")):
+        return tr("ocr.lin_err_nopkg")
+    if any(k in low for k in ("lock", "another app", "could not get")):
+        return tr("ocr.lin_err_lock")
+    return detail or exit_text(code)
+
+
+def can_install(help) -> bool:
+    """Есть ли у подсказки кнопка «Установить распознавание» на этой системе."""
+    if help is None:
+        return False
+    if sys.platform == "win32":
+        return bool(getattr(help, "ocr_capability", None))
+    return bool(getattr(help, "install_langs", None)) and linux_install_argv(help.install_langs) is not None
+
+
+def begin_install(help, on_done, on_state=None, process_factory=None, which=None, verify=None):
+    """Одна кнопка на всех системах. Windows: Dism.exe с запросом UAC (InstallJob). Linux: pkexec и менеджер пакетов
+    (LinuxInstall). on_state(текст): «устанавливается…» сразу; on_done(ok, текст, outcome) по окончании, outcome: «ok»,
+    «declined», «failed». None, если на этой системе так поставить нельзя (тогда остаётся команда для терминала)."""
+    if sys.platform == "win32":
+        tag = getattr(help, "ocr_capability", None)
+        if not tag:
+            return None
+        job = InstallJob(tag)
+        _install_jobs.append(job)
+
+        def finished(ok, error, declined):
+            outcome = "ok" if ok else "declined" if declined else "failed"
+            text = (tr("ocr.win_install_done") if ok else tr("ocr.win_install_declined") if declined
+                    else tr("ocr.win_install_failed", error=error))
+            on_done(ok, text, outcome)
+        job.done.connect(finished, Qt.ConnectionType.QueuedConnection)
+        job.finished.connect(lambda: _forget_install(job))
+        if on_state:
+            on_state(tr("ocr.win_install_started"))
+        job.start()
+        return job
+    codes = tuple(getattr(help, "install_langs", ()) or ())
+    argv = linux_install_argv(codes, which=which or shutil.which) if codes else None
+    if argv is None:
+        return None
+    job = LinuxInstall(argv, codes, process_factory, verify)
+
+    def finished_linux(outcome, code, detail):
+        text = (tr("ocr.win_install_done") if outcome == "ok" else tr("ocr.lin_install_declined")
+                if outcome == "declined" else tr("ocr.lin_install_failed", error=linux_error_text(code, detail)))
+        on_done(outcome == "ok", text, outcome)
+    job.done.connect(finished_linux)
+    if on_state:
+        on_state(tr("ocr.lin_install_started"))
+    job.start()
+    return job
+
+
 def _lang_main(tag: str) -> str:
     """«ru-RU» и «ru» → «ru»; «zh-Hans» → «zh»."""
     return (tag or "").strip().split("-")[0].lower()
@@ -604,14 +827,23 @@ def _tess_code(tag: str) -> str:
     return next((c for c, t in WIN_TAGS.items() if _lang_main(t) == main), "rus")
 
 
-def windows_fallback_help(info: str):
+def windows_fallback_help(info: str, want: str = ""):
     """1.34.1: Windows распознал не тем языком, что просили (русского в Windows нет, взял английский из профиля):
     русский текст тогда выходит похожими латинскими буквами, «каракулями». Подсказка, как поставить язык (иначе None).
-    info: строка last_info («OCR_WANT=ru OCR_LANG=en-US …»)."""
+    info: строка last_info («OCR_WANT=ru OCR_LANG=en-US OCR_AVAIL=en-US …»).
+    1.34.3: want: какой язык просили, если сценарий не сообщил OCR_WANT; нет OCR_LANG: подсказка, когда в списке
+    установленных (OCR_AVAIL, он может быть пустым) нужного языка нет."""
     fields = dict(part.split("=", 1) for part in (info or "").split() if "=" in part)
-    want, got = fields.get("OCR_WANT", ""), fields.get("OCR_LANG", "")
-    if not want or not got or _lang_main(want) == _lang_main(got):
+    want, got = fields.get("OCR_WANT", "") or want, fields.get("OCR_LANG", "")
+    if not want:
         return None
+    if got:
+        if _lang_main(want) == _lang_main(got):
+            return None
+    else:
+        avail = [t for t in fields.get("OCR_AVAIL", "").split(",") if t]
+        if any(_lang_main(t) == _lang_main(want) for t in avail):
+            return None
     return install_help("windows_lang", _tess_code(want))
 
 
@@ -620,6 +852,7 @@ def _run_windows(path, lang="ru") -> str:
     err = _decode_console(out.stderr)
     global last_info
     last_info = " ".join(line.strip() for line in err.splitlines() if line.startswith("OCR_"))
+    _found.note = "engine=windows " + last_info
     if out.returncode != 0:
         if "NO_OCR_LANGUAGE" in err:
             raise OcrError("ocr.err_windows_no_lang", install_help("windows_lang", _tess_code(lang.split(",")[0])))
@@ -627,7 +860,7 @@ def _run_windows(path, lang="ru") -> str:
         tail = failed or [line for line in err.strip().splitlines()
                           if line.strip() and not line.startswith(("#< CLIXML", "<Objs", "OCR_"))]
         raise OcrError("ocr.err_windows_failed_detail", detail=tail[-1]) if tail else OcrError("ocr.err_windows_failed")
-    _found.help = windows_fallback_help(last_info)
+    _found.help = windows_fallback_help(last_info, lang.split(",")[0])
     return _decode_console(out.stdout)
 
 
@@ -659,8 +892,79 @@ def recognize(image: QImage, langs: str = DEFAULT_LANGS, quality: str = "accurat
     return tidy(words_text(recognize_words(image, langs, quality)))
 
 
+def log_path():
+    """Журнал распознавания: каким движком и какими языками распознан каждый снимок (для разбора «каракулей»)."""
+    from pathlib import Path
+    if os.name == "nt":   # та же папка данных, что у обновления (updater.data_dir), без импорта обновления
+        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData/Local") / "ClipSD" / "ocr.log"
+    return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share") / "clipsd" / "ocr.log"
+
+
+def _log_safe(line: str) -> str:
+    """В журнал не должны попасть пути с именем пользователя (текст ошибок PowerShell): пути заменяются на <путь>, строка
+    не длиннее 400 знаков."""
+    line = re.sub(r"[A-Za-z]:\\[^\s\"']*", "<путь>", str(line))
+    line = re.sub(r"(?<![\w<])/(?:home|Users|tmp|var|root)/[^\s\"']*", "<путь>", line)
+    line = re.sub(r"\s+", " ", line).strip()
+    return line[:400]
+
+
+def ocr_log(line: str) -> None:
+    """Одна строка в журнал распознавания (до 200 КБ, дальше остаётся хвост). Сбой записи не мешает распознаванию."""
+    import time
+    line = _log_safe(line)
+    try:
+        path = log_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            if path.stat().st_size > 200_000:
+                tail = path.read_bytes()[-100_000:]
+                tmp = path.with_name(path.name + ".tmp")
+                tmp.write_bytes(tail[tail.find(b"\n") + 1:])
+                os.replace(tmp, path)   # хвост заменяется целиком: сбой посреди записи журнал не теряет
+        except OSError:
+            pass
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(time.strftime("%Y-%m-%d %H:%M:%S") + " " + line + "\n")
+    except OSError:
+        pass
+
+
+def _wanted_main(langs: str) -> str:
+    codes = [c for c in (langs or "").split("+") if c]
+    return next((c for c in codes if c != "eng"), "")
+
+
 def recognize_words(image: QImage, langs: str = DEFAULT_LANGS, quality: str = "accurate"):
     """Слова с рамками в пикселях исходной картинки, по порядку чтения. Бросает OcrError."""
+    _found.note = ""
+    _found.used = None
+    try:
+        words = _recognize_words(image, langs, quality)
+    except OcrError as exc:
+        ocr_log(f"ошибка {exc.key}: {_found.note}".strip())
+        raise
+    ocr_log(f"{_found.note} слов={len(words)}".strip())
+    return words
+
+
+def _windows_words(image: QImage, quality: str, langs: str):
+    folder = tempfile.mkdtemp(prefix="clipsd-ocr-")
+    try:
+        path = os.path.join(folder, "image.png")
+        img = _prepare_windows(image, quality)
+        if not img.save(path, "PNG"):
+            raise OcrError("ocr.err_prepare")
+        sx, sy = img.width() / max(1, image.width()), img.height() / max(1, image.height())
+        words = layout(_parse_windows(_run_windows(path, win_tags(langs)), sx, sy))
+        fields = dict(p.split("=", 1) for p in last_info.split() if "=" in p)
+        _found.used = ("windows", fields.get("OCR_LANG", ""))
+        return words
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def _recognize_words(image: QImage, langs: str, quality: str):
     langs = resolve_langs(langs)
     _found.help = None
     if image is None or image.isNull():
@@ -668,18 +972,41 @@ def recognize_words(image: QImage, langs: str = DEFAULT_LANGS, quality: str = "a
     exe = find_tesseract()
     if not exe and sys.platform != "win32":
         raise OcrError("ocr.err_not_installed", install_help("missing"))
+    if not exe:
+        return _windows_words(image, quality, langs)
+    have = tesseract_langs(exe)
+    wanted = [c for c in langs.split("+") if c]
+    missing = [c for c in wanted if c != "eng" and c not in have]
+    _found.note = f"engine=tesseract exe={os.path.basename(exe)} have={','.join(sorted(have))} want={langs}"
+    if missing and sys.platform == "win32":
+        # 1.34.3: Tesseract есть, а нужного языка у него нет (русский Windows, Tesseract только с английским): он
+        # предпочитался встроенному и давал «каракули». Сначала встроенное распознавание Windows: если оно читает
+        # нужный язык, берём его; нет (языка нет и там, сбой): остаёмся на Tesseract, подсказка прежняя
+        note = _found.note
+        try:
+            words = _windows_words(image, quality, langs)
+        except OcrError:
+            words = None
+        if words is not None and _found.help is None:
+            _found.note = f"{_found.note} (у Tesseract нет {','.join(missing)}: взято встроенное) {note}"
+            return words
+        _found.note = f"{note} (встроенное Windows: {last_info or 'не сработало'})"
+        win_help = _found.help
+        _found.used = None
+    else:
+        win_help = None
     folder = tempfile.mkdtemp(prefix="clipsd-ocr-")
     try:
         path = os.path.join(folder, "image.png")
-        # Windows сам увеличивает мелкий текст плохо: подготовка помогает обоим движкам, но для Windows без
-        # переворота цвета (его движок сам справляется с тёмной темой, а предел размера у него 10 000 px).
-        img = prepare(image, quality) if exe else _prepare_windows(image, quality)
+        img = prepare(image, quality)
         if not img.save(path, "PNG"):
             raise OcrError("ocr.err_prepare")
         sx, sy = img.width() / max(1, image.width()), img.height() / max(1, image.height())
-        if exe:
-            return layout(_parse_tsv(_run_tesseract(exe, path, langs), sx, sy))
-        return layout(_parse_windows(_run_windows(path, win_tags(resolve_langs(langs))), sx, sy))
+        words = layout(_parse_tsv(_run_tesseract(exe, path, langs), sx, sy))
+        use = [c for c in wanted if c in have] or ["eng"]
+        _found.used = ("tesseract", "+".join(use))
+        _found.help = win_help
+        return words
     finally:
         shutil.rmtree(folder, ignore_errors=True)
 
@@ -736,6 +1063,243 @@ def engine_status() -> str:
     return tr("ocr.status_missing")
 
 
+# --- 1.36: проверка заранее и строка состояния ----------------------------------------
+
+def installed_codes():
+    """Коды Tesseract распознаваемых языков, которые есть сейчас, или None, если узнать нельзя (Windows без ответа
+    PowerShell). Linux: tesseract --list-langs. Windows: языки Tesseract, если он есть, и встроенного распознавания."""
+    codes = set()
+    exe = find_tesseract()
+    if not exe and sys.platform != "win32":
+        return None
+    if exe:
+        codes |= {c for c in tesseract_langs(exe) if c in _TESS_LANGS}
+    if sys.platform == "win32":
+        tags = installed_ocr_languages()
+        if tags is None and not codes:
+            return None
+        for tag in tags or []:
+            code = _tess_code(tag) if _lang_main(tag) in {_lang_main(t) for t in WIN_TAGS.values()} else ""
+            if code:
+                codes.add(code)
+    return sorted(codes)
+
+
+def early_help(langs=None):
+    """Проверка до распознавания: подсказка «нужно распознавание языка», если для языка интерфейса его нет, иначе None
+    (или нельзя узнать). Linux: нет Tesseract или нет его языка. Windows: нет ни у Tesseract, ни у встроенного."""
+    langs = resolve_langs(langs)
+    if sys.platform != "win32":
+        return engine_help(langs)
+    want = _wanted_main(langs) or "eng"
+    exe = find_tesseract()
+    if exe and (want == "eng" or want in tesseract_langs(exe)):
+        return None
+    tags = installed_ocr_languages()
+    if tags is None:
+        return None
+    if any(_lang_main(t) == _lang_main(WIN_TAGS.get(want, "en-US")) for t in tags):
+        return None
+    return install_help("windows_lang", want)
+
+
+class _EarlyJob(QThread):
+    done = pyqtSignal(object)
+
+    def __init__(self, langs):
+        super().__init__()
+        self.langs = langs
+
+    def run(self):
+        try:
+            self.done.emit(early_help(self.langs))
+        except Exception:   # noqa: BLE001 — проверка не должна мешать самому распознаванию
+            self.done.emit(None)
+
+
+_early = {}        # набор языков -> "ok" (есть) или "offered" (предложили один раз за запуск)
+_early_jobs = []
+
+
+def early_forget():
+    """Забыть результаты проверки (после установки или смены языка): следующая проверка сделается заново."""
+    _early.clear()
+
+
+def precheck(parent, config, proceed):
+    """При первом использовании текста или перевода: есть ли распознавание языка интерфейса. Есть (или проверить
+    нельзя): proceed() сразу. Нет: окно «Нужно распознавание [Установить]» до попытки; proceed() после установки
+    или когда окно закрыли (распознать как раньше). Предложение один раз за запуск на набор языков."""
+    from PyQt6 import sip
+    langs = resolve_langs((config or {}).get("ocr_langs") if hasattr(config, "get") else None)
+    if _early.get(langs):
+        proceed()
+        return None
+    job = _EarlyJob(langs)
+    _early_jobs.append(job)
+
+    def got(help):
+        if parent is not None and sip.isdeleted(parent):
+            return
+        if help is None:
+            _early[langs] = "ok"
+            proceed()
+            return
+        _early[langs] = "offered"
+        _offer(parent, langs, help, proceed)
+
+    job.done.connect(got, Qt.ConnectionType.QueuedConnection)
+    job.finished.connect(lambda: (_early_jobs.remove(job) if job in _early_jobs else None, job.deleteLater()))
+    job.start()
+    return job
+
+
+def _offer(parent, langs, help, proceed):
+    note = tr("ocr.early_need", lang=_lang_title(_wanted_main(langs) or "eng"))
+    dlg = show_result("", note, parent, help, again=True)
+    state = {"go": False}
+
+    def go(*_):
+        if not state["go"]:
+            state["go"] = True
+            proceed()
+
+    def installed():
+        _early[langs] = "ok"
+        QTimer.singleShot(1200, dlg.close)   # «Готово» видно, дальше окно закрывается и распознавание идёт само
+    dlg.installed.connect(installed)
+    dlg.finished.connect(go)
+    return dlg
+
+
+def status_line(codes=None) -> str:
+    """«Распознавание: русский, английский» для окна настроек (codes: коды языков; None: узнать сейчас)."""
+    if codes is None:
+        codes = installed_codes()
+    if codes is None:
+        return tr("ocr.status_windows") if sys.platform == "win32" else tr("ocr.status_missing")
+    main = TESS_CODES.get(__import__("clipshot.i18n", fromlist=["current"]).current(), "eng")
+    order = [main, "eng"] + [c for c in _TESS_LANGS]   # язык интерфейса первым, затем английский, дальше по таблице
+    codes = sorted(set(codes), key=lambda c: order.index(c) if c in order else len(order))
+    names = [_lang_title(c) for c in codes]
+    names = [n.lower() if c != "chi_sim" else n for c, n in zip(codes, names)]
+    if not names:
+        return tr("ocr.status_none")
+    return tr("ocr.status_line", langs=", ".join(names))
+
+
+def missing_languages(codes) -> list:
+    """Языки из таблицы, которых ещё нет (для меню «Установить ещё язык»)."""
+    return [c for c in _TESS_LANGS if c not in (codes or [])]
+
+
+class _CodesJob(QThread):
+    done = pyqtSignal(object)
+
+    def run(self):
+        try:
+            self.done.emit(installed_codes())
+        except Exception:   # noqa: BLE001
+            self.done.emit(None)
+
+
+class OcrStatusRow(QFrame):
+    """Строка в настройках: «Распознавание: русский, английский [Установить ещё язык]» и ход установки под ней.
+    Язык ставится кнопкой (Linux: pkexec, Windows: UAC); нет такой возможности: показывается команда."""
+
+    def __init__(self, tokens=None, dark: bool = False, parent=None, codes=None):
+        super().__init__(parent)
+        self.setObjectName("ocrStatusRow")
+        self.tokens, self.dark = tokens, dark
+        box = QVBoxLayout(self)
+        box.setContentsMargins(0, 0, 0, 0)
+        box.setSpacing(6)
+        row = QHBoxLayout()
+        row.setSpacing(10)
+        self.label = QLabel("")
+        self.label.setWordWrap(True)
+        self.label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        row.addWidget(self.label, 1)
+        self.more_button = QPushButton(tr("ocr.install_more"))
+        self.more_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.more_button.clicked.connect(self.show_menu)
+        row.addWidget(self.more_button, 0, Qt.AlignmentFlag.AlignTop)
+        box.addLayout(row)
+        self.progress = QLabel("")
+        self.progress.setWordWrap(True)
+        self.progress.setVisible(False)
+        box.addWidget(self.progress)
+        self.manual = None
+        self.codes = None
+        self._job = None
+        if codes is not None or sys.platform != "win32":
+            self.set_codes(codes if codes is not None else installed_codes())
+        else:   # Windows: PowerShell отвечает секунду, окно не ждёт
+            self.label.setText(tr("ocr.status_checking"))
+            self.more_button.setEnabled(False)
+            job = _CodesJob()
+            self._job = job
+            job.done.connect(self._codes_ready, Qt.ConnectionType.QueuedConnection)
+            job.finished.connect(job.deleteLater)
+            job.start()
+
+    def _codes_ready(self, codes):
+        self.set_codes(codes)
+
+    def set_codes(self, codes):
+        self.codes = codes
+        self.label.setText(status_line(codes))
+        self.more_button.setEnabled(True)
+        self.more_button.setVisible(True)
+
+    def menu_languages(self) -> list:
+        return missing_languages(self.codes or [])
+
+    def show_menu(self):
+        from PyQt6.QtWidgets import QMenu
+        menu = QMenu(self)
+        for code in self.menu_languages():
+            menu.addAction(_lang_title(code), lambda c=code: self.install_language(c))
+        if menu.isEmpty():
+            return
+        menu.exec(self.more_button.mapToGlobal(self.more_button.rect().bottomLeft()))
+
+    def _help_for(self, code):
+        if sys.platform == "win32":
+            return InstallHelp("", None, None, "", ocr_capability=OCR_CAPS.get(code), install_langs=(code,))
+        h = install_help("no_lang", code)
+        return h
+
+    def install_language(self, code, process_factory=None, which=None, verify=None):
+        """Поставить язык code кнопкой; нельзя (нет pkexec, Flatpak): показать команду для терминала."""
+        help = self._help_for(code)
+        self.progress.setVisible(True)
+        self.more_button.setEnabled(False)
+
+        def state(text):
+            self.progress.setText(text)
+
+        def done(ok, text, outcome):
+            try:
+                self.progress.setText(text)
+                self.more_button.setEnabled(True)
+                if ok:
+                    early_forget()
+                    self.set_codes(installed_codes())
+            except RuntimeError:
+                pass
+        job = begin_install(help, done, state, process_factory, which, verify)
+        if job is None:
+            self.more_button.setEnabled(True)
+            self.progress.setVisible(False)
+            if self.manual is not None:
+                self.layout().removeWidget(self.manual)
+                self.manual.deleteLater()
+            self.manual = InstallBlock(help, tokens=self.tokens, dark=self.dark)
+            self.layout().addWidget(self.manual)
+        return job
+
+
 # --- фон и окно результата -----------------------------------------------------------
 
 class OcrJob(QThread):
@@ -749,6 +1313,27 @@ class OcrJob(QThread):
         self.quality = quality
         self.help = None
         self.words = []
+        self.used = ""   # 1.34.3: «язык (движок)» распознавания, если он не совпал с языком интерфейса, иначе ""
+
+    def _describe_used(self) -> str:
+        used = getattr(_found, "used", None)
+        if not used:
+            return ""
+        engine, lang = used
+        want = _wanted_main(resolve_langs(self.langs))
+        got = [c for c in lang.split("+") if c] if engine == "tesseract" else [lang]
+        if not want or not lang:
+            return ""
+        if engine == "tesseract":
+            if want in got:
+                return ""
+            names = ", ".join(_lang_title(c) for c in got)
+        else:
+            if _lang_main(WIN_TAGS.get(want, "")) == _lang_main(lang):
+                return ""
+            names = _lang_title(next((k for k, v in WIN_TAGS.items() if _lang_main(v) == _lang_main(lang)), lang))
+        return tr("ocr.recognized_as", lang=names, engine=tr("ocr.engine_tesseract" if engine == "tesseract"
+                                                             else "ocr.engine_windows"))
 
     def run(self):
         try:
@@ -757,7 +1342,13 @@ class OcrJob(QThread):
             text = tidy(words_text(self.words))
             # текст есть, но нужного языка нет: подсказать. Tesseract без русского; Windows без русского
             # распознал английским (1.34.1, «каракули» вместо русского текста)
-            self.help = missing_rus_help(self.langs) or getattr(_found, "help", None)
+            used = getattr(_found, "used", None)
+            self.help = getattr(_found, "help", None) or (None if used and used[0] == "windows"
+                                                          else missing_rus_help(self.langs))
+            try:
+                self.used = self._describe_used()
+            except Exception:   # noqa: BLE001 — строка-пояснение не должна лишать человека распознанного текста
+                self.used = ""
             self.done.emit(text, "")
         except OcrError as exc:
             self.help = exc.help
@@ -799,7 +1390,24 @@ def start(image: QImage, on_done, langs: str = DEFAULT_LANGS, quality: str = "ac
     return job
 
 
-def copy_text(text: str):
+def training_owner(owner) -> bool:
+    """Учебный редактор окна «Ознакомление» (или окно внутри него): буфер обмена человека не трогаем (1.35, проверка)."""
+    w = owner
+    for _ in range(12):
+        if w is None:
+            return False
+        if getattr(w, "training", False) is True:
+            return True
+        try:
+            w = w.parentWidget()
+        except (AttributeError, RuntimeError):
+            return False
+    return False
+
+
+def copy_text(text: str, owner=None):
+    if training_owner(owner):
+        return
     QGuiApplication.clipboard().setText(text)
 
 
@@ -889,7 +1497,7 @@ class Toast(QLabel):
 def toast(widget, text: str = None, ms: int = None, mark: bool = True):
     """Показать всплывающее сообщение в окне, где находится widget. mark=False: без галочки (информация, не «успех»)."""
     if text is None:
-        text = tr("ocr.toast_copied")
+        text = tr("ozn.no_clip") if training_owner(widget) else tr("ocr.toast_copied")
     win = widget.window()
     bubble = win.findChild(Toast, "clipsdToast")
     if bubble is None or bubble.parentWidget() is not win:
@@ -956,9 +1564,12 @@ class TextResultDialog(ClipDialog):
 
     WIDTH = 640           # ширина карточки: в строку влезает команда установки
     MAX_SHARE = 0.6       # выше этой доли высоты экрана окно не растёт
+    installed = pyqtSignal()   # 1.36: в окне нажали «Установить распознавание» и оно установилось
 
-    def __init__(self, text: str, error: str = "", parent=None, help: InstallHelp = None):
+    def __init__(self, text: str, error: str = "", parent=None, help: InstallHelp = None, used: str = "",
+                 again: bool = False):
         super().__init__(parent, tr("ocr.window_title"), "", "info", self.WIDTH)
+        self.again = again   # владелец окна повторит распознавание сам после «Готово»
         # не поверх всех окон: окно-спутник редактора, а не отдельное приложение
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, False)
         self.setStyleSheet(self.styleSheet() + dialog_extra(self.dark))
@@ -976,7 +1587,7 @@ class TextResultDialog(ClipDialog):
         if error:
             note = error
         elif text:
-            note = tr("ocr.note_copied")
+            note = tr("ozn.no_clip") if training_owner(parent) else tr("ocr.note_copied")
             hint = tr("ocr.hint_symbols")
         else:
             note = tr("ocr.note_empty")
@@ -991,7 +1602,7 @@ class TextResultDialog(ClipDialog):
         self.hint.setVisible(bool(hint))
         self.body.addWidget(self.hint)
         if help is not None:
-            self.install = InstallBlock(help, dark=self.dark)
+            self.install = self._new_install(help)
             self.body.addWidget(self.install)
         self.edit = QTextEdit()
         self.edit.setObjectName("ocrEdit")
@@ -1002,6 +1613,12 @@ class TextResultDialog(ClipDialog):
         self.edit.setPlainText(text)
         self.edit.setVisible(bool(text))
         self.body.addWidget(self.edit, 1)
+        # 1.34.3: каким языком и движком распознано, если не тем, что язык интерфейса (разбор «каракулей»)
+        self.used_label = QLabel(used)
+        self.used_label.setObjectName("ocrHint")
+        self.used_label.setWordWrap(True)
+        self.used_label.setVisible(bool(used))
+        self.body.addWidget(self.used_label)
         self.copy_button = QPushButton(tr("editor.copy"))
         self.copy_button.setFixedHeight(BUTTON_H)
         self.copy_button.setMinimumWidth(150)
@@ -1055,6 +1672,9 @@ class TextResultDialog(ClipDialog):
         self.resize(width, 10)          # сначала до минимума: раскладка пересчитывается под новое поле
         self.layout().activate()
         self.resize(width, self.minimumSizeHint().height())   # по содержимому: и вверх, и вниз
+        need = self.layout().totalHeightForWidth(width)   # 1.36: переносимые подписи занимают столько, сколько им надо при этой ширине
+        if need > self.height():
+            self.resize(width, need)
 
     def _keep_on_screen(self):
         """Новый длинный текст растит окно вниз: если низ ушёл за край экрана, окно сдвигается вверх."""
@@ -1063,6 +1683,35 @@ class TextResultDialog(ClipDialog):
         y = min(frame.top(), area.bottom() + 1 - frame.height())
         x = min(max(frame.left(), area.left()), max(area.left(), area.right() + 1 - frame.width()))
         self.move(x, max(area.top(), y))
+
+    def _new_install(self, help):
+        block = InstallBlock(help, dark=self.dark, again=self.again)
+        block.installed.connect(self._block_installed)
+        block.changed.connect(self._fit)
+        return block
+
+    def _block_installed(self):
+        self.installed.emit()
+        self._fit()
+
+    def set_used(self, used: str = ""):
+        self.used_label.setText(used)
+        self.used_label.setVisible(bool(used))
+
+    def set_help(self, help: InstallHelp = None):
+        """Подсказка по установке (Windows без русского распознавания: русский текст выходит латинскими буквами)
+        в уже открытом окне: ставится, меняется или убирается."""
+        if help is None and self.install is None:
+            return
+        if self.install is not None:
+            self.body.removeWidget(self.install)
+            self.install.hide()
+            self.install.deleteLater()
+            self.install = None
+        if help is not None:
+            self.install = self._new_install(help)
+            self.body.insertWidget(self.body.indexOf(self.hint) + 1, self.install)
+            self._fit()
 
     def set_text(self, text: str):
         """Новый выделенный кусок: показать его (он уже в буфере обмена, кнопка «Скопировано»)."""
@@ -1087,7 +1736,7 @@ class TextResultDialog(ClipDialog):
 
     def _copy(self):
         text = self.edit.toPlainText()
-        copy_text(text)
+        copy_text(text, self)
         self.mark_copied(text)
         toast(self)
 
@@ -1153,8 +1802,12 @@ class InstallBlock(QFrame):
                 f" QFrame#installBlock QTextEdit#installField {{ font-size: {field}px; padding: 6px 10px;"
                 f" border: 1px solid {line}; border-radius: 8px; background: {field_bg}; color: {fg}; }}" + button)
 
-    def __init__(self, help: InstallHelp, parent=None, tokens=None, dark: bool = False):
+    installed = pyqtSignal()   # распознавание установлено: владелец блока повторяет распознавание
+    changed = pyqtSignal()     # ход установки сменил текст: окно подгоняет высоту
+
+    def __init__(self, help: InstallHelp, parent=None, tokens=None, dark: bool = False, again: bool = False):
         super().__init__(parent)
+        self.help, self.again = help, again   # again: владелец сам повторит распознавание, «Готово» говорит об этом
         self.setObjectName("installBlock")
         self.setStyleSheet(self.style_for(tokens, dark))
         self._compact = tokens is not None
@@ -1172,21 +1825,28 @@ class InstallBlock(QFrame):
         what.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         box.addWidget(what)
         self.command_field = self.url_field = self.settings_button = None
-        if help.command:
-            self.command_field = self._copy_row(box, help.command, tr("ocr.copy_command"), self._compact)
-            hint = QLabel(tr("ocr.terminal_hint"))
-            hint.setWordWrap(True)
-            box.addWidget(hint)
-        self.install_button = self.install_status = None
-        if sys.platform == "win32" and getattr(help, "ocr_capability", None):
+        self.install_button = self.install_status = self.manual_link = self.manual_hint = None
+        one_click = can_install(help)
+        if one_click:
             self.install_button = QPushButton(tr("ocr.win_install_button"))
             self.install_button.setCursor(Qt.CursorShape.PointingHandCursor)
-            self.install_button.clicked.connect(lambda: self.install_ocr(help.ocr_capability))
+            self.install_button.clicked.connect(lambda *_: self.install_now())
             box.addWidget(self.install_button, 0, Qt.AlignmentFlag.AlignLeft)
             self.install_status = QLabel()
             self.install_status.setWordWrap(True)
             self.install_status.setVisible(False)
             box.addWidget(self.install_status)
+        if help.command:
+            if one_click and sys.platform != "win32":   # 1.36: команда остаётся мелкой ссылкой «Поставить вручную»
+                self.manual_link = QLabel(link_colored(f'<a href="manual">{tr("ocr.install_manual")}</a>', dark))
+                self.manual_link.linkActivated.connect(lambda *_: self.show_manual(True))
+                box.addWidget(self.manual_link)
+            self.command_field = self._copy_row(box, help.command, tr("ocr.copy_command"), self._compact)
+            self.manual_hint = QLabel(tr("ocr.terminal_hint"))
+            self.manual_hint.setWordWrap(True)
+            box.addWidget(self.manual_hint)
+            if self.manual_link is not None:
+                self.show_manual(False)
         if help.settings_url:
             self.settings_button = QPushButton(tr("ocr.open_win_settings"))
             self.settings_button.clicked.connect(lambda: open_url(help.settings_url))
@@ -1211,22 +1871,45 @@ class InstallBlock(QFrame):
             box.addWidget(link2)
             self._copy_row(box, TESSERACT_WINDOWS, tr("ocr.copy_link"), self._compact)
 
-    def install_ocr(self, tag: str):
-        """«Установить распознавание»: запрос UAC и ожидание конца установки в фоне (InstallJob)."""
-        job = InstallJob(tag)
-        _install_jobs.append(job)
-        job.done.connect(self._install_finished)   # метод окна: закрытое окно Qt отвязывает само
-        job.finished.connect(lambda: _forget_install(job))
+    def show_manual(self, shown: bool):
+        """«Поставить вручную»: показать или спрятать команду для терминала (она нужна, если отказали в пароле)."""
+        for w in (self.command_field, getattr(self.command_field, "copy_button", None), self.manual_hint):
+            if w is not None:
+                w.setVisible(shown)
+        if self.manual_link is not None:
+            self.manual_link.setVisible(not shown)
+        self.changed.emit()   # окно подгоняет высоту
+
+    def install_now(self, process_factory=None, which=None, verify=None):
+        """«Установить распознавание»: Windows: запрос UAC и Dism; Linux: окно пароля системы и менеджер пакетов.
+        Всё в фоне, окно не замирает; ход и итог в строке под кнопкой."""
         self.install_button.setEnabled(False)
         self.install_status.setVisible(True)
-        self.install_status.setText(tr("ocr.win_install_started"))
-        job.start()
+        job = begin_install(self.help, self._install_finished, self._status, process_factory, which, verify)
+        if job is None:   # на этой системе так не поставить: остаётся команда
+            self.install_button.setEnabled(True)
+            self.install_status.setVisible(False)
+            self.show_manual(True)
         return job
 
-    def _install_finished(self, ok: bool, error: str, declined: bool):
+    def _status(self, text: str):
+        self.install_status.setVisible(True)
+        self.install_status.setText(text)
+        self.changed.emit()
+
+    def install_ocr(self, tag: str = None):
+        """Прежнее имя для Windows (1.34.2): то же, что install_now."""
+        return self.install_now()
+
+    def _install_finished(self, ok: bool, text: str, outcome: str = ""):
+        from PyQt6 import sip
+        if sip.isdeleted(self):
+            return
         self.install_button.setEnabled(not ok)
-        self.install_status.setText(tr("ocr.win_install_done") if ok else tr("ocr.win_install_declined") if declined
-                                    else tr("ocr.win_install_failed", error=error))
+        self._status(tr("ocr.install_done_again") if ok and self.again else text)
+        if ok:
+            early_forget()
+            self.installed.emit()
 
     @staticmethod
     def _copy_row(box, value, caption, compact=False):
@@ -1236,7 +1919,7 @@ class InstallBlock(QFrame):
         button.setCursor(Qt.CursorShape.PointingHandCursor)
 
         def copy():
-            copy_text(value)
+            copy_text(value, button)
             button.setText(tr("ocr.copied_mark"))
             toast(button, tr("ocr.command_copied") if value.startswith("sudo ") else tr("ocr.link_copied"))
         button.clicked.connect(copy)
@@ -1246,10 +1929,10 @@ class InstallBlock(QFrame):
         return field
 
 
-def show_result(text: str, error: str, parent=None, help: InstallHelp = None) -> TextResultDialog:
+def show_result(text: str, error: str, parent=None, help: InstallHelp = None, again: bool = False) -> TextResultDialog:
     if text and not error:
-        copy_text(text)
-    dlg = TextResultDialog(text, error, parent, help)
+        copy_text(text, parent)
+    dlg = TextResultDialog(text, error, parent, help, again=again)
     if text and not error:
         QTimer.singleShot(150, lambda: toast(dlg))
     # у окна нет рамки системы: ставим по центру родителя (или экрана), иначе оно прижмётся к углу

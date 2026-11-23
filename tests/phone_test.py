@@ -696,8 +696,10 @@ def test_menus():
     ed.present()
     settle()
     items = [a.text() for a in ed.insert_button.menu().actions()]
-    check(items[-1] == "Скриншот/фото с телефона", f"«Вставить» редактора: последний пункт «Скриншот/фото с телефона» ({items})")
-    ed.insert_button.menu().actions()[-1].trigger()
+    # 22.11.2026: после пункта телефона идёт разделитель и выбор «Вставить в этот снимок / Открыть отдельным снимком»
+    check(items[3] == "Скриншот/фото с телефона" and items[-2:] == ["Вставить в этот снимок", "Открыть отдельным снимком"],
+          f"«Вставить» редактора: пункт «Скриншот/фото с телефона», затем выбор места ({items})")
+    ed.insert_button.menu().actions()[3].trigger()
     check(fake.phone_calls[-1] is ed, "пункт «Вставить» передаёт свой редактор: фото ляжет поверх снимка")
     ed.canvas.modified, ed.exported = False, True
     ed.close()

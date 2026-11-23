@@ -141,5 +141,8 @@
   "phone.wifi_text": "手机和电脑必须连接同一个 Wi-Fi 网络。使用移动数据时照片无法送达。",
   "phone.tile_title": "从手机",
   "phone.tile_sub": "拍照或图片",
-  "phone.tile_tip": "用相机拍摄，或从手机发送图片"
+  "phone.tile_tip": "用相机拍摄，或从手机发送图片",
+  "phone.zoom": "放大",
+  "phone.zoom_caption": "用手机相机对准二维码",
+  "phone.zoom_tip": "放大显示二维码"
 }

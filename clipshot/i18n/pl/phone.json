@@ -141,5 +141,8 @@
   "phone.wifi_text": "Telefon i komputer muszą być połączone z tą samą siecią Wi-Fi. Przez dane komórkowe zdjęcie nie dotrze.",
   "phone.tile_title": "Z telefonu",
   "phone.tile_sub": "aparat lub obraz",
-  "phone.tile_tip": "Zrób zdjęcie lub wyślij obraz z telefonu"
+  "phone.tile_tip": "Zrób zdjęcie lub wyślij obraz z telefonu",
+  "phone.zoom": "Powiększ",
+  "phone.zoom_caption": "Skieruj aparat telefonu na kod",
+  "phone.zoom_tip": "Pokaż kod w dużym rozmiarze"
 }

@@ -93,8 +93,8 @@ check("#" in dark.styleSheet() and "QFrame#nav" in dark.styleSheet() and "rgba" 
 check(dark.nav.palette().window().color().name() is not None and dark.width() <= 860, "тёмное окно строится")
 dark.resize(640, 420)
 settle()
-buttons = [b for b in dark.findChildren(QPushButton) if b.text() in ("Отмена", "Сохранить")]
-check(len(buttons) == 2 and all(b.isVisible() and dark.rect().contains(b.geometry()) for b in buttons), "узкое окно: кнопки на виду")
+buttons = [b for b in dark.findChildren(QPushButton) if b.text() in ("ОК", "Отмена", "Применить")]
+check(len(buttons) == 3 and all(b.isVisible() and dark.rect().contains(b.geometry()) for b in buttons), "узкое окно: кнопки на виду")
 for code in i18n.LANGUAGES:
     i18n.set_language(code)
     d = SettingsDialog(dict(appmod.DEFAULTS, language=code))

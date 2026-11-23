@@ -1,6 +1,8 @@
 {
   "settings.accent_tip": "Colore della cornice e dei pulsanti selezionati",
   "settings.accent_tip_plain": "In questo stile la cornice è neutra; il colore resta sui pulsanti selezionati",
+  "settings.applied": "Applicato",
+  "settings.apply": "Applica",
   "settings.auto_save": "Salva automaticamente ogni screenshot (il file viene aggiornato dopo le modifiche nell'editor)",
   "settings.auto_save_dir": "Cartella del salvataggio automatico:",
   "settings.autostart": "Avvia con il sistema (icona nell'area di notifica)",
@@ -67,6 +69,7 @@
   "settings.ocr_ru": "Solo russo",
   "settings.ocr_ru_en": "Russo e inglese",
   "settings.off": "Disattiva",
+  "settings.ok": "OK",
   "settings.press_text": "Premi la combinazione di tasti desiderata (ad esempio Alt+W).\nLa finestra si chiude da sola.",
   "settings.press_title": "Premi una combinazione di tasti",
   "settings.press_wait": "In attesa di una combinazione di tasti…",

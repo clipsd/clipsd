@@ -1,4 +1,4 @@
-ClipSD 1.34.2: screenshots with an editor
+ClipSD 1.35.0: screenshots with an editor
 Copyright (C) 2026 Sergey Dayneko. Licence: GNU GPL v3 or later, official text in the file LICENSE
   (a plain-language Russian summary is in LICENSE.ru.txt). По-русски: README.md.
   The name ClipSD and the program icon: modified versions by others use another name and not the ClipSD icon;
@@ -136,5 +136,7 @@ For developers
 
 ## Code signing policy
 
-Free code signing provided by SignPath.io, certificate by SignPath Foundation.
+The installer from the website is not signed yet: Windows may show a SmartScreen window on first launch.
+The Microsoft Store version is signed by Microsoft and installs without a warning.
+The application for free code signing to SignPath Foundation was declined on 21 November 2026 (the project is not well known yet); we will apply again later.
 Roles, what is signed, privacy: https://clipsd.github.io/en/code-signing.html#policy

@@ -191,6 +191,15 @@ def _draw(name: str, p: QPainter, c: str):
         p.setPen(_pen(c, 2.4))
         p.drawLine(QPointF(8, 8), QPointF(16, 8))
         p.drawLine(QPointF(12, 8), QPointF(12, 17))
+    elif name == "zoom":
+        # лупа с плюсом: «Увеличить» (код в окне приёма с телефона, 1.34)
+        p.setPen(_pen(c, 2.0))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawEllipse(QPointF(10, 10), 6.5, 6.5)
+        p.drawLine(QPointF(15, 15), QPointF(21, 21))
+        p.setPen(_pen(c, 1.8))
+        p.drawLine(QPointF(7, 10), QPointF(13, 10))
+        p.drawLine(QPointF(10, 7), QPointF(10, 13))
     elif name == "crop":
         p.setPen(_pen(c, 2.2))
         p.drawPolyline(QPolygonF([QPointF(7, 2), QPointF(7, 17), QPointF(22, 17)]))
@@ -377,6 +386,13 @@ def _draw(name: str, p: QPainter, c: str):
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawRoundedRect(QRectF(8.8, 8.2, 6.4, 5.2), 1, 1)
         p.drawEllipse(QPointF(12, 10.8), 1.4, 1.4)
+    elif name == "apart":
+        # Окно со стрелкой наружу: открыть отдельным снимком (22.11.2026)
+        p.setPen(_pen(c, 1.8))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(QRectF(3, 6, 13, 14), 2, 2)
+        p.drawLine(QPointF(11, 13), QPointF(20.5, 3.5))
+        p.drawPolyline(QPolygonF([QPointF(14.5, 3.5), QPointF(20.5, 3.5), QPointF(20.5, 9.5)]))
     elif name == "save":
         p.setPen(_pen(c, 1.8))
         p.setBrush(Qt.BrushStyle.NoBrush)

@@ -1,6 +1,8 @@
 {
   "settings.accent_tip": "Couleur du cadre et des boutons sélectionnés",
   "settings.accent_tip_plain": "Dans ce style, le cadre est neutre ; la couleur reste sur les boutons sélectionnés",
+  "settings.applied": "Appliqué",
+  "settings.apply": "Appliquer",
   "settings.auto_save": "Enregistrer automatiquement chaque capture (le fichier est mis à jour après les modifications dans l'éditeur)",
   "settings.auto_save_dir": "Dossier d'enregistrement automatique :",
   "settings.autostart": "Lancer au démarrage du système (icône dans la zone de notification)",
@@ -67,6 +69,7 @@
   "settings.ocr_ru": "Russe uniquement",
   "settings.ocr_ru_en": "Russe et anglais",
   "settings.off": "Désactiver",
+  "settings.ok": "OK",
   "settings.press_text": "Appuyez sur la combinaison de touches souhaitée (par exemple Alt+W).\nLa fenêtre se ferme d'elle-même.",
   "settings.press_title": "Appuyez sur une combinaison de touches",
   "settings.press_wait": "En attente d'une combinaison de touches…",

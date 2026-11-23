@@ -110,6 +110,7 @@ for row in range(3):
         three.append(W(f"к{col + 1}с{row + 1}", x, 20 + row * 24, f"r{row}"))
 check(ocr.words_text(ocr.layout(three)) == "к1с1\nк1с2\nк1с3\nк2с1\nк2с2\nк2с3\nк3с1\nк3с2\nк3с3", "три столбца по порядку")
 
+ocr._early[ocr.resolve_langs("auto")] = "ok"   # 1.36: проверка языка перед распознаванием здесь не нужна (её проверяет ocr_ustanovka_test)
 engine = ocr.engine_name()
 # Tesseract 4 (Ubuntu 22.04) reads a line in one script: a Latin word inside a Cyrillic line comes out garbled
 # ("Swiftpost" -> "$\\/Йроз{"). Mixed lines are checked from Tesseract 5 on; the word tests then use a Russian word.

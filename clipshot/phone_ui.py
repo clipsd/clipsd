@@ -22,16 +22,19 @@ import weakref
 
 from PyQt6.QtCore import QObject, QProcess, Qt, QThread, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QGuiApplication, QImage, QPainter, QPixmap
-from PyQt6.QtWidgets import (QCheckBox, QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget)
+from PyQt6.QtWidgets import (QCheckBox, QFrame, QHBoxLayout, QLabel, QPushButton, QToolButton, QVBoxLayout, QWidget)
 
-from . import phone, qr
+from . import icons, otdelno, phone, qr
 from .dialogs import ClipDialog
 from .i18n import current, tr
 from .themes import GREEN
 
 TROUBLE_AFTER_MS = 20_000
 PHOTO_QUALITY = 92          # JPEG quality of the autosaved photo (the page already sent a JPEG of 0.92)
-QR_MODULE = 4              # px per module: version 3 (29 + 2 x 4 quiet) -> 148 px, as in the sketch
+QR_MODULE = 7              # px per module: version 3 (29 + 2 x 4 quiet) -> 259 px (was 4 = 148 px; owner 22.11.2026: bigger)
+QR_MODULES = (7, 6, 5, 4)  # the window takes the biggest one that fits the height of the screen (1366 x 768 at 150 %)
+ZOOM_SHARE = 0.7           # the big code: this share of the shorter side of the screen
+CARD_WIDTH = 680           # was 600: the text beside the bigger code must not become a narrow column
 CONFIG_HIDE_NOTE = "phone_wifi_note_hidden"
 CONFIG_FULL = "phone_full_size"   # check box "Save photos in full size": off = fit to the screen of this computer
 CONFIG_FW_NETWORKS = "phone_fw_networks"   # subnets for which ClipSD already added a (permanent) ufw rule
@@ -60,6 +63,9 @@ QLabel#phoneWarn { background: #fff5d6; border: 1px solid #efd27e; border-radius
                    padding: 8px 10px; }
 QLabel#phoneWifi { background: #eef4ff; border-radius: 10px; padding: 12px 14px; color: #16181c; font-size: 14px; }
 QLabel#phoneCommand { background: #eef1f5; border-radius: 8px; padding: 8px 10px; color: #16181c; }
+QPushButton#phoneZoom { background: #eef1f5; color: #16181c; border: 1px solid #d3d9e2; border-radius: 6px;
+                        padding: 4px 12px; font-size: 12px; }
+QPushButton#phoneZoom:hover { background: #e2e8f0; }
 QPushButton#phoneTrouble { background: #fff6e6; color: #8a5200; border: 1px solid #e0b572; border-radius: 8px;
                            padding: 7px 14px; font-weight: bold; font-size: 13px; }
 QPushButton#phoneTrouble:hover { background: #fdebc8; }
@@ -265,6 +271,8 @@ def deliver_photo(session, data):
             # Фото, положенное туда, ушло бы вместе со снимком после «Закрыть без сохранения», а телефон уже
             # удалил свою копию. Фото открывается отдельным снимком, как без снимка-получателя.
             target = None
+        elif target is not None and otdelno.get_mode(ctx.config) == otdelno.APART:
+            target = None   # 22.11.2026: выбрано «Открыть отдельным снимком» (читается в момент прихода фото)
         screen = (win._screen() if win is not None else None) or QGuiApplication.primaryScreen()
         scale = 1.0
         if screen is not None:   # the picture in points fits the screen with the panels: window by the picture
@@ -277,7 +285,10 @@ def deliver_photo(session, data):
         saved = _autosave_photo(ctx, image)
         if target is not None:
             image.setDevicePixelRatio(scale)
-            target.canvas.insert_image(image)   # on top of that snapshot, like "Insert, from file"
+            shape = target.canvas.insert_image(image)   # on top of that snapshot, like "Insert, from file"
+            note = getattr(target, "note_inserted", None)
+            if note is not None:
+                note(shape, image, saved=saved, phone=True)   # плашка «Вставлено в снимок · Открыть отдельно»
             target.show()
             target.raise_()
             target.activateWindow()
@@ -341,14 +352,26 @@ def flush_photos(timeout: float = 5.0):
             QApplication.processEvents()
 
 
-def is_busy() -> bool:
+def is_busy(ignore_hidden: bool = False) -> bool:
     """The reception is open (the window visible or hidden after a photo) or a photo is being opened: the program must
-    not be closed for an update now, the same as with an editor that is not saved."""
-    if current_window() is not None:
-        return True
+    not be closed for an update now, the same as with an editor that is not saved.
+
+    ignore_hidden: the person pressed "Restart now": a window that hid itself after a photo (nobody sees it, nobody can
+    close it) and its idle receiver do not count; a visible window and a photo being opened still do (stop_all
+    delivers the photos that are being opened before the exit)."""
+    win = current_window()
+    if win is not None:
+        try:
+            hidden = win.hidden_for_photo and not win.isVisible()
+        except RuntimeError:
+            hidden = False
+        if not (ignore_hidden and hidden):
+            return True
     for rx in list(_RECEIVERS):
         try:
-            if rx.running or rx._busy > 0:
+            if rx._busy > 0:
+                return True
+            if rx.running and not (ignore_hidden and win is not None):
                 return True
         except Exception:   # noqa: BLE001
             continue
@@ -505,13 +528,92 @@ class WifiNote(_FitMixin, ClipDialog):
             QTimer.singleShot(200, on_ok)   # the next window after a pause (desktop-app-design, section 4)
 
 
+class QrZoom(QWidget):
+    """The code big: about ZOOM_SHARE of the shorter side of the screen, white, a caption under it. A click, Esc or the
+    cross closes it. The window with the code keeps it up to date (set_url) and closes it when the code is gone."""
+
+    def __init__(self, owner, url: str):
+        super().__init__(None, Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint
+                         | Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        self.setWindowTitle("ClipSD: " + tr("phone.step2_title"))
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setObjectName("phoneZoomWin")
+        self.setStyleSheet("QWidget#phoneZoomWin { background: #ffffff; border: 1px solid #c9ccd1; }"
+                           "QLabel#phoneZoomCaption { color: #16181c; font-size: 20px; font-weight: bold; }"
+                           "QToolButton#phoneZoomClose { background: transparent; color: #3c4656; border: none;"
+                           " border-radius: 6px; font-size: 18px; }"
+                           "QToolButton#phoneZoomClose:hover { background: #eef1f5; }")
+        screen = owner.screen() or QGuiApplication.primaryScreen()
+        geo = screen.availableGeometry() if screen is not None else None
+        side = min(geo.width(), geo.height()) if geo is not None else 720
+        # whole pixels per module: the biggest code not over ZOOM_SHARE of the shorter side
+        self.module = max(4, int(side * ZOOM_SHARE) // (len(qr.encode(url)) + 8))
+        self.url = url
+        self._screen_geo = geo
+        self.qr_label = QLabel()
+        self.qr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.qr_label.setAccessibleName(tr("phone.step2_title"))
+        self.caption = QLabel(tr("phone.zoom_caption"))
+        self.caption.setObjectName("phoneZoomCaption")
+        self.caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.caption.setWordWrap(True)
+        self.close_b = QToolButton()
+        self.close_b.setObjectName("phoneZoomClose")
+        self.close_b.setText("✕")
+        self.close_b.setFixedSize(34, 34)
+        self.close_b.setToolTip(tr("dialogs.close_tip"))
+        self.close_b.setAccessibleName(tr("phone.close"))
+        self.close_b.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.close_b.clicked.connect(self.close)
+        top = QHBoxLayout()
+        top.addStretch(1)
+        top.addWidget(self.close_b)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(16, 12, 12, 20)
+        lay.setSpacing(8)
+        lay.addLayout(top)
+        lay.addWidget(self.qr_label, 0, Qt.AlignmentFlag.AlignHCenter)
+        lay.addWidget(self.caption)
+        self.set_url(url)
+
+    def set_url(self, url: str):
+        self.url = url
+        dpr = self.devicePixelRatioF() if self.isVisible() else (self.screen().devicePixelRatio() if self.screen() else 1.0)
+        self.qr_label.setPixmap(qr_pixmap(url, self.module, dpr))
+        self.qr_label.setFixedSize(self.qr_label.pixmap().deviceIndependentSize().toSize())
+        self.layout().activate()
+        self.resize(self.sizeHint())
+
+    def open_centered(self):
+        self.layout().activate()
+        self.resize(self.sizeHint())
+        geo = self._screen_geo
+        if geo is not None:
+            self.move(geo.x() + (geo.width() - self.width()) // 2, geo.y() + (geo.height() - self.height()) // 2)
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        self.setFocus()
+
+    def mousePressEvent(self, event):
+        self.close()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape:
+            self.close()
+        else:
+            super().keyPressEvent(event)
+
+
 class PhoneDialog(_FitMixin, ClipDialog):
     """The window with the code. target: the editor that asked for the photo ("Insert"), else None."""
 
     def __init__(self, ctx, target=None, candidates=None, receiver_cls=phone.Receiver, firewall=None, which=None,
                  process_factory=None):
-        super().__init__(None, tr("phone.title"), "", "info", 600)
-        self.card.setFixedWidth(600)   # a known width: wrapped lines get their real height (heightForWidth)
+        super().__init__(None, tr("phone.title"), "", "info", CARD_WIDTH)
+        self.card.setFixedWidth(CARD_WIDTH)   # a known width: wrapped lines get their real height (heightForWidth)
         # not above every window: the editor with the photo has to come up over it
         self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
         self.card.setStyleSheet(EXTRA_STYLE)   # on the card: a second sheet on the window did not reach new labels
@@ -544,7 +646,20 @@ class PhoneDialog(_FitMixin, ClipDialog):
         qr_row.setSpacing(16)
         self.qr_label = QLabel()
         self.qr_label.setAccessibleName(tr("phone.step2_title"))
-        qr_row.addWidget(self.qr_label, 0, Qt.AlignmentFlag.AlignTop)
+        self.zoom_btn = QPushButton(tr("phone.zoom"))   # under the code: opens it big (owner 22.11.2026)
+        self.zoom_btn.setObjectName("phoneZoom")
+        self.zoom_btn.setIcon(icons.icon("zoom", "#e8ebef" if self.dark else None))
+        self.zoom_btn.setToolTip(tr("phone.zoom_tip"))
+        self.zoom_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.zoom_btn.clicked.connect(self.open_zoom)
+        left = QVBoxLayout()
+        left.setSpacing(6)
+        left.setContentsMargins(0, 0, 0, 0)
+        left.addWidget(self.qr_label, 0, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+        left.addWidget(self.zoom_btn, 0, Qt.AlignmentFlag.AlignHCenter)
+        left.addStretch(1)
+        qr_row.addLayout(left)
+        self.zoom_win = None
         right = QVBoxLayout()
         right.setSpacing(6)
         manual = QLabel(tr("phone.manual"))
@@ -579,7 +694,18 @@ class PhoneDialog(_FitMixin, ClipDialog):
         self.hint.setWordWrap(True)
         self.hint.setTextFormat(Qt.TextFormat.RichText)
         self.hint.setVisible(False)
-        self.step2.extra.addWidget(self.hint)
+        from PyQt6.QtWidgets import QScrollArea, QSizePolicy
+        self.hint_scroll = QScrollArea()   # the hint scrolls inside the window when even the smallest code leaves no room
+        self.hint_scroll.setObjectName("phoneHintScroll")
+        self.hint_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.hint_scroll.setWidgetResizable(True)
+        self.hint_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.hint_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.hint_scroll.setStyleSheet("QScrollArea#phoneHintScroll{background:transparent;border:0}"
+                                       "QScrollArea#phoneHintScroll>QWidget>QWidget{background:transparent}")
+        self.hint_scroll.setWidget(self.hint)
+        self.hint_scroll.setVisible(False)
+        self.step2.extra.addWidget(self.hint_scroll)
         self.new_code_btn = QPushButton(tr("phone.new_code"))
         self.new_code_btn.setObjectName("clipSecondary")
         self.new_code_btn.setVisible(False)
@@ -645,12 +771,15 @@ class PhoneDialog(_FitMixin, ClipDialog):
         self.full_box.setChecked(bool(ctx.config.get(CONFIG_FULL)))
         self.full_box.toggled.connect(self._full_toggled)
         self.body.addSpacing(6)
-        self.body.addWidget(self.full_box)
         self.vpn = QLabel(tr("phone.vpn_hint"))
         self.vpn.setObjectName("phoneVpn")
         self.vpn.setWordWrap(True)
-        self.body.addSpacing(6)
-        self.body.addWidget(self.vpn)
+        self.vpn.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        options = QHBoxLayout()   # one row: the check box and the line about a VPN (room for the bigger code)
+        options.setSpacing(16)
+        options.addWidget(self.full_box, 0, Qt.AlignmentFlag.AlignVCenter)
+        options.addWidget(self.vpn, 1)
+        self.body.addLayout(options)
         self.trouble_btn = QPushButton(tr("phone.trouble"))
         self.trouble_btn.setObjectName("phoneTrouble")
         self.trouble_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -833,6 +962,7 @@ class PhoneDialog(_FitMixin, ClipDialog):
         self._open_receiver()
 
     def stop(self):
+        self._close_zoom()
         self.timer.stop()
         self.trouble_timer.stop()
         receiver, self.receiver = self.receiver, None
@@ -850,6 +980,7 @@ class PhoneDialog(_FitMixin, ClipDialog):
         url = self.receiver.url
         dpr = self.devicePixelRatioF() if self.isVisible() else (QGuiApplication.primaryScreen().devicePixelRatio()
                                                                  if QGuiApplication.primaryScreen() else 1.0)
+        self._dpr = dpr
         self.qr_label.setPixmap(qr_pixmap(url, dpr=dpr))
         self.address.setText(url.split("://", 1)[1])
         self.qr_box.setVisible(True)
@@ -865,12 +996,81 @@ class PhoneDialog(_FitMixin, ClipDialog):
         self.collapse_hint()
         self.android.setVisible(True)
         self.trouble_timer.start()
+        self._fit_qr(url)
         self._relayout()
+        if self.zoom_win is not None:
+            self.zoom_win.set_url(url)   # "New code": the big window shows the new one
+
+    def _set_hint_visible(self, on: bool):
+        self.hint.setVisible(on)
+        self.hint_scroll.setVisible(on)
+
+    def _need_height(self) -> int:
+        lay = self.layout()
+        lay.invalidate()
+        lay.activate()
+        return lay.totalHeightForWidth(self.width()) if lay.hasHeightForWidth() else self.sizeHint().height()
+
+    def _hint_natural(self) -> int:
+        """Height of the open hint at the width it really has (the wrapped lines), measured after the layout."""
+        width = max(120, self.hint_scroll.viewport().width())
+        return self.hint.heightForWidth(width) if self.hint.hasHeightForWidth() else self.hint.sizeHint().height()
+
+    def _fit_qr(self, url: str):
+        """The biggest code (QR_MODULES) with which the window, measured after the layout, still fits the height of this
+        screen. If even the smallest code does not fit (large system font) the open hint gets a scroll instead."""
+        screen = self.screen() or QGuiApplication.primaryScreen()
+        room = screen.availableGeometry().height() - 24 if screen is not None else 10_000
+        hint_open = self.hint.isVisible()
+        if hint_open:
+            self.hint_scroll.setFixedHeight(max(60, self.hint_scroll.height()))
+            self._need_height()
+            self.hint_scroll.setFixedHeight(self._hint_natural() + 2)   # whole text first: scroll is the last resort
+        need = room + 1
+        for module in QR_MODULES:
+            self.qr_label.setPixmap(qr_pixmap(url, module, self._dpr))
+            need = self._need_height()
+            if need <= room:
+                return
+        if hint_open:   # the smallest code and still too tall: the hint scrolls
+            cut = need - room
+            self.hint_scroll.setFixedHeight(max(70, self.hint_scroll.height() - cut))
+            self._need_height()
+
+    def _refit_qr(self):
+        """The hint opens or folds: the room for the code changes with it."""
+        if self.receiver is not None and self.qr_box.isVisible():
+            self._fit_qr(self.receiver.url)
+
+    def open_zoom(self):
+        """The same code, big, in a window of its own; it follows the code and closes with the reception."""
+        if self.receiver is None or not self.qr_box.isVisible():
+            return
+        if self.zoom_win is not None:
+            try:
+                self.zoom_win.set_url(self.receiver.url)
+                self.zoom_win.raise_()
+                self.zoom_win.activateWindow()
+                return
+            except RuntimeError:
+                self.zoom_win = None
+        self.zoom_win = QrZoom(self, self.receiver.url)
+        self.zoom_win.destroyed.connect(lambda *_: setattr(self, "zoom_win", None))
+        self.zoom_win.open_centered()
+
+    def _close_zoom(self):
+        win, self.zoom_win = self.zoom_win, None
+        if win is not None:
+            try:
+                win.close()
+            except RuntimeError:
+                pass
 
     def _fail(self, text: str):
         self.step1.set_text(text=text)
         self.step1.set_state("now")
         self.step2.set_state("todo")
+        self._close_zoom()
         self.qr_box.setVisible(False)
         self.retry_btn.setVisible(True)
         self._relayout()
@@ -904,9 +1104,10 @@ class PhoneDialog(_FitMixin, ClipDialog):
             return   # the phone came at this very moment (or the code is gone): nothing to open
         e = lambda k, **kw: html.escape(tr("phone." + k, **kw))   # noqa: E731
         self.hint.setText(f"<b>{e('hint_title')}</b><br>1. {e('hint_android')}<br>2. {e('hint_vpn')}<br>3. {e('hint_wifi')}")
-        self.hint.setVisible(True)
-        for w in (self.android, self.step3, self.vpn):   # room for the hint: the window stays on a 1280 x 720 screen
+        self._set_hint_visible(True)
+        for w in (self.android, self.step3, self.vpn, self.step1.text):   # room for the hint: the window stays on a 1280 x 720 screen
             w.setVisible(False)
+        self._refit_qr()
         self._relayout_settled()
 
     def _relayout_settled(self):
@@ -920,9 +1121,11 @@ class PhoneDialog(_FitMixin, ClipDialog):
     def collapse_hint(self):
         if not self.hint.isVisible():
             return
-        self.hint.setVisible(False)
+        self._set_hint_visible(False)
         self.step3.setVisible(True)
         self.vpn.setVisible(True)
+        self.step1.text.setVisible(bool(self.step1.text.text()))
+        self._refit_qr()
         self._relayout_settled()
 
     def _trouble_loud(self, loud: bool):
@@ -938,6 +1141,7 @@ class PhoneDialog(_FitMixin, ClipDialog):
             self.trouble_timer.stop()
             self._trouble_loud(False)
             self.collapse_hint()
+            self._close_zoom()   # the phone is here: nobody needs the code any more
             self.qr_box.setVisible(False)
             self.android.setVisible(False)
             self.step2.set_text(tr("phone.step2_done"), tr("phone.step2_done_text"))
@@ -1005,6 +1209,7 @@ class PhoneDialog(_FitMixin, ClipDialog):
             return
         self.trouble_timer.stop()
         self.collapse_hint()
+        self._close_zoom()
         self.qr_box.setVisible(False)
         self.warn.setText(texts[reason])
         self.warn.setVisible(True)
@@ -1036,6 +1241,7 @@ class PhoneDialog(_FitMixin, ClipDialog):
         if self.closing:
             return
         self.hidden_for_photo = True
+        self._close_zoom()
         self.hide()
         rx = self.receiver
         open_now = rx is not None and rx.running and rx.state != phone.CLOSED

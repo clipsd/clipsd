@@ -5,8 +5,8 @@
 
 Что проверяется: (1) данные новинок читаются, у каждой строки есть тексты на 12 языках, цели записаны верно; (2) первая
 установка: окна «Новое в версии» нет, меток нет, знакомство как раньше; (3) обновление (настройки 1.33 без поля версии
-и обновление с записанной версии): окно приходит при первом редакторе один раз, «Позже» откладывает не больше двух раз,
-«Показать новое» ведёт коротким курсом и задаёт вопрос про обзор; «Не сейчас» больше не спрашивает, «Да, показать
+и обновление с записанной версии): окно приходит при первом редакторе один раз, «Отложить» откладывает на срок (otlozhit_test.py),
+«Показать новое» открывает «Ознакомление» (1.35) и после него задаёт вопрос про обзор; «Не сейчас» больше не спрашивает, «Да, показать
 обзор» запускает всё знакомство; (4) метка «Новое» в редакторе и на панели выделения: исчезает после нажатия и после
 трёх показов; (5) настройка «Показывать новинки после обновления» выключает окно и метки; (6) меню значка у часов:
 «Что нового»; окно обновления программы заменяется окном новинок; (7) окно и вопрос в обеих темах, одна зелёная кнопка,
@@ -42,7 +42,7 @@ from PyQt6.QtWidgets import QApplication, QPushButton  # noqa: E402
 qapp = QApplication(sys.argv)
 
 import clipshot  # noqa: E402
-from clipshot import app as appmod, i18n, novoe, themes  # noqa: E402
+from clipshot import app as appmod, i18n, novoe, otlozhit, themes  # noqa: E402
 from clipshot.i18n import tr  # noqa: E402
 
 V = "1.34.0"                       # версия, для которой в таблице есть новинки
@@ -85,7 +85,7 @@ check(len(novoe.ITEMS) >= 3 and all(len(it) == 4 for it in novoe.ITEMS), f"та�
 ids = [it[1] for it in novoe.ITEMS]
 check(len(ids) == len(set(ids)), "id новинок не повторяются")
 check(all(re.fullmatch(r"\d+\.\d+\.\d+", it[0]) for it in novoe.ITEMS), "версии в виде 1.34.0")
-check(all(re.fullmatch(r"(selector:[a-z_]+|editor:(tool:)?[a-z_]+(\|(tool:)?[a-z_]+)*)", it[2]) for it in novoe.ITEMS), "цели selector:… или editor:…")
+check(all(re.fullmatch(r"(selector:[a-z_]+|app:[a-z_]+|editor:(tool:)?[a-z_]+(\|(tool:)?[a-z_]+)*)", it[2]) for it in novoe.ITEMS), "цели selector:…, app:… или editor:…")
 src = open(os.path.join(ROOT, "clipshot", "novoe.py"), encoding="utf-8").read()
 merge_ids = re.findall(r'#\s*\("\d+\.\d+\.\d+", "([a-z_]+)"', src)
 check(not merge_ids and ids[:4] == ["phone_tile", "forma", "windows", "other_area"] and "phone_editor" in ids,
@@ -175,6 +175,11 @@ def fresh_app_config(**kw):
 
 
 def close_all():
+    ozn = getattr(a, "_ozn_window", None)
+    if ozn is not None:
+        novoe.ask_done(a.config)
+        ozn.close()
+        settle(450)   # окно удалено, отложенный вопрос после него (300 мс) отработал при ask_done
     for ed in list(a.editors):
         ed.canvas.modified = False
         ed.close()
@@ -209,44 +214,37 @@ settle(1200)
 check(got.get("title") == "Новое в версии 1.34.0" and got.get("rows") == 4, f"обновление: окно «Новое в версии 1.34.0», 4 пункта ({got})")
 check(got.get("primary") == ["Показать новое"], f"одна зелёная кнопка «Показать новое» ({got.get('primary')})")
 check(got.get("closable"), "окно не мешает выходу для обновления (clipsd_closable)")
-check(a.config.get("novoe_later") == 1 and novoe.window_pending(a.config), "«Позже»: окно придёт при следующем редакторе")
+check(otlozhit.is_snoozed(a.config, "novoe") and not novoe.window_pending(a.config),
+      "«Отложить» (основная часть, 1 час): следующий редактор окно не показывает, пока срок не вышел")
 close_all()
-answer("later_button")
-ed = a.open_editor(image(), None)
-settle(1200)
-close_all()
-check(not novoe.window_pending(a.config), "после двух «Позже» окно само больше не приходит")
 n_before = len(seen)
 ed = a.open_editor(image(), None)
 settle(1200)
-check(len(seen) == n_before, "третий редактор: окна нет")
+check(len(seen) == n_before, "второй редактор до срока: окна нет")
 close_all()
+_real_now = otlozhit.now
+otlozhit.now = lambda: _real_now() + 3700   # срок вышел
+check(novoe.window_pending(a.config), "срок вышел: окно снова ждёт первого редактора")
+otlozhit.now = _real_now
+a.config.pop("otlozhit", None)
 
-# «Показать новое»: короткий курс по новым кнопкам, потом вопрос; «Не сейчас»
+# «Показать новое» (1.35): окно «Ознакомление» на новинках, короткого курса поверх редактора больше нет
 fresh_app_config(tour_done=True, theme_chosen=True)
 answer("show_button")
 ed = a.open_editor(image(), None)
 settle(1300)
-tour = getattr(ed, "tour", None)
-check(tour is not None and tour.steps_fn is not None, "«Показать новое»: короткий курс поверх редактора")
-if tour is not None:
-    titles = [s[1] for s in tour.steps]
-    check(titles[:4] == [novoe.title("forma"), novoe.title("phone_editor"), novoe.title("translate_head"), novoe.title("numbers")]
-          and titles[-1] == tr("novoe.panel_title"), f"курс: новые кнопки редактора, потом карточка о панели выделения ({titles})")
-    check(tour.steps[0][0] is ed.form_button, f"первый шаг подсвечивает кнопку «Форма снимка» ({tour.steps[0][0]})")
-    check(tour.steps[1][0] is ed.phone_button, f"второй шаг подсвечивает кнопку «С телефона» ({tour.steps[1][0]})")
-    check(tour.steps[2][0] is ed.tr_block, f"третий шаг подсвечивает строку перевода ({tour.steps[2][0]}, видна {ed.tr_block.isVisible()})")
-    panel_text = tour.steps[-1][2]
-    check(all(novoe.title(i) in panel_text for i in ("phone_tile", "other_area", "windows")),
-          "карточка о панели: «С телефона», «Другая область», «Открытые окна»")
-    check(not novoe.window_pending(a.config), "после «Показать новое» окно само больше не приходит")
-    q = {}
-    answer("secondary_button", lambda w: q.update(title=w.title.text(), yes=w.primary_button.text(), no=w.secondary_button.text()))
-    tour.finish()
-    settle(800)
-    check(q.get("title") == "Хотите узнать о других функциях программы?" and q.get("yes") == "Да, показать обзор"
-          and q.get("no") == "Не сейчас", f"вопрос про обзор ({q})")
-    check(not novoe.ask_pending(a.config) and getattr(ed, "tour", None) is None, "«Не сейчас»: обзор не начат, больше не спрашивает")
+win = getattr(a, "_ozn_window", None)
+check(win is not None and win.isVisible() and win.current == "phone_tile", "«Показать новое»: окно «Ознакомление» на первой новинке")
+check(getattr(ed, "tour", None) is None, "короткий курс поверх редактора больше не запускается")
+check(not novoe.window_pending(a.config), "после «Показать новое» окно само больше не приходит")
+# вопрос про обзор: после окна «Ознакомление», если смотрели одни новинки; «Не сейчас» больше не спрашивает
+q = {}
+answer("secondary_button", lambda w: q.update(title=w.title.text(), yes=w.primary_button.text(), no=w.secondary_button.text()))
+win.close()
+settle(1200)
+check(q.get("title") == "Хотите узнать о других функциях программы?" and q.get("yes") == "Да, показать обзор"
+      and q.get("no") == "Не сейчас", f"вопрос про обзор после окна «Ознакомление» ({q})")
+check(not novoe.ask_pending(a.config), "«Не сейчас»: больше не спрашивает")
 close_all()
 n_before = len(seen)
 ed = a.open_editor(image(), None)
@@ -254,34 +252,25 @@ settle(1200)
 check(len(seen) == n_before, "после ответа: ни окна, ни вопроса")
 close_all()
 
-# «Да, показать обзор»: всё знакомство без шага языка
+# «Да, показать обзор»: окно «Ознакомление» целиком
 fresh_app_config(tour_done=True, theme_chosen=True)
 answer("show_button")
 ed = a.open_editor(image(), None)
 settle(1300)
-if getattr(ed, "tour", None) is not None:
-    answer("primary_button")
-    ed.tour.finish()
-    settle(1000)
-from clipshot import tour as tourmod  # noqa: E402
-full = getattr(ed, "tour", None)
-check(full is not None and full.steps_fn is tourmod.steps and len(full.steps) == len(tourmod.steps(ed, False)),
-      "«Да, показать обзор»: всё знакомство с программой")
-if full is not None:
-    full.finish()
+answer("primary_button")
+getattr(a, "_ozn_window").close()
+settle(1500)
+check(getattr(a, "_ozn_window", None) is not None, "«Да, показать обзор»: снова окно «Ознакомление»")
 close_all()
 
-# окно из меню значка без редактора: «Показать новое» открывает пример снимка
+# окно из меню значка без редактора: «Показать новое» открывает «Ознакомление», редактор программы не открывается
 fresh_app_config(tour_done=True, theme_chosen=True)
 novoe.window_done(a.config)
 answer("show_button")
 a.show_novoe()
 settle(800)
-check(len(a.editors) == 1 and getattr(a.editors[0], "tour", None) is not None, "«Что нового» без редактора: пример снимка и курс по новому")
-if a.editors and getattr(a.editors[0], "tour", None) is not None:
-    answer("secondary_button")
-    a.editors[0].tour.finish()
-    settle(600)
+check(not a.editors and getattr(a, "_ozn_window", None) is not None, "«Что нового» без редактора: «Ознакомление», пример снимка внутри окна")
+novoe.ask_done(a.config)
 close_all()
 
 # М6 проверки 1.34.0: язык сменили, пока окно новинок открыто: окно открывается заново на новом языке
@@ -305,7 +294,7 @@ def relang_then_later():
 QTimer.singleShot(30, relang_then_later)
 ch = a.show_novoe(None, auto=True)
 i18n.set_language("ru")
-check(titles == [i18n._load("ru")["novoe.show"], i18n._load("en")["novoe.show"]] and ch == "later",
+check(titles == [i18n._load("ru")["novoe.show"], i18n._load("en")["novoe.show"]] and ch == "snooze",
       f"смена языка при открытом окне: окно на новом языке, ответ человека тот же ({titles}, {ch})")
 close_all()
 
@@ -476,7 +465,7 @@ check(dlg.values()["novoe_enabled"] is False, "values() отдаёт настр�
 dlg.deleteLater()
 menu = a._build_tray_menu()
 texts = [x.text() for x in menu.actions()]
-check("Что нового" in texts and texts.index("Что нового") + 1 == texts.index(tr("app.menu_tour")),
+check("Что нового" in texts and texts.index("Что нового") + 2 == texts.index(tr("app.menu_tour")),
       f"меню значка: «Что нового» перед «Знакомство с программой» ({texts})")
 
 # --- 7. вид окна: темы, языки, контраст ----------------------------------------------------------------------------

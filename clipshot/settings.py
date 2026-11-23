@@ -503,6 +503,11 @@ def _readable(fg, bg, need: float = 4.5):
     return c
 
 
+def _themes_tokens(cfg) -> dict:
+    from . import themes as _themes
+    return _themes.tokens(cfg)
+
+
 def settings_style(t) -> str:
     r = 10 if not t["dark"] else 3
     from PyQt6.QtGui import QColor as _C
@@ -521,6 +526,7 @@ def settings_style(t) -> str:
     # кнопки с белым текстом (выбранный модификатор, «Сохранить»): синий по правилу контраста 4,5:1, не акцент
     from . import themes as _themes
     t["blue_bg"], t["blue_hover"], t["blue_border"] = _themes.blue_button(t["ui_accent"])
+    t["error_text"] = _readable(_C("#d32f2f"), _C(t["dialog_bg"])).name()   # сообщение «не удалось применить»
     t["found_bg"] = "rgba(255,210,63,0.45)" if not t["dark"] else "rgba(255,210,63,0.30)"
     return f"""
 QDialog {{ background: {t['dialog_bg']}; color: {t['text']}; }}
@@ -528,6 +534,7 @@ QLabel, QCheckBox {{ color: {t['text']}; font-size: 14px; }}
 QLabel#section {{ font-size: 14px; font-weight: bold; color: {t['text']}; margin-top: 6px; }}
 QScrollArea#settingsScroll, QWidget#settingsContent {{ background: transparent; }}
 QLabel#hint, QLabel#footer {{ color: {t['text_dim']}; font-size: 14px; }}
+QLabel#applyError {{ color: {t['error_text']}; font-size: 14px; }}
 QFrame#card {{ background: {t['card_bg']}; border: 1px solid {t['card_border']}; border-radius: {r}px; }}
 QKeySequenceEdit, QLineEdit, QComboBox {{ min-height: 32px; font-size: 14px; }}
 QLineEdit, QComboBox {{ background: {t['input_bg']}; color: {t['text']}; border: 1px solid {t['button_border']};
@@ -539,6 +546,7 @@ HotkeyEditor QPushButton:checked:hover {{ background: {t['blue_hover']}; border-
 QPushButton {{ min-height: 32px; font-size: 14px; padding: 0 14px; border-radius: {min(r, 6)}px; border: 1px solid {t['button_border']};
     background: {t['button_bg']}; color: {t['button_text']}; }}
 QPushButton:hover {{ background: {t['button_hover']}; border-color: {t['ui_accent']}; }}
+QPushButton:disabled {{ background: transparent; color: {t['text_dim']}; border-color: {t['card_border']}; }}
 QFrame#nav {{ background: {t['nav_bg']}; border-right: 1px solid {t['card_border']}; }}
 QLineEdit#search {{ min-height: 30px; border-radius: 15px; padding: 0 12px; }}
 QPushButton#navItem {{ text-align: left; min-height: 36px; padding: 0 10px; border: none; border-radius: 8px;
@@ -560,12 +568,20 @@ class SettingsDialog(QDialog):
         self.config = config
         self._parent = parent
         self.update_ctx = None   # приложение (ставит open_settings): без него кнопка ничего не запускает
+        self.apply_handler = None   # values -> [(поля, текст ошибки)]: «Применить» и «ОК» применяют в приложении
         self._found_widgets = []
+        self._building = False
         self._build(config)
+        # что уже применено: «Применить» неактивна, пока окно совпадает с этим; «Отмена» возвращает язык и вид
+        self._baseline = self._snapshot()
+        self._applied = dict(self._baseline, settings_page=None)
+        self._applied_style = self._style_cfg(self._baseline)
+        self._refresh_apply()
 
     def _build(self, config: dict):
         """Строит содержимое окна; при смене языка окно строится заново на новом языке (_language_chosen)."""
         from . import __author__, __version__
+        self._building = True
         self.config = config
         self.setWindowTitle(tr("settings.title"))
         from . import themes as _themes
@@ -706,22 +722,17 @@ class SettingsDialog(QDialog):
         index = self.ocr_langs.findData(config.get("ocr_langs", "auto"))
         self.ocr_langs.setCurrentIndex(max(0, index))
         grid.addWidget(self.ocr_langs, 2, 1, 1, 2)
-        status = QLabel(ocr.engine_status() + "\n" + tr("settings.ocr_idle"))
-        status.setWordWrap(True)
-        status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        grid.addWidget(status, 3, 0, 1, 3)
+        # 1.36: «Распознавание: русский, английский [Установить ещё язык]»; нет программы: блок с кнопкой установки
+        self.ocr_status = ocr.OcrStatusRow(tokens=_themes.tokens(config))
+        grid.addWidget(self.ocr_status, 3, 0, 1, 3)
+        idle = QLabel(tr("settings.ocr_idle"))
+        idle.setWordWrap(True)
+        grid.addWidget(idle, 4, 0, 1, 3)
         help = ocr.engine_help(config.get("ocr_langs"))
         self.ocr_install = ocr.InstallBlock(help, tokens=_themes.tokens(config)) if help is not None else None
         if self.ocr_install is not None:
-            grid.addWidget(self.ocr_install, 4, 0, 1, 3)
-        # Языки распознавания (болгарский, немецкий и др.): это про распознавание, поэтому здесь, а не в «Переводе»
-        from . import translate
-        missing = translate.missing_ocr_langs()
-        if missing and ocr.linux_family() == "debian":
-            langs_help = ocr.InstallHelp(tr("settings.ocr_more_text"),
-                                         translate.OCR_EXTRA_COMMAND, ocr.TESSERACT_GUIDE, tr("ocr.guide_title"))
-            langs_help.title = tr("settings.ocr_more_title")
-            grid.addWidget(ocr.InstallBlock(langs_help, tokens=_themes.tokens(config)), 5, 0, 1, 3)
+            self.ocr_install.installed.connect(lambda: self.ocr_status.set_codes(ocr.installed_codes()))
+            grid.addWidget(self.ocr_install, 5, 0, 1, 3)
         for widget in (self.ocr_quality, self.ocr_langs):
             widget.setEnabled(self.ocr_enabled.isChecked())
             self.ocr_enabled.toggled.connect(widget.setEnabled)
@@ -929,22 +940,130 @@ class SettingsDialog(QDialog):
                 label.setWordWrap(True)
         for layout in pg.values():
             layout.addStretch(1)
+        self.apply_error = QLabel()   # «Не удалось применить»: сообщение в окне, остальное уже применено
+        self.apply_error.setObjectName("applyError")
+        self.apply_error.setWordWrap(True)
+        self.apply_error.setAccessibleName(tr("settings.apply"))
+        self.apply_error.hide()
+        err_row = QHBoxLayout()
+        err_row.setContentsMargins(18, 0, 18, 0)
+        err_row.addWidget(self.apply_error)
+        outer.addLayout(err_row)
         buttons = QHBoxLayout()
         buttons.setContentsMargins(18, 0, 18, 0)
+        # Как в Windows: «ОК», «Отмена», «Применить»; порядок не зависит от языка
+        self.apply_note = QLabel("")   # серое «Применено» после «Применить», пока нет новых правок
+        self.apply_note.setObjectName("hint")
+        buttons.addWidget(self.apply_note)
         buttons.addStretch(1)
-        cancel = QPushButton(tr("settings.cancel"))
-        cancel.clicked.connect(self.reject)
-        save = QPushButton(tr("settings.save"))
+        save = QPushButton(tr("settings.ok"))
         save.setObjectName("primary")
         save.setDefault(True)
         save.clicked.connect(self.accept)
-        buttons.addWidget(cancel)
+        cancel = QPushButton(tr("settings.cancel"))
+        cancel.clicked.connect(self.reject)
+        self.apply_button = QPushButton(tr("settings.apply"))
+        self.apply_button.clicked.connect(self.apply_now)
+        self.ok_button, self.cancel_button = save, cancel
         buttons.addWidget(save)
+        buttons.addWidget(cancel)
+        buttons.addWidget(self.apply_button)
         outer.addLayout(buttons)
+        self._watch_changes()
         self.search.textChanged.connect(self._search_changed)
         first = config.get("settings_page")
         self.show_section(first if first in self.pages else "general")
         self._fit_to_screen(self._parent)
+        self._building = False
+        self._refresh_apply()
+
+    # --- «Применить» ---------------------------------------------------------
+
+    def _watch_changes(self):
+        """Любая правка в окне пересчитывает, активна ли «Применить»."""
+        for box in self.findChildren(QCheckBox):
+            box.toggled.connect(self._refresh_apply)
+        for box in self.findChildren(QComboBox):
+            box.currentIndexChanged.connect(self._refresh_apply)
+        for edit in self.findChildren(QLineEdit):
+            if edit is not self.search and edit.objectName() != "search":
+                edit.textChanged.connect(self._refresh_apply)
+        for button in self.findChildren(QPushButton):
+            if button.isCheckable() and button.objectName() != "navItem":
+                button.toggled.connect(self._refresh_apply)   # Ctrl/Shift/Alt/Win в сочетаниях
+
+    def _snapshot(self) -> dict:
+        values = self.values()
+        values.pop("settings_page", None)   # раздел окна настройкой не считается
+        return values
+
+    @staticmethod
+    def _style_cfg(values: dict) -> dict:
+        return {k: values.get(k) for k in ("ui_theme", "ui_accent", "ui_panel", "ui_field", "ui_frame")}
+
+    def has_changes(self) -> bool:
+        """В окне есть то, что ещё не применено."""
+        return not self._building and self._snapshot() != self._baseline
+
+    def _refresh_apply(self, *_args):
+        if self._building or not hasattr(self, "_baseline") or getattr(self, "apply_button", None) is None:
+            return
+        dirty = self.has_changes()
+        self.apply_button.setEnabled(dirty)
+        if dirty:
+            self.apply_note.setText("")
+            self.apply_error.hide()
+
+    def show_apply_errors(self, texts):
+        self.apply_error.setText("\n".join(texts))
+        self.apply_error.setVisible(bool(texts))
+        if texts:
+            self.apply_note.setText("")
+
+    def apply_now(self) -> bool:
+        """«Применить»: сохранить и применить всё изменённое сейчас, окно остаётся открытым. True: без ошибок.
+        Что не вышло (сочетание занято, автозапуск), показано в окне; остальное применено."""
+        values = self.values()
+        errors = []
+        if self.apply_handler is not None:
+            errors = self.apply_handler(dict(values)) or []
+        failed = {key for keys, _text in errors for key in keys}
+        shot = dict(values)
+        shot.pop("settings_page", None)
+        for key in failed:   # не применённое остаётся «изменённым»: «Применить» повторит попытку
+            shot[key] = self._baseline.get(key)
+        self._baseline = shot
+        self._applied = dict(shot)
+        for key, value in values.items():
+            if key not in failed and key not in ("autostart", "settings_page"):
+                self.config[key] = value
+        self._applied_style = self._style_cfg(shot)
+        self.setStyleSheet(settings_style(_themes_tokens(self._applied_style)))
+        self._refresh_apply()
+        self.show_apply_errors([text for _keys, text in errors])   # после пересчёта: он прячет прежнее сообщение
+        self.apply_note.setText("" if errors else tr("settings.applied"))
+        return not errors
+
+    def accept(self):
+        """«ОК»: применить и закрыть. Не вышло применить (занято сочетание): окно остаётся, сообщение в нём."""
+        if self.apply_handler is not None and self.has_changes():
+            if not self.apply_now() and not (self.want_tour or self.want_selector_tour):
+                return
+        super().accept()
+
+    def reject(self):
+        """«Отмена» и крестик: то, что не применено, не применяется; язык и вид, показанные как предпросмотр,
+        возвращаются прежними. Уже применённое остаётся."""
+        self._revert_preview()
+        super().reject()
+
+    def _revert_preview(self):
+        from . import language
+        ctx = self.update_ctx if self.update_ctx is not None else self
+        wanted = self._applied.get("language")
+        if wanted is not None and language.current_choice(ctx) != wanted:
+            language.change(ctx, wanted)
+        self.setStyleSheet(settings_style(_themes_tokens(self._applied_style)))
 
     # --- разделы и поиск (1.32) --------------------------------------------
 
@@ -1057,7 +1176,7 @@ class SettingsDialog(QDialog):
 
     def _language_chosen(self, _index=None):
         """Язык выбран в списке: применяется сразу (как глобус в редакторе), окно настроек перестраивается на новом
-        языке без закрытия, несохранённые правки остаются. «Отмена» язык не откатывает: он остаётся выбранным."""
+        языке без закрытия, несохранённые правки остаются. Это предпросмотр: «Отмена» без «Применить» возвращает прежний язык."""
         from . import language
         code = self.language.currentData()
         if code == language.current_choice(self):
@@ -1136,6 +1255,7 @@ class SettingsDialog(QDialog):
         fg = "#000000" if QColor(color).lightnessF() > 0.6 else "#ffffff"
         self.colors[key].setText(color.upper())
         self.colors[key].setStyleSheet(f"QPushButton {{ background: {color}; color: {fg}; border: 1px solid #777; }}")
+        self._refresh_apply()
 
     def _pick_color(self, key):
         color = QColorDialog.getColor(QColor(self.colors[key].property("color")), self, tr("settings.color_dialog"))

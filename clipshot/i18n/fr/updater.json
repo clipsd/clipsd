@@ -57,6 +57,7 @@
   "updater.retry.busy": "La mise à jour est déjà en cours d'installation. Patientez une minute : ClipSD redémarrera automatiquement.",
   "updater.up_to_date": "Vous avez la dernière version ({version}).",
   "updater.wait.dialog": "La version {version} sera installée lorsque vous fermerez la fenêtre ClipSD ouverte (par exemple, les paramètres).",
+  "updater.wait.phone": "La version {version} sera installée lorsque vous fermerez la fenêtre « Depuis le téléphone ».",
   "updater.wait.selector": "La version {version} sera installée lorsque la fenêtre de sélection de zone sera fermée.",
   "updater.wait.text": "La version {version} sera installée lorsque vous aurez fini de saisir le texte et fermé l'éditeur.",
   "updater.wait.title": "La mise à jour est téléchargée",

@@ -1,6 +1,8 @@
 {
   "settings.accent_tip": "Farbe des Rahmens und der ausgewählten Schaltflächen",
   "settings.accent_tip_plain": "In diesem Stil ist der Rahmen neutral; die Farbe bleibt bei den ausgewählten Schaltflächen",
+  "settings.applied": "Übernommen",
+  "settings.apply": "Übernehmen",
   "settings.auto_save": "Jeden Screenshot automatisch speichern (die Datei wird nach Änderungen im Editor aktualisiert)",
   "settings.auto_save_dir": "Ordner für automatisches Speichern:",
   "settings.autostart": "Mit dem System starten (Symbol im Infobereich)",
@@ -67,6 +69,7 @@
   "settings.ocr_ru": "Nur Russisch",
   "settings.ocr_ru_en": "Russisch und Englisch",
   "settings.off": "Ausschalten",
+  "settings.ok": "OK",
   "settings.press_text": "Drücken Sie die gewünschte Tastenkombination (zum Beispiel Alt+W).\nDas Fenster schließt sich von selbst.",
   "settings.press_title": "Tastenkombination drücken",
   "settings.press_wait": "Warten auf Tastenkombination…",

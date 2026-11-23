@@ -36,7 +36,7 @@ from PyQt6.QtWidgets import QApplication, QToolButton  # noqa: E402
 
 app = QApplication(sys.argv)
 from clipshot import app as appmod, i18n, phone, phone_ui  # noqa: E402
-from clipshot.editor import EditorWindow, TOOL_W, soft_colors  # noqa: E402
+from clipshot.editor import EditorWindow, PHONE_ICON_W, TOOL_W, soft_colors  # noqa: E402
 from clipshot.shapes import IMAGE  # noqa: E402
 
 phone.LISTEN_PORTS = ()   # свободный порт системы, только 127.0.0.1
@@ -176,7 +176,7 @@ check(b in idx and ed.bell_button in idx and idx.index(b) < idx.index(ed.bell_bu
       and ed.titlebar is not None and ed.titlebar.isAncestorOf(b), "кнопка в шапке окна, слева от колокольчика")
 check(b.text() == "С телефона" and b.toolButtonStyle() == Qt.ToolButtonStyle.ToolButtonTextBesideIcon,
       f"широкое окно: подпись «С телефона» ({b.text()!r})")
-check(b.toolTip() == "С телефона · Снять камерой или отправить картинку с телефона",
+check(b.toolTip().startswith("С телефона · Снять камерой или отправить картинку с телефона\n"),
       f"подсказка как у плитки окна выделения: {b.toolTip()!r}")
 check(b.accessibleName() == "С телефона" and "камерой" in b.accessibleDescription(), "имя и описание для экранного диктора")
 check(b.focusPolicy() == Qt.FocusPolicy.TabFocus, "до кнопки можно дойти клавишей Tab, щелчок фокус у снимка не забирает (М3)")
@@ -200,7 +200,7 @@ done(ctx, ed)
 ctx_sys = Ctx(editor_system_title=True)
 ed = mk(ctx_sys, 1180)
 b = ed.phone_button
-check(ed.titlebar is None and b.isVisible() and b.text() == "" and b.width() == TOOL_W and b.accessibleName() == "С телефона"
+check(ed.titlebar is None and b.isVisible() and b.text() == "" and b.width() == PHONE_ICON_W and b.accessibleName() == "С телефона"
       and b.toolTip().startswith("С телефона · "), "системный заголовок: значок без подписи, название в подсказке и для диктора")
 done(ctx_sys, ed)
 
@@ -257,7 +257,7 @@ for lang in LANGS:
     ed = mk(ctx, 300)
     b = ed.phone_button
     fits = ed.titlebar.layout().minimumSize().width() <= ed.titlebar.width()
-    check(b.isVisible() and fits and (b.text() == label or b.width() == TOOL_W),
+    check(b.isVisible() and fits and (b.text() == label or b.width() == PHONE_ICON_W),
           f"{lang}: узкое окно, кнопка на месте ({'с подписью' if b.text() else 'значком'})")
     check(ed.width() <= 1280, f"{lang}: узкое окно не шире экрана 1280 ({ed.width()})")
     done(ctx, ed)

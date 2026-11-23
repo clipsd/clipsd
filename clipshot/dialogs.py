@@ -339,14 +339,22 @@ class MessageCard(ClipDialog):
     После закрытия choice: "primary", "secondary" или "close" (крестик, Esc). Тёмная карточка при тёмном оформлении."""
 
     def __init__(self, parent, title: str, text: str, icon: str = "info", primary: str = None, secondary: str = None,
-                 subtitle: str = "", modal: bool = True, width: int = 480, logo: bool = False, dark: bool = None):
+                 subtitle: str = "", modal: bool = True, width: int = 480, logo: bool = False, dark: bool = None,
+                 snooze: bool = False):
         from . import themes
         super().__init__(parent, title, subtitle, icon, width, dark=themes.is_dark() if dark is None else dark, logo=logo)
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, parent is None)
         self.setModal(modal)
         self.choice = "close"
+        self.delay = None
         self.message_text = text
         self.message = self.text(text)
+        self.snooze_button = None
+        if snooze:   # «Отложить ▾» (otlozhit.py): слева от второстепенной кнопки
+            from . import otlozhit
+            self.snooze_button = otlozhit.SnoozeButton(self.dark)
+            self.footer_right.addWidget(self.snooze_button)
+            self.snooze_button.chosen.connect(lambda key: self._pick("snooze", key))
         self.secondary_button = self.secondary(secondary) if secondary else None
         self.primary_button = self.primary(primary or tr("dialogs.ok"))
         self.primary_button.clicked.connect(lambda: self._pick("primary"))
@@ -354,8 +362,9 @@ class MessageCard(ClipDialog):
             self.secondary_button.clicked.connect(lambda: self._pick("secondary"))
         self.primary_button.setFocus()
 
-    def _pick(self, choice: str):
+    def _pick(self, choice: str, delay: str = None):
         self.choice = choice
+        self.delay = delay
         self.accept()
 
     def showEvent(self, event):

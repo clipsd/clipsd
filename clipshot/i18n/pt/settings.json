@@ -1,6 +1,8 @@
 {
   "settings.accent_tip": "Cor da moldura e dos botões selecionados",
   "settings.accent_tip_plain": "Neste estilo a moldura é neutra; a cor permanece nos botões selecionados",
+  "settings.applied": "Aplicado",
+  "settings.apply": "Aplicar",
   "settings.auto_save": "Salvar cada captura automaticamente (o arquivo é atualizado após edições no editor)",
   "settings.auto_save_dir": "Pasta de salvamento automático:",
   "settings.autostart": "Iniciar com o sistema (ícone na bandeja)",
@@ -67,6 +69,7 @@
   "settings.ocr_ru": "Somente russo",
   "settings.ocr_ru_en": "Russo e inglês",
   "settings.off": "Desativar",
+  "settings.ok": "OK",
   "settings.press_text": "Pressione a combinação de teclas desejada (por exemplo, Alt+W).\nA janela se fecha sozinha.",
   "settings.press_title": "Pressione uma combinação de teclas",
   "settings.press_wait": "Aguardando uma combinação de teclas…",

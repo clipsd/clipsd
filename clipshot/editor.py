@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (QAbstractButton, QAbstractSpinBox, QKeySequenceEdit
                              QVBoxLayout,
                              QWidget)
 
-from . import forma, hidpi, icons
+from . import forma, hidpi, icons, otdelno
 from .dialogs import PALETTES as CARD_PALETTES, ClipDialog
 from .frame_extents import track_frame_extents
 from .i18n import dynamic, tr
@@ -1534,7 +1534,7 @@ QToolButton#group {{ padding-right: {GROUP_ARROW_W + 3}px; }}
 QToolButton#more {{ padding: 0px 10px 0px 7px; background: {P['s2']}; font-size: {font - 1}px; }}
 QToolButton#tool:hover, QToolButton#group:hover, QToolButton#action:hover, QToolButton#bell:hover {{ background: {P['hover']}; }}
 QToolButton#more:hover {{ background: {P['s3']}; }}
-QToolButton#phone {{ border: none; border-radius: 6px; padding: 0px 10px 0px 7px; background: {ph_bg}; color: {ph_fg};
+QToolButton#phone {{ border: none; border-radius: 6px; padding: 0px {GROUP_ARROW_W + 6}px 0px 7px; background: {ph_bg}; color: {ph_fg};
     font-size: {font - 1}px; font-weight: 600; }}
 QToolButton#phone:hover {{ background: {ph_hover}; }}
 QToolButton#tool:checked, QToolButton#group:checked {{ background: {P['accs']}; }}
@@ -2251,6 +2251,73 @@ class FormButton(QToolButton):
     default_mark = False
 
 
+PHONE_ICON_W = GROUP_W   # «С телефона» только значком: значок и зона ▾ (22.11.2026)
+
+
+class PhoneButton(QToolButton):
+    """«С телефона» со стрелкой ▾ (22.11.2026): щелчок по кнопке открывает приём так, как выбрано (в этот снимок или
+    отдельным снимком), стрелка (и правая кнопка мыши) открывает меню выбора (menu_requested)."""
+
+    menu_requested = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+        self.menu_open = False
+        self._arrow_hover = False
+        self.setMouseTracking(True)
+
+    def in_arrow(self, pos) -> bool:
+        return pos.x() >= self.width() - GROUP_ARROW_W - 2
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self.in_arrow(event.position()):
+            event.accept()
+            self.menu_requested.emit()
+            return
+        super().mousePressEvent(event)
+
+    def contextMenuEvent(self, event):
+        event.accept()
+        self.menu_requested.emit()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Down:
+            event.accept()
+            self.menu_requested.emit()
+            return
+        super().keyPressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        hover = self.in_arrow(event.position())
+        if hover != self._arrow_hover:
+            self._arrow_hover = hover
+            self.update()
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event):
+        self._arrow_hover = False
+        self.update()
+        super().leaveEvent(event)
+
+    def paintEvent(self, event):
+        QToolButton.paintEvent(self, event)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        zone = QRectF(self.width() - GROUP_ARROW_W - 2, 4, GROUP_ARROW_W, self.height() - 8)
+        if self.menu_open or self._arrow_hover:
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(128, 128, 128, 60 if self._arrow_hover and not self.menu_open else 90))
+            p.drawRoundedRect(zone, 4, 4)
+        c = zone.center()
+        color = QColor(self.palette().buttonText().color())
+        color.setAlpha(220)
+        p.setPen(QPen(color, 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawPolyline(QPolygonF([QPointF(c.x() - 3.5, c.y() - 1.6), QPointF(c.x(), c.y() + 1.9),
+                                  QPointF(c.x() + 3.5, c.y() - 1.6)]))
+        p.end()
+
+
 class ToolStrip(QWidget):
     """Ряд инструментов (1.32): отдельные кнопки и группы. Свёрнутая группа показывает одну кнопку GroupButton,
     развёрнутая: кнопки всех своих инструментов. Порядок меняется перетаскиванием (группы целиком, инструмент
@@ -2854,6 +2921,16 @@ QPushButton#penHintButton:pressed {{ background: {HINT_BUTTON[self.dark][3]}; bo
         self.sub.setText(sub)
         self.button.setText(button)
         self.button.setAccessibleName(button)
+        # 22.11.2026 (владелец): на кнопке квадратик цвета, которым будут новые линии после нажатия (выбранный сейчас);
+        # меняется при каждом новом выборе цвета, пока карточка открыта
+        chosen = self.pending.get("color") or self.pending.get("text_color")
+        if kind in ("color", "both") and chosen:
+            self.button.setIcon(color_square_icon(chosen, self.dark))
+            self.button.setIconSize(QSize(23, 16))
+            self.button.setToolTip(QColor(chosen).name().upper())
+        else:
+            self.button.setIcon(QIcon())
+            self.button.setToolTip("")
         self.button.show()
         self.title_sample.hide()
         self.setAccessibleName(f"{title}. {sub}")
@@ -2885,6 +2962,89 @@ QPushButton#penHintButton:pressed {{ background: {HINT_BUTTON[self.dark][3]}; bo
         if self.isVisible():
             self.timer.start(self.LINGER_MS)
         super().leaveEvent(event)
+
+
+class InsertHint(PenHint):
+    """22.11.2026: после вставки картинки в снимок на 6 секунд карточка «Вставлено в снимок» с кнопкой «Открыть
+    отдельно». Та же карточка, что подсказка у палитры (не окно, рисовать не мешает, уходит при следующем действии)."""
+    dismissed = pyqtSignal()
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.setObjectName("penHint")
+        self.shape = None
+
+    def show_inserted(self, shape):
+        self.kind = "inserted"
+        self.shape = shape
+        self.pending = {}
+        self.target = None
+        title, button = tr("otdelno.hint_title"), tr("otdelno.hint_button")
+        self.title.setText(title)
+        self.sub.setText("")
+        self.sub.hide()
+        self.sample.hide()
+        self.title_sample.hide()
+        self.button.setText(button)
+        self.button.setAccessibleName(button)
+        self.button.setIcon(icons.icon("apart", HINT_BUTTON[self.dark][1]))
+        self.button.setIconSize(QSize(18, 18))
+        self.button.setToolTip(tr("otdelno.hint_tip"))
+        self.button.show()
+        self.setAccessibleName(title + ". " + button)
+        self._fit()
+        self.raise_()
+        self.timer.start(self.SHOW_MS)
+
+    def dismiss(self):
+        was = self.isVisible()
+        super().dismiss()
+        self.shape = None
+        if was:
+            self.dismissed.emit()
+
+
+class OpenApartButton(QPushButton):
+    """22.11.2026: кнопка «Открыть отдельно» у выделенной вставленной картинки (с телефона, из файла, из буфера).
+    Для стрелки, рамки, текста и пустого выделения её нет."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.setObjectName("openApart")
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)   # фокус остаётся у снимка
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.dark = False
+        self.hide()
+
+    def apply_theme(self, dark: bool):
+        self.dark = bool(dark)
+        h = HINT_BUTTON[self.dark]
+        self.setStyleSheet(f"""
+QPushButton#openApart {{ color: {h[1]}; background: {h[0]}; border: 1px solid {h[2]}; border-radius: 6px;
+    padding: 4px 10px; font-size: 13px; font-weight: 600; min-height: 20px; }}
+QPushButton#openApart:hover {{ background: {h[3]}; }}
+""")
+        self.setIcon(icons.icon("apart", h[1]))
+        self.setIconSize(QSize(18, 18))
+
+    def refresh_text(self):
+        self.setText(tr("otdelno.hint_button"))
+        self.setAccessibleName(tr("otdelno.hint_button"))
+        self.setToolTip(tr("otdelno.hint_tip"))
+        self.adjustSize()
+
+
+def color_square_icon(color, dark: bool = False) -> QIcon:
+    """Квадратик цвета для кнопки «Рисовать дальше этим цветом» (с рамкой: белый и жёлтый видны на светлой кнопке)."""
+    pm = QPixmap(40, 28)   # справа прозрачный запас: отступ от надписи кнопки
+    pm.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setPen(QPen(QColor("#6b7178" if dark else "#8a8f98"), 2))
+    p.setBrush(QColor(color))
+    p.drawRoundedRect(QRectF(1, 1, 26, 26), 6, 6)
+    p.end()
+    return QIcon(pm)
 
 
 # 1.34: кнопка подсказки у палитры мягкая синяя (фон, текст, рамка, наведение): заметнее белой, но не спорит с зелёной
@@ -3068,10 +3228,18 @@ class EditorWindow(QMainWindow):
         self.canvas.context_requested.connect(self.show_context_menu)
         self.canvas.zoom_requested.connect(self.zoom_by)
         self.canvas.pressed.connect(self._dismiss_pen_hint)        # следующее действие на снимке убирает подсказку
+        self.canvas.pressed.connect(self._dismiss_insert_hint)
+        self.canvas.changed.connect(self._dismiss_insert_hint)
+        self.canvas.changed.connect(self._update_apart_button)
+        self.canvas.resized.connect(self._update_apart_button)
         self.canvas.size_wheeled.connect(lambda size: self._object_restyled(size=size))
         self.canvas.form_changed.connect(self._sync_form)
         self.canvas.checker_dark = palette(cfg)["dark"]
         self._pen_hint = None
+        self._insert_hint = None     # 22.11.2026: «Вставлено в снимок · Открыть отдельно»
+        self._apart_button = None    # 22.11.2026: «Открыть отдельно» у выделенной вставленной картинки
+        self._image_meta = {}
+        self._target_menu = None
         self.canvas.crop_state_changed.connect(self._update_info)
         self.canvas.crop_confirmed.connect(self.exit_crop_mode)   # обрезали любым способом: режим завершён
         self.canvas.text_selected.connect(self._text_selected)
@@ -3265,6 +3433,9 @@ class EditorWindow(QMainWindow):
         menu.addAction(tr("editor.insert_file")).triggered.connect(self.insert_from_file)
         menu.addAction(tr("editor.insert_capture")).triggered.connect(self.insert_screenshot)
         menu.addAction(tr("phone.insert_menu")).triggered.connect(self.insert_from_phone)   # после 1.32
+        menu.addSeparator()   # 22.11.2026: куда класть картинку (то же, что меню у кнопки «С телефона»)
+        target_actions = self._target_actions(menu)
+        menu.aboutToShow.connect(lambda: self._sync_target_actions(target_actions))
         insert.setMenu(menu)
         self.insert_button = insert
         row1.addWidget(insert)
@@ -3304,13 +3475,14 @@ class EditorWindow(QMainWindow):
         # с телефона»; принятое фото ложится поверх этого снимка отдельной картинкой (canvas.insert_image, как Ctrl+V и
         # «Из файла»). Значок и подписи те же, что у плитки окна выделения. При системном заголовке (группа в первом
         # ряду) и в слишком узкой шапке только значок.
-        phone_b = QToolButton()
+        phone_b = PhoneButton()
         phone_b.setObjectName("phone")
         phone_b.setIconSize(QSize(20, 20))
         phone_b.setFixedHeight(30)
         phone_b.setFocusPolicy(Qt.FocusPolicy.TabFocus)   # с клавиатуры (Tab), щелчок фокус у снимка не забирает (М3)
         phone_b.setCursor(Qt.CursorShape.PointingHandCursor)
         phone_b.clicked.connect(self.insert_from_phone)
+        phone_b.menu_requested.connect(self.show_phone_menu)
         self.phone_button = phone_b
         self._phone_icon()
         self._set_phone_label(not self.system_title)
@@ -3834,7 +4006,7 @@ class EditorWindow(QMainWindow):
             self.show_toast(tr("editor.tr_nothing_to_copy"))
             return
         from . import ocr
-        ocr.copy_text(text)
+        ocr.copy_text(text, self)
         self.show_toast(tr("editor.tr_copied"))
 
     def _set_mode_ui(self, tool):
@@ -4040,7 +4212,7 @@ class EditorWindow(QMainWindow):
         bind(["Ctrl+0"], lambda: self.set_zoom(1.0))
         bind(["Ctrl+9"], self.zoom_fit)
         bind(["F1"], self.start_tour)
-        bind([QKeySequence.StandardKey.Paste], self.paste_image)
+        bind([QKeySequence.StandardKey.Paste], lambda: self.paste_image(True))   # Ctrl+V: всегда в этот снимок
         bind(["Shift+Delete"], self.canvas.delete_selected)
         if sys.platform == "win32":
             QApplication.instance().installEventFilter(self)
@@ -4312,6 +4484,11 @@ class EditorWindow(QMainWindow):
         """Под палитрой у левого края снимка; если там выделенный объект, справа, иначе внизу: подсказка не
         закрывает то, с чем работают."""
         hint = getattr(self, "_pen_hint", None)
+        self._place_hint(getattr(self, "_insert_hint", None))
+        self._update_apart_button()
+        self._place_hint(hint)
+
+    def _place_hint(self, hint):
         if hint is None or not hint.isVisible():
             return
         view = self.scroll.viewport()
@@ -4473,12 +4650,161 @@ class EditorWindow(QMainWindow):
 
     def _selection_changed(self, shape):
         """Выделили объект — кнопки показывают его свойства и меняют только его; сняли — общий выбор."""
+        self._update_apart_button()
         hint = self._pen_hint
         if hint is not None and hint.isVisible() and hint.target is not shape:
             hint.dismiss()       # выделили другое или сняли выделение: подсказка была про прежний объект
         self._sync_controls()
 
-    def paste_image(self):
+    # --- 22.11.2026: куда класть картинку: в этот снимок или отдельным снимком ------------------------------------
+
+    def insert_mode(self) -> str:
+        return otdelno.get_mode(self.ctx.config)
+
+    def set_insert_mode(self, mode: str):
+        """Выбор из меню запоминается и действует на следующую картинку (в том числе на следующее фото с телефона)."""
+        if otdelno.set_mode(self.ctx.config, mode):
+            self.ctx.save_config()
+
+    def _target_actions(self, menu) -> list:
+        """Два пункта выбора с отметкой у текущего: [(режим, действие)]."""
+        group = QActionGroup(menu)
+        group.setExclusive(True)
+        actions = []
+        for mode, key in ((otdelno.HERE, "otdelno.here"), (otdelno.APART, "otdelno.apart")):
+            act = menu.addAction(tr(key))
+            act.setCheckable(True)
+            act.setActionGroup(group)
+            act.setChecked(mode == self.insert_mode())
+            act.triggered.connect(lambda _c=False, m=mode: self.set_insert_mode(m))
+            actions.append((mode, act))
+        return actions
+
+    def _sync_target_actions(self, actions):
+        for mode, act in actions:
+            act.setChecked(mode == self.insert_mode())
+
+    def build_target_menu(self) -> QMenu:
+        menu = QMenu(self)
+        style_menu(menu, self.ctx.config)
+        self._target_actions(menu)
+        return menu
+
+    def show_phone_menu(self):
+        button = self.phone_button
+        menu = self.build_target_menu()
+        self._target_menu = menu   # для проверки: открытое сейчас меню
+        button.menu_open = True
+        button.update()
+        try:
+            menu.exec(button.mapToGlobal(QPoint(0, button.height() + 2)))
+        finally:
+            button.menu_open = False
+            button.update()
+            self._target_menu = None
+
+    def place_image(self, image: QImage, force_here: bool = False):
+        """Картинка из файла или буфера: по выбору в этот снимок (с карточкой «Открыть отдельно») или отдельным."""
+        if image is None or image.isNull():
+            return None
+        if not force_here and self.insert_mode() == otdelno.APART:
+            return otdelno.open_apart(self.ctx, image)
+        shape = self.canvas.insert_image(image)
+        self.note_inserted(shape, image)
+        return shape
+
+    def note_inserted(self, shape, image, saved=None, phone=False):
+        """Картинка вставлена в снимок: запомнить, откуда она (исходное качество, файл фото), и на 6 секунд показать
+        карточку «Вставлено в снимок · Открыть отдельно»."""
+        if shape is None or shape.image is None:
+            return
+        self._image_meta[id(shape.image)] = {"keep": shape.image, "orig": image, "saved": saved, "phone": phone}
+        hint = self._insert_hint
+        if hint is None:
+            hint = self._insert_hint = InsertHint(self)
+            hint.apply_theme(palette(self.ctx.config)["dark"])
+            hint.adopt.connect(self._hint_open_apart)
+            hint.dismissed.connect(self._update_apart_button)
+        hint.show_inserted(shape)
+        self._place_hint(hint)
+        self._update_apart_button()
+
+    def _hint_open_apart(self):
+        hint = self._insert_hint
+        shape = hint.shape if hint is not None else None
+        if hint is not None:
+            hint.dismiss()
+        if shape is not None:
+            self.open_shape_apart(shape)
+
+    def open_shape_apart(self, shape) -> bool:
+        """Вставленная картинка уходит из снимка одним шагом (его отменяет «Отменить»; остальные правки не
+        трогаются) и открывается новым снимком в исходном качестве, без пометок, нарисованных поверх неё."""
+        c = self.canvas
+        target = next((s for s in c.shapes if s.kind == IMAGE and s.image is shape.image), None)
+        if target is None:
+            return False
+        meta = self._image_meta.get(id(target.image)) or {}
+        image = meta.get("orig")
+        if image is None or image.isNull():
+            image = target.image
+        c.commit_text()
+        c.push_undo()
+        c.shapes.remove(target)
+        c.select(None)
+        c.update()
+        phone = bool(meta.get("phone"))
+        quality = None
+        if phone:
+            from .phone_ui import PHOTO_QUALITY as quality
+        otdelno.open_apart(self.ctx, image, saved=meta.get("saved"), phone=phone, quality=quality)
+        self._update_apart_button()
+        return True
+
+    def _dismiss_insert_hint(self):
+        if self._insert_hint is not None and self._insert_hint.isVisible():
+            self._insert_hint.dismiss()
+
+    def _update_apart_button(self, *_):
+        """Кнопка «Открыть отдельно» только у выделенной вставленной картинки; пока видна карточка после вставки,
+        кнопки нет (то же предложение уже на экране)."""
+        c = self.canvas
+        sel = c.selected if c.editing_object() else None
+        want = sel is not None and sel.kind == IMAGE and c.text_edit is None
+        hint = self._insert_hint
+        if want and hint is not None and hint.isVisible():
+            want = False
+        btn = self._apart_button
+        if not want:
+            if btn is not None:
+                btn.hide()
+            return
+        if btn is None:
+            btn = self._apart_button = OpenApartButton(self)
+            btn.apply_theme(palette(self.ctx.config)["dark"])
+            btn.clicked.connect(self._apart_clicked)
+        btn.refresh_text()
+        z = c.zoom
+        r = sel.bounding_rect()
+        view = self.scroll.viewport()
+        area = QRect(view.mapTo(self, QPoint(0, 0)), view.size())
+        tl = c.mapTo(self, QPoint(int(r.left() * z), int(r.top() * z)))
+        right = c.mapTo(self, QPoint(int(r.right() * z), 0)).x()
+        x = min(max(area.left() + 4, right - btn.width()), area.right() - btn.width() - 4)
+        y = tl.y() - btn.height() - 4
+        if y < area.top() + 2:
+            y = min(tl.y() + 6, area.bottom() - btn.height() - 4)   # места над картинкой нет: внутри, у её верха
+        btn.move(x, max(area.top() + 2, y))
+        btn.show()
+        btn.raise_()
+
+    def _apart_clicked(self):
+        c = self.canvas
+        sel = c.selected if c.editing_object() else None
+        if sel is not None and sel.kind == IMAGE:
+            self.open_shape_apart(sel)
+
+    def paste_image(self, force_here: bool = False):
         mime = QGuiApplication.clipboard().mimeData()
         image = QImage()
         if mime is not None and mime.hasImage():
@@ -4492,13 +4818,13 @@ class EditorWindow(QMainWindow):
         if image.isNull():
             self.ctx.notify(tr("editor.no_image"))
             return
-        self.canvas.insert_image(image)
+        self.place_image(image, force_here is True)
 
     def insert_from_file(self):
         path, _ = QFileDialog.getOpenFileName(self, tr("editor.insert_title"), os.path.expanduser(self.ctx.config["save_dir"]),
                                               tr("editor.images_filter"))
         if path:
-            self.canvas.insert_image(QImage(path))
+            self.place_image(QImage(path))
 
     def insert_from_phone(self):
         """«Фото с телефона»: фото по QR-коду ложится поверх этого снимка, как «Из файла»."""
@@ -4899,7 +5225,7 @@ class EditorWindow(QMainWindow):
         if b is None:
             return
         label = tr("phone.tile_title")
-        tip = label + " · " + tr("phone.tile_tip")
+        tip = label + " · " + tr("phone.tile_tip") + "\n" + tr("otdelno.arrow_tip")
         b.setAccessibleName(label)
         b.setAccessibleDescription(tr("phone.tile_tip"))
         b.setToolTip(tip)
@@ -4908,14 +5234,14 @@ class EditorWindow(QMainWindow):
         b.ensurePolished()
         bold = QFont(b.font())
         bold.setWeight(QFont.Weight.DemiBold)
-        self._phone_full_w = QFontMetrics(bold).horizontalAdvance(label) + 20 + 17 + 6   # значок, поля, промежуток
+        self._phone_full_w = QFontMetrics(bold).horizontalAdvance(label) + 20 + 17 + 6 + GROUP_ARROW_W + 3   # значок, поля, промежуток, зона ▾
         if on:
             b.setMinimumWidth(0)
             b.setMaximumWidth(16777215)
             self._phone_full_w = max(b.sizeHint().width(), self._phone_full_w)
             b.setFixedWidth(self._phone_full_w)
         else:
-            b.setFixedWidth(TOOL_W)
+            b.setFixedWidth(PHONE_ICON_W)
         self._phone_label = on
 
     def _title_need(self):
@@ -4927,7 +5253,7 @@ class EditorWindow(QMainWindow):
         lay = tb.layout()
         lay.invalidate()
         base = lay.minimumSize().width() - b.width()
-        return base + getattr(self, "_phone_full_w", TOOL_W), base + TOOL_W
+        return base + getattr(self, "_phone_full_w", PHONE_ICON_W), base + PHONE_ICON_W
 
     def _fit_phone_label(self, width):
         """Подпись «С телефона» в шапке, пока шапка помещается (обратно с запасом COLLAPSE_SLACK)."""
@@ -5288,6 +5614,9 @@ class EditorWindow(QMainWindow):
         if item["kind"] == "update":
             self._check_updates()
         elif item["kind"] == "whatsnew":
+            from . import __version__, novoe
+            if item["version"] == __version__:
+                novoe.window_done(self.ctx.config)   # «Что нового» открыли в колокольчике: окно новинок само не придёт
             notes = notifications.whats_new_notes(self.ctx.config, item["version"])
             from . import updater
             updater.UpdaterUI().whats_new(item["version"], notes)
@@ -5312,16 +5641,35 @@ class EditorWindow(QMainWindow):
         from .tour import Tour
         if getattr(self, "tour", None) is not None:
             return
+        from . import otlozhit
+        cfg = self.ctx.config
+        first = not cfg.get("tour_done")
         if language is None:
-            language = not self.ctx.config.get("tour_done")
-        self.tour = Tour(self, language=bool(language))
+            language = first
+        # первое знакомство (само при первом снимке): «Отложить ▾», после срока курс идёт с того же шага
+        step = int(otlozhit.data(cfg, "tour").get("step") or 0) if first else 0
+        self.tour = Tour(self, language=bool(language), snoozable=first, start_index=step)
         self.tour.finished.connect(self._tour_finished)
+        self.tour.snoozed.connect(self._tour_snoozed)
         self.tour.start()
 
     def _tour_finished(self):
+        from . import otlozhit
         self.tour = None
         self.ctx.config["tour_done"] = True
+        otlozhit.clear(self.ctx.config, "tour")
         self.ctx.save_config()
+
+    def _tour_snoozed(self, key):
+        """«Отложить ▾» в первом знакомстве: tour_done не ставится, срок и шаг запоминаются в настройках."""
+        from . import otlozhit
+        step = self.tour.index if self.tour is not None else 0
+        self.tour = None
+        otlozhit.snooze(self.ctx.config, "tour", key, step=step)
+        self.ctx.save_config()
+        schedule = getattr(self.ctx, "schedule_otlozhit", None)
+        if callable(schedule):
+            schedule()
 
     def start_text_mode(self):
         """Режим «Копировать текст»: распознать снимок (один раз на снимок), подсветить слова."""
@@ -5331,7 +5679,23 @@ class EditorWindow(QMainWindow):
         if self.canvas.has_words():
             self._text_mode_hint()
             return
-        if self._ocr_job is not None:
+        if self._ocr_job is not None or getattr(self, "_ocr_checking", False):
+            return
+        # 1.36: сначала проверка, есть ли распознавание языка интерфейса: нет, окно «Установить» до попытки
+        self._ocr_checking = True
+
+        def go():
+            from PyQt6 import sip
+            if sip.isdeleted(self):
+                return
+            self._ocr_checking = False
+            self._start_text_mode_now()
+        ocr.precheck(self, self.ctx.config, go)
+
+    def _start_text_mode_now(self):
+        """Распознать снимок сейчас (проверка языка уже сделана)."""
+        from . import ocr
+        if self._ocr_job is not None or self.canvas.has_words():
             return
         from .busy import BusySpinner
         spinner = BusySpinner(self.scroll.viewport(), tr("editor.ocr_busy"))   # кружок «думаю» по центру снимка
@@ -5351,20 +5715,63 @@ class EditorWindow(QMainWindow):
                 self._ocr_spinner.stop()
                 self._ocr_spinner = None
             job_words = getattr(job, "words", [])
+            self._ocr_used = getattr(job, "used", "")
+            self._ocr_help = help   # 1.34.3: подсказка «Установить распознавание» живёт и в окне выделенного текста
             if error:
-                self._ocr_dialog = ocr.show_result("", error, self, help)
+                self._ocr_dialog = ocr.show_result("", error, self, help, again=True)
+                self._watch_ocr_dialog(self._ocr_dialog)
                 self.select_tool(MOVE)
                 return
             if self.canvas.base.cacheKey() != key:
                 return   # снимок успели обрезать или отменить: распознаём заново при следующем входе
             self.canvas.set_words(job_words, self.canvas.base.devicePixelRatio())
+            self._reselect_words()
             if help is not None:
-                self._ocr_dialog = ocr.show_result("", tr("editor.ocr_no_ru"), self, help)
+                self._ocr_dialog = ocr.show_result("", tr("editor.ocr_no_ru"), self, help, again=True)
+                self._watch_ocr_dialog(self._ocr_dialog)
             self._text_mode_hint()
             self._update_info()
         job = ocr.start(self.canvas.base.copy(), done, ocr.resolve_langs(self.ctx.config.get("ocr_langs")),
                         self.ctx.config.get("ocr_quality", "accurate"))
         self._ocr_job = job
+
+    def _watch_ocr_dialog(self, dlg):
+        """Окно с подсказкой: «Установить распознавание» нажали и оно установилось, значит, распознать снимок заново."""
+        if dlg is not None:
+            dlg.installed.connect(lambda d=dlg: self._ocr_installed(d))
+
+    def _ocr_installed(self, dialog=None, panel=False):
+        """1.36: распознавание установили кнопкой из окна: результат для текущего снимка обновляется сам. Окно с
+        подсказкой закрывается через секунду (видно «Готово»); слова снимка распознаются заново, а выделенное
+        маркером остаётся выделенным (те же места снимка)."""
+        from PyQt6 import sip
+        from PyQt6.QtCore import QTimer
+        from . import ocr
+        if sip.isdeleted(self):
+            return
+        self._ocr_help = None
+        old_rects = []
+        if panel and self.canvas.has_words():
+            old_rects = [QRectF(self.canvas.words[i].rect) for i in sorted(self.canvas.text_sel)
+                         if i < len(self.canvas.words)]
+        if dialog is not None and not panel and not sip.isdeleted(dialog):
+            QTimer.singleShot(1200, dialog.close)
+        self.canvas.words, self.canvas.text_sel = [], set()   # старые слова (с каракулями) не годятся
+        self._ocr_reselect = old_rects
+        self._start_text_mode_now()
+
+    def _reselect_words(self):
+        """После повторного распознавания: слова, лежащие там же, где было выделено, выделяются снова."""
+        rects = getattr(self, "_ocr_reselect", None)
+        self._ocr_reselect = None
+        if not rects or not self.canvas.has_words():
+            return
+        picked = {i for i, w in enumerate(self.canvas.words)
+                  if any(r.contains(w.rect.center()) for r in rects)}
+        if picked:
+            self.canvas.text_sel = picked
+            self.canvas.update()
+            self.canvas.text_selected.emit(self.canvas.selected_text())
 
     def _sync_translate_layer(self, tool):
         """Слой перевода поверх снимка включён только в режиме перевода (создаётся при первом входе)."""
@@ -5508,11 +5915,14 @@ class EditorWindow(QMainWindow):
         from . import ocr
         if not text:
             return
-        ocr.copy_text(text)
+        ocr.copy_text(text, self)
         panel = getattr(self, "_text_panel", None)
         if panel is None or not panel.isVisible():
-            panel = ocr.TextResultDialog(text, "", self)
+            panel = ocr.TextResultDialog(text, "", self, getattr(self, "_ocr_help", None),
+                                         getattr(self, "_ocr_used", ""))
             panel.destroyed.connect(lambda *_: setattr(self, "_text_panel", None))
+            panel.again = True
+            panel.installed.connect(lambda p=panel: self._ocr_installed(p, panel=True))
             self._text_panel = panel
             # окно у правого края редактора, чтобы не закрывало снимок
             frame = self.frameGeometry()
@@ -5522,6 +5932,8 @@ class EditorWindow(QMainWindow):
             self.activateWindow()
             self.canvas.setFocus()
         else:
+            panel.set_help(getattr(self, "_ocr_help", None))
+            panel.set_used(getattr(self, "_ocr_used", ""))
             panel.set_text(text)
         ocr.toast(self)   # «Текст скопирован в буфер обмена», как на телефоне
 
@@ -5767,6 +6179,10 @@ class EditorWindow(QMainWindow):
             sw.update()
         if self._pen_hint is not None:
             self._pen_hint.apply_theme(pal["dark"])
+        if self._insert_hint is not None:
+            self._insert_hint.apply_theme(pal["dark"])
+        if self._apart_button is not None:
+            self._apart_button.apply_theme(pal["dark"])
         self.bell_button.ring = QColor(pal["panel"])
         self.ocr_button.setIcon(icons.icon("ocr", soft_colors("ocr", pal["dark"])[1]))
         self.tr_all_button.setIcon(icons.icon("translate_all", soft_colors("tr", pal["dark"])[1]))

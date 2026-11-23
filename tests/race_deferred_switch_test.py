@@ -131,6 +131,63 @@ check(len(launches) == 1, f"два закрытия за 0,4 с: один пом
 if launches:
     check(launches[0][0] - t0 >= 1.3, f"помощник через 1 с после последнего закрытия ({launches[0][0] - t0:.2f} с)")
 
+# --- 3. «Перезапустить сейчас» и окно «С телефона» (22.11.2026: окно ожидания мигало и возвращалось) ----------
+import json  # noqa: E402
+from types import SimpleNamespace  # noqa: E402
+from clipshot import i18n, phone_ui  # noqa: E402
+
+up._unlink(up.attempt_path())
+owns[0] = False
+for ed in list(ctx.editors):
+    ed.canvas.modified = False
+    ed.exported = True
+shown = []
+u.ui = type("UI2", (), {"deferred_notice": lambda self, text, cb: shown.append(text),
+                        "__getattr__": lambda self, n: (lambda *a, **k: None)})()
+up.write_attempt(up.attempt_path(), "1.32.2", "1.32.3", up.utcnow())
+u._switch_started = None
+visible = [False]
+fake = SimpleNamespace(closing=False, hidden_for_photo=True, isVisible=lambda: visible[0])
+phone_ui._window = fake
+u.note_deferred("phone")
+app.processEvents()
+check(ctx.quit_blocker() == "phone", "спрятанное окно «С телефона» без нажатия держит обновление")
+launches.clear()
+check(u.restart_now() is True and len(launches) == 1, "«Перезапустить сейчас»: спрятанное окно телефона не мешает, переключение запущено")
+check(ctx.quit_blocker() == "", "после нажатия помощник, спросив программу снова, получает «можно» (нет петли)")
+check(ctx.answer_quit_for_update() == "ok", "quit-for-update после нажатия отвечает ok")
+ctx._restart_asked_at -= appmod.Clipshot.RESTART_ASK_S + 1
+check(ctx.quit_blocker() == "phone", "пометка нажатия действует ограниченно по времени")
+# видимое окно держит и после нажатия
+visible[0] = True
+fake.hidden_for_photo = False
+ctx.restart_requested()
+check(ctx.quit_blocker() == "phone", "видимое окно «С телефона» держит обновление и после нажатия")
+u._switch_started = None
+shown.clear()
+launches.clear()
+check(u.restart_now() is False and not launches, "видимое окно: переключение не запущено")
+app.processEvents()
+check(bool(shown) and shown[-1] == up.wait_text("phone", "1.32.3") and "С телефона" in shown[-1],
+      f"окно ожидания называет причину про окно «С телефона»: {shown[-1:]!r}")
+# фото в обработке держит и спрятанное окно
+visible[0] = False
+fake.hidden_for_photo = True
+rx = SimpleNamespace(running=True, _busy=1)
+phone_ui._RECEIVERS.append(rx)
+ctx.restart_requested()
+check(ctx.quit_blocker() == "phone", "фото в обработке держит обновление даже после нажатия")
+rx._busy = 0
+check(ctx.quit_blocker() == "", "фото обработано, окно спрятано: после нажатия не держит")
+phone_ui._RECEIVERS.remove(rx)
+phone_ui._window = None
+langs = sorted(p.name for p in (ROOT / "clipshot" / "i18n").iterdir() if p.is_dir() and p.name != "__pycache__")
+check(len(langs) == 12, f"языков 12 ({len(langs)})")
+for lang in langs:
+    data = json.loads((ROOT / "clipshot" / "i18n" / lang / "updater.json").read_text(encoding="utf-8"))
+    check("{version}" in data.get("updater.wait.phone", ""), f"updater.wait.phone есть на языке {lang}")
+check(up.WAIT_KEYS.get("phone") == "updater.wait.phone", "WAIT_KEYS знает причину phone")
+
 print("ИТОГ:", "все проверки пройдены" if not failures else f"провалено {len(failures)}")
 from clipshot.exitutil import quick_exit  # noqa: E402
 quick_exit(1 if failures else 0)

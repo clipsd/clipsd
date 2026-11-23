@@ -1,6 +1,8 @@
 {
   "settings.accent_tip": "Color del marco y de los botones seleccionados",
   "settings.accent_tip_plain": "En este estilo el marco es neutro; el color se conserva en los botones seleccionados",
+  "settings.applied": "Aplicado",
+  "settings.apply": "Aplicar",
   "settings.auto_save": "Guardar cada captura automáticamente (el archivo se actualiza tras los cambios en el editor)",
   "settings.auto_save_dir": "Carpeta de guardado automático:",
   "settings.autostart": "Iniciar con el sistema (icono en la bandeja)",
@@ -67,6 +69,7 @@
   "settings.ocr_ru": "Solo ruso",
   "settings.ocr_ru_en": "Ruso e inglés",
   "settings.off": "Desactivar",
+  "settings.ok": "Aceptar",
   "settings.press_text": "Pulse el atajo que desee (por ejemplo, Alt+W).\nLa ventana se cierra sola.",
   "settings.press_title": "Pulse una combinación de teclas",
   "settings.press_wait": "Esperando una combinación de teclas…",

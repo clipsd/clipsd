@@ -1,6 +1,8 @@
 {
   "settings.accent_tip": "Çerçevenin ve seçili düğmelerin rengi",
   "settings.accent_tip_plain": "Bu tarzda çerçeve nötrdür; renk seçili düğmelerde kalır",
+  "settings.applied": "Uygulandı",
+  "settings.apply": "Uygula",
   "settings.auto_save": "Her ekran görüntüsünü otomatik kaydet (düzenleyicide yapılan değişikliklerden sonra dosya güncellenir)",
   "settings.auto_save_dir": "Otomatik kayıt klasörü:",
   "settings.autostart": "Sistemle birlikte başlat (tepsi simgesi)",
@@ -67,6 +69,7 @@
   "settings.ocr_ru": "Yalnızca Rusça",
   "settings.ocr_ru_en": "Rusça ve İngilizce",
   "settings.off": "Devre dışı bırak",
+  "settings.ok": "Tamam",
   "settings.press_text": "İstediğiniz tuş kombinasyonuna basın (örneğin Alt+W).\nPencere kendiliğinden kapanır.",
   "settings.press_title": "Tuş kombinasyonuna basın",
   "settings.press_wait": "Tuş kombinasyonu bekleniyor…",

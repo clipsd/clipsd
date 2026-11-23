@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later.
 # Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """1.32: язык в настройках применяется сразу (окно настроек перестраивается на новом языке, открытый редактор тоже,
-несохранённые правки остаются, «Отмена» язык не откатывает); флаги у всех 12 языков в меню языка, списке настроек,
+несохранённые правки остаются; это предпросмотр: «Отмена» без «Применить» возвращает прежний язык, 1.35); флаги у всех 12 языков в меню языка, списке настроек,
 кнопках знакомства и чипе окна выделения.
 
 Запуск: QT_QPA_PLATFORM=offscreen python3 tests/langflags_test.py
@@ -105,6 +105,7 @@ ed.present()
 settle()
 before_ed = ed.save_button.text()
 before_title = dlg.windowTitle()
+before_lang = ctx.config["language"]
 dlg.show_zoom.setChecked(not dlg.show_zoom.isChecked())
 unsaved = dlg.show_zoom.isChecked()
 dlg.language.setCurrentIndex(dlg.language.findData("de"))
@@ -120,8 +121,8 @@ settle(8)
 check(dlg.windowTitle() == i18n.tr_in("zh", "settings.title"), "второй раз подряд тоже работает")
 dlg.reject()
 settle()
-check(ctx.config["language"] == "zh", "«Отмена» язык не откатывает: остаётся выбранный")
-check(dlg.values()["language"] == "zh", "values() даёт выбранный язык")
+check(ctx.config["language"] == before_lang and i18n.choice() == before_lang,
+      "«Отмена» без «Применить» возвращает прежний язык (предпросмотр)")
 ed.close()
 
 # --- знакомство и окно выделения

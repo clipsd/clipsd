@@ -141,5 +141,8 @@
   "phone.wifi_text": "Smartphone und Computer müssen mit demselben WLAN verbunden sein. Über mobile Daten kommt das Foto nicht an.",
   "phone.tile_title": "Vom Smartphone",
   "phone.tile_sub": "Kamera oder Bild",
-  "phone.tile_tip": "Mit der Kamera aufnehmen oder ein Bild vom Smartphone senden"
+  "phone.tile_tip": "Mit der Kamera aufnehmen oder ein Bild vom Smartphone senden",
+  "phone.zoom": "Vergrößern",
+  "phone.zoom_caption": "Richten Sie die Kamera des Smartphones auf den Code",
+  "phone.zoom_tip": "Code groß anzeigen"
 }

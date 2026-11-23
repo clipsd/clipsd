@@ -141,5 +141,8 @@
   "phone.wifi_text": "Telefon ve bilgisayar aynı Wi-Fi ağına bağlı olmalı. Mobil veriyle fotoğraf ulaşmaz.",
   "phone.tile_title": "Telefondan",
   "phone.tile_sub": "kamera veya resim",
-  "phone.tile_tip": "Kamerayla çekin veya telefondan resim gönderin"
+  "phone.tile_tip": "Kamerayla çekin veya telefondan resim gönderin",
+  "phone.zoom": "Büyüt",
+  "phone.zoom_caption": "Telefonun kamerasını koda tutun",
+  "phone.zoom_tip": "Kodu büyük göster"
 }

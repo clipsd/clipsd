@@ -1,6 +1,8 @@
 {
   "settings.accent_tip": "Цвет рамки и выбранных кнопок",
   "settings.accent_tip_plain": "Рамка в этом виде нейтральная; цвет остаётся у выбранных кнопок",
+  "settings.applied": "Применено",
+  "settings.apply": "Применить",
   "settings.auto_save": "Сохранять каждый снимок автоматически (после правок в редакторе файл обновляется)",
   "settings.auto_save_dir": "Папка автосохранения:",
   "settings.autostart": "Запускать вместе с системой (значок в трее)",
@@ -67,6 +69,7 @@
   "settings.ocr_ru": "Только русский",
   "settings.ocr_ru_en": "Русский и английский",
   "settings.off": "Выключить",
+  "settings.ok": "ОК",
   "settings.press_text": "Нажмите нужное сочетание клавиш (например, Alt+W).\nОкно закроется само.",
   "settings.press_title": "Нажмите сочетание",
   "settings.press_wait": "Ждём нажатия…",

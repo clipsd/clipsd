@@ -57,6 +57,7 @@
   "updater.retry.busy": "Güncelleme zaten kuruluyor. Bir dakika bekleyin: ClipSD kendiliğinden yeniden başlayacak.",
   "updater.up_to_date": "En son sürüme sahipsiniz ({version}).",
   "updater.wait.dialog": "{version} sürümü, açık ClipSD penceresini (örneğin ayarlar penceresini) kapattığınızda kurulacak.",
+  "updater.wait.phone": "{version} sürümü, «Telefondan» penceresini kapattığınızda kurulacak.",
   "updater.wait.selector": "{version} sürümü, alan seçimi penceresi kapandığında kurulacak.",
   "updater.wait.text": "{version} sürümü, metin girişini bitirip düzenleyiciyi kapattığınızda kurulacak.",
   "updater.wait.title": "Güncelleme indirildi",

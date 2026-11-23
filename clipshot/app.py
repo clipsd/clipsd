@@ -76,6 +76,7 @@ DEFAULTS = {
     "default_tool": "",             # инструмент по умолчанию: редактор открывается с ним; пусто: с последним (правая кнопка по инструменту)
     "remember_region": True,        # подсвечивать прошлую область при новом снимке
     "save_format": "png",           # png | jpg — формат по умолчанию при сохранении
+    "insert_target_mode": "here",   # 22.11.2026: картинка с телефона/из файла: "here" в этот снимок, "apart" отдельным снимком
     "form_last": "round2",          # 1.34: последняя форма снимка (кнопка «Форма снимка» включает её одним щелчком)
     "form_radius": 28.0,            # 1.34: свой радиус скруглённых углов (точки), когда form_last = round
     "shape_background": "#ffffff",  # 1.34: фон за формой там, где нет прозрачности (JPG, запасная картинка буфера)
@@ -283,6 +284,7 @@ class Clipshot(QObject):
         self._rating_timer = None
         self._rating_quiet_timer = None   # ждёт спокойной минуты, пока правила позволяют окно оценки
         self._rating_quiet_since = None   # с какого момента (time.monotonic) спокойно; None: не спокойно
+        self._restart_asked_at = None     # когда человек нажал «Перезапустить сейчас» (time.monotonic)
         self._clipboard_at = None         # когда программа последний раз положила что-то в буфер (time.monotonic)
         self._capture_at = None           # снимок запрошен (щелчок по значку, Alt+W), окно выделения ещё не открыто
         try:
@@ -305,6 +307,7 @@ class Clipshot(QObject):
         if novoe.on_start(self.config):   # 1.34: первая установка или обновление (версия в настройках)
             self.save_config()
         self._start(server_name)
+        QTimer.singleShot(3000, self.schedule_otlozhit)   # отложенные окна, срок которых вышел за время, пока программа не работала
         if command:
             QTimer.singleShot(300, lambda: self.handle_command(command))
 
@@ -531,6 +534,7 @@ class Clipshot(QObject):
             (tr("app.menu_settings"), lambda: self.open_settings()),
             ("language", None),
             (tr("novoe.menu"), lambda: self.show_novoe()),   # 1.34: «Что нового» в любой момент (novoe.py)
+            (tr("ozn.menu"), lambda: self.open_oznakomlenie()),   # 1.35: окно «Ознакомление» со всеми функциями
             (tr("app.menu_tour"), self.demo_tour),
             (tr("app.menu_tour_selector"), self.demo_selector_tour),
             (tr("feedback.rate_title"), self.show_rating),
@@ -632,6 +636,13 @@ class Clipshot(QObject):
         self.hotkey_failed.emit(text)
 
     def _show_hotkey_error(self, text):
+        dialog = getattr(self, "_settings", None)
+        if dialog is not None:   # окно настроек открыто (кнопка «Применить»): сообщение в самом окне
+            try:
+                dialog.show_apply_errors([text])
+                return
+            except RuntimeError:   # окно уже удалено
+                pass
         self.notify(text)
 
     # --- команды -------------------------------------------------------------
@@ -655,6 +666,17 @@ class Clipshot(QObject):
 
     # --- выход для обновления и по сигналу ----------------------------------------
 
+    RESTART_ASK_S = 120   # после «Перезапустить сейчас» спрятанное окно «С телефона» не держит обновление столько
+
+    def restart_requested(self) -> None:
+        """Человек сам нажал «Перезапустить сейчас»: помощник смены версии спросит программу (quit-for-update) ещё раз,
+        и без этой пометки спрятанное окно «С телефона» снова ответило бы «busy» (бесконечное мигание окна)."""
+        self._restart_asked_at = time.monotonic()
+
+    def restart_asked(self) -> bool:
+        at = getattr(self, "_restart_asked_at", None)
+        return at is not None and 0 <= time.monotonic() - at < self.RESTART_ASK_S
+
     def quit_blocker(self) -> str:
         """Почему программу нельзя закрыть сейчас без потери работы ("" = можно).
 
@@ -675,7 +697,7 @@ class Clipshot(QObject):
             if getattr(canvas, "modified", False) or getattr(editor, "only_in_memory", False):
                 return "unsaved"
         from . import phone_ui
-        if phone_ui.is_busy():
+        if phone_ui.is_busy(ignore_hidden=Clipshot.restart_asked(self)):
             return "phone"   # the reception from the phone is open (or a photo is being opened): like an unsaved editor
         modal = QApplication.activeModalWidget()
         if modal is not None and not modal.property("clipsd_closable"):
@@ -1075,9 +1097,10 @@ class Clipshot(QObject):
             timer.timeout.connect(lambda: self.first_run(editor))
             timer.start(400)
         elif not self.config.get("tour_done"):
-            QTimer.singleShot(500, editor.start_tour)   # первый запуск: вводный курс
-            from . import novoe
-            novoe.window_done(self.config)   # всё знакомство и так покажет программу: окно новинок не нужно
+            from . import novoe, otlozhit
+            if not otlozhit.is_snoozed(self.config, "tour"):   # «Отложить» в знакомстве: вернётся, когда срок выйдет
+                QTimer.singleShot(500, editor.start_tour)   # первый запуск: вводный курс
+                novoe.window_done(self.config)   # всё знакомство и так покажет программу: окно новинок не нужно
         else:
             self._maybe_novoe(editor)
         return editor
@@ -1106,13 +1129,49 @@ class Clipshot(QObject):
             return   # уже показано
         if self.editors and self.editors[-1] is not editor:
             return   # открыт новый редактор: окно предложит его собственный таймер, над ним человек и работает
-        if not self.editor_quiet(editor):
+        if not self.editor_quiet(editor) or self.work_window_open():
             # 1.34.1 (Б1 проверки 1.34.0): Alt+W меньше чем через 0,7 с после редактора. Модальное окно новинок
             # поверх открытого (или запрошенного) выделения заморозило бы его. Ждём спокойного момента у этого же
             # редактора: выделение закрыто, редактор на экране, других модальных окон нет.
             self._retry_on_editor(editor, lambda: self._novoe_from_editor(editor))
             return
         self.show_novoe(editor, auto=True)
+
+    def work_window_open(self) -> bool:
+        """Человек сейчас работает: окно текста с картинки или режим текста, перевод (окошки и режим), редактор с
+        несохранёнными пометками или набором текста. Окно «Новое в версии» (слова владельца 22.11.2026: всплыло
+        поверх окна копирования текста) в такой момент не приходит, ждёт спокойной минуты."""
+        from PyQt6 import sip
+
+        def alive(w):
+            try:
+                return w is not None and not sip.isdeleted(w)
+            except TypeError:   # не окно Qt (проверочные подставки)
+                return False
+        try:
+            from . import translate_ui
+            if any(alive(w) and w.isVisible() for w in list(translate_ui._floating)):
+                return True
+        except Exception:   # перевод не загружен: окошек нет
+            pass
+        ozn = getattr(self, "_ozn_window", None)
+        if alive(ozn) and ozn.isVisible() and ozn.lesson.active:
+            return True   # идёт урок в «Ознакомлении»: окно оценки, предложение обновления, «Новое в версии» не поверх него
+        for ed in list(self.editors):
+            if not alive(ed):
+                continue
+            for name in ("_text_panel", "_ocr_dialog"):
+                w = getattr(ed, name, None)
+                if alive(w) and w.isVisible():
+                    return True
+            canvas = getattr(ed, "canvas", None)
+            if canvas is None:
+                continue
+            if canvas.tool in ("ocr", "translate") or getattr(canvas, "text_edit", None) is not None:
+                return True
+            if canvas.modified and not getattr(ed, "exported", False):
+                return True
+        return False
 
     QUIET_RETRY_MS = 1000   # окно знакомства или новинок ждёт спокойного момента: проверка раз в секунду
 
@@ -1161,6 +1220,8 @@ class Clipshot(QObject):
         if getattr(self, "_novoe_window", None) is not None:
             self._novoe_window.raise_()
             return "open"
+        from . import otlozhit
+        otlozhit.shown(self.config, "novoe")   # окно пришло (само или из меню): срок отложенного снят
         from PyQt6 import sip
         while True:
             box = novoe.make_window(__version__, items, editor, updated=updated, notes=bool(notes))
@@ -1181,44 +1242,144 @@ class Clipshot(QObject):
                 editor = None
         if choice in ("show", "notes"):
             novoe.window_done(self.config)
-        elif auto:
-            novoe.later(self.config)   # «Позже» или крестик: спросит при следующем редакторе, не больше двух раз
+            self.mark_whatsnew_read()   # человек посмотрел новое: точка на колокольчике гаснет (слова владельца 22.11.2026)
+        elif choice == "snooze" or (auto and choice != "relang"):
+            # «Отложить ▾» (в том числе у окна, открытого из меню значка) или крестик у окна, пришедшего само:
+            # вернётся, когда срок выйдет, в спокойную минуту; после трёх откладываний подряд не раньше чем через неделю
+            otlozhit.snooze(self.config, "novoe", box.delay or otlozhit.DEFAULT)
+        else:
+            self.mark_whatsnew_read()   # открыл сам (меню значка): он всё увидел
         self.save_config()
+        if choice not in ("show", "notes"):
+            self.schedule_otlozhit()
         if choice == "notes":
             from . import updater
             updater.UpdaterUI().whats_new(__version__, notes)
         elif choice == "show":
-            from PyQt6 import sip
-            if editor is None or editor not in self.editors or sip.isdeleted(editor):
-                editor = self.open_editor(demo_image(), None)
-                if editor is not None:
-                    editor.demo_maker = demo_image
-            if editor is not None:
-                QTimer.singleShot(300, lambda: self._novoe_tour(editor))
+            QTimer.singleShot(200, lambda: self.open_oznakomlenie(focus_new=True, ask_after=True))
         return choice
 
-    def _novoe_tour(self, editor):
-        from PyQt6 import sip
-        from . import novoe
-        if editor not in self.editors or sip.isdeleted(editor):
-            return
-        novoe.start_tour(editor, self.config, on_done=lambda: QTimer.singleShot(200, lambda: self._ask_overview(editor)))
+    def mark_whatsnew_read(self):
+        """«Что нового» установленной версии прочитано: точка на колокольчике гаснет, пункт остаётся справкой."""
+        from . import __version__, notifications
+        notifications.mark_read(self.config, [f"whatsnew:{__version__}"], self.save_config)
 
-    def _ask_overview(self, editor):
-        """После короткого курса: «Хотите узнать о других функциях программы?» Один раз на версию."""
-        from PyQt6 import sip
-        from . import novoe
-        if not novoe.ask_pending(self.config) or editor not in self.editors or sip.isdeleted(editor):
+    def open_oznakomlenie(self, focus_new=False, ask_after=False):
+        """Окно «Ознакомление» (oznakomlenie.py): все функции, новое сверху. focus_new: сразу на первой новинке.
+        ask_after: после закрытия один раз на версию вопрос «Хотите узнать о других функциях?», если человек смотрел
+        только новое."""
+        from . import novoe, oznakomlenie, otlozhit
+        otlozhit.shown(self.config, "ozn")   # окно открыто (само, из меню или после срока): отложенное снято
+        win = oznakomlenie.open_window(self, focus_new)
+        if oznakomlenie.new_ids(self.config):
+            novoe.window_done(self.config)
+            self.mark_whatsnew_read()   # открыл «Ознакомление» на новинках: «Что нового» прочитано
+        if ask_after and win is not None:
+            win.destroyed.connect(lambda *_: QTimer.singleShot(300, lambda: self._ask_overview()))
+        return win
+
+    def _ask_overview(self, editor=None, tries=0):
+        """После окна «Ознакомление», открытого кнопкой «Показать новое»: «Хотите узнать о других функциях
+        программы?» Один раз на версию, и только если человек смотрел одни новинки; «Да» открывает окно целиком."""
+        from . import novoe, oznakomlenie, otlozhit
+        if not novoe.ask_pending(self.config) or otlozhit.is_snoozed(self.config, "ozn"):
+            return   # вопрос отложен или «Ознакомление» отложено: после возвращения окна спросим
+        new = set(oznakomlenie.new_ids(self.config))
+        seen = set(self.config.get("ozn_seen") or [])
+        if seen - new:
+            novoe.ask_done(self.config)   # уже смотрел и другие функции: спрашивать нечего
+            self.save_config()
             return
-        if not self.editor_quiet(editor):
-            self._retry_on_editor(editor, lambda: self._ask_overview(editor))   # не поверх выделения (Б1)
+        if (self.selector is not None or self.capture_pending() or self._modal_in_the_way() is not None
+                or self.work_window_open()):
+            if tries < 120:
+                QTimer.singleShot(self.QUIET_RETRY_MS, lambda: self._ask_overview(None, tries + 1))   # не поверх работы
             return
-        box = novoe.make_question(editor)
+        from . import otlozhit
+        otlozhit.shown(self.config, "ask")
+        box = novoe.make_question(None)
         box.exec()
+        if box.choice == "snooze":
+            otlozhit.snooze(self.config, "ask", box.delay or otlozhit.DEFAULT)   # спросит снова, когда срок выйдет
+            self.save_config()
+            self.schedule_otlozhit()
+            return
         novoe.ask_done(self.config)   # «Не сейчас» и крестик: до следующей версии не спрашивает
         self.save_config()
-        if box.choice == "primary" and editor in self.editors and not sip.isdeleted(editor):
-            QTimer.singleShot(200, lambda: editor.start_tour(language=False))
+        if box.choice == "primary":
+            QTimer.singleShot(200, lambda: self.open_oznakomlenie())
+
+    # --- «Отложить ▾»: возврат окон в спокойную минуту (otlozhit.py) --------------------------------------------
+
+    OTL_MAX_WAIT_MS = 6 * 3600 * 1000   # таймер не длиннее шести часов: после сна и смены часов срок проверяется заново
+
+    def _otl_timer_get(self):
+        timer = getattr(self, "_otl_timer", None)
+        if timer is None:
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.timeout.connect(self._otlozhit_tick)
+            self._otl_timer = timer
+        return timer
+
+    def schedule_otlozhit(self):
+        """Поставить таймер на ближайший срок среди отложенных окон (одно место: настройки)."""
+        from . import otlozhit
+        timer = self._otl_timer_get()
+        nxt = otlozhit.next_until(self.config)
+        if nxt is None:
+            timer.stop()
+            return
+        ms = int((nxt - otlozhit.now()) * 1000)
+        timer.start(max(200, min(ms, self.OTL_MAX_WAIT_MS)))
+
+    def otlozhit_quiet(self) -> bool:
+        """Спокойная минута для окна, которое возвращается без редактора: нет выделения, вставки, запрошенного
+        снимка, модальных окон, окон текста, перевода и несохранённого снимка."""
+        return (self.selector is None and self.insert_target is None and not self.capture_pending()
+                and self._modal_in_the_way() is None and not self.work_window_open()
+                and getattr(self, "_novoe_window", None) is None)
+
+    def _otlozhit_tick(self):
+        from . import novoe, otlozhit
+        due = otlozhit.due_topics(self.config)
+        if not due:
+            self.schedule_otlozhit()
+            return
+        if not self.otlozhit_quiet():
+            self._otl_timer_get().start(self.QUIET_RETRY_MS)   # человек занят: ждём, раз в секунду смотрим снова
+            return
+        topic = due[0]
+        try:
+            if topic == "novoe":
+                if novoe.enabled(self.config) and novoe.window_items(self.config):
+                    self.show_novoe(None, auto=True)
+                else:
+                    otlozhit.clear(self.config, "novoe")
+            elif topic == "ask":
+                otlozhit.shown(self.config, "ask")
+                self.save_config()
+                self._ask_overview()
+            elif topic == "ozn":
+                ident = otlozhit.data(self.config, "ozn").get("id")
+                otlozhit.shown(self.config, "ozn")
+                self.save_config()
+                win = self.open_oznakomlenie(ask_after=True)
+                if win is not None and ident:
+                    win.select(ident)   # учебный показ продолжается с той же функции
+            elif topic == "tour":
+                editor = next((e for e in reversed(self.editors) if getattr(e, "tour", None) is None
+                               and self.editor_quiet(e)), None)
+                otlozhit.shown(self.config, "tour")
+                self.save_config()
+                if editor is not None:
+                    editor.start_tour()
+                # редактора нет: знакомство начнётся само при следующем редакторе (срок уже снят)
+            elif topic == "tour_selector":
+                otlozhit.shown(self.config, "tour_selector")   # покажется при следующем окне выделения
+                self.save_config()
+        finally:
+            self.schedule_otlozhit()
 
     def _editor_closed(self, editor):
         if editor in self.editors:
@@ -1260,7 +1421,9 @@ class Clipshot(QObject):
         chooser.exec()
         self.config["theme_chosen"] = True
         self.save_config()
-        if not self.config.get("tour_done") and editor in self.editors:
+        from . import otlozhit
+        if (not self.config.get("tour_done") and editor in self.editors
+                and not otlozhit.is_snoozed(self.config, "tour")):
             QTimer.singleShot(300, editor.start_tour)
 
     def demo_tour(self):
@@ -1336,10 +1499,10 @@ class Clipshot(QObject):
         dialog = SettingsDialog(self.config, parent)
         dialog.setWindowIcon(self.icon)
         dialog.update_ctx = self
+        dialog.apply_handler = self.apply_settings   # «Применить» и «ОК»: сохранить и применить, не закрывая окно
         self._settings = dialog
         try:
-            if dialog.exec() == dialog.DialogCode.Accepted:
-                self.apply_settings(dialog.values())
+            if dialog.exec() == dialog.DialogCode.Accepted:   # изменения уже применены самим окном (accept)
                 if dialog.want_tour:
                     if parent is not None and hasattr(parent, "start_tour"):
                         QTimer.singleShot(200, parent.start_tour)
@@ -1351,14 +1514,27 @@ class Clipshot(QObject):
         finally:
             self._settings = None
 
-    def apply_settings(self, values: dict):
+    def apply_settings(self, values: dict) -> list:
+        """Сохранить и применить настройки сразу, без перезапуска. Возвращает список ошибок
+        [(поля, текст)]: то, что не удалось (сочетание, автозапуск), остальное применено."""
         from .settings import GnomeHotkeys, autostart_enabled, set_autostart
+        errors = []
         autostart = values.pop("autostart", None)
+        old_keys = {k: self.config.get(k) for k in ("hotkey_region", "hotkey_fullscreen", "hotkey_both_layouts")}
         keys_changed = (values["hotkey_region"] != self.config.get("hotkey_region")
                         or values["hotkey_fullscreen"] != self.config.get("hotkey_fullscreen")
                         or values.get("hotkey_both_layouts", True) != self.config.get("hotkey_both_layouts", True))
         language = values.pop("language", None)
         self.config.update(values)
+        if keys_changed:
+            failed = self._apply_hotkeys(GnomeHotkeys)
+            if failed:
+                errors.append((("hotkey_region", "hotkey_fullscreen", "hotkey_both_layouts"), failed))
+                for key, value in old_keys.items():   # не вышло: в настройках остаётся прежнее, повторить можно
+                    if value is None:
+                        self.config.pop(key, None)
+                    else:
+                        self.config[key] = value
         self.save_config()
         if language is not None and language != self.config.get("language"):
             self.set_language(language)
@@ -1368,26 +1544,31 @@ class Clipshot(QObject):
             try:
                 set_autostart(autostart)
             except (OSError, subprocess.SubprocessError) as exc:
-                self.notify(tr("app.autostart_failed", error=exc))
-        if keys_changed:
-            self._apply_hotkeys(GnomeHotkeys)
+                errors.append((("autostart",), tr("app.autostart_failed", error=exc)))
         from . import themes
         themes.apply_app(self.qapp, self.config)   # меню, подсказки, стандартные окна
         for editor in list(self.editors):
             editor.refresh_theme()   # новое оформление сразу в открытых окнах
+        if errors and getattr(self, "_settings", None) is None:   # окна настроек нет: сообщение из значка
+            for _keys, text in errors:
+                self.notify(text)
+        return errors
 
     def _apply_hotkeys(self, gnome_cls):
+        """Новые сочетания вступают в силу сразу. Текст ошибки, если не вышло (GNOME), иначе None; на Windows и X11
+        «занято» приходит позже из потока клавиш (_hotkey_error)."""
         if sys.platform != "win32" and gnome_cls.available():
             try:
                 gnome_cls().apply(self.config["hotkey_region"], self.config["hotkey_fullscreen"],
                                   self.config.get("hotkey_both_layouts", True))
             except (RuntimeError, OSError, ValueError) as exc:
-                self.notify(tr("app.gnome_hotkey_failed", error=exc))
-            return
+                return tr("app.gnome_hotkey_failed", error=exc)
+            return None
         if self.hotkeys is not None:
             self.hotkeys.stop()
             self.hotkeys = None
         QTimer.singleShot(700, self._setup_hotkeys)   # дать старому потоку отпустить клавиши
+        return None
 
     # --- общее для редактора -------------------------------------------------
 

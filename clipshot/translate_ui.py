@@ -57,6 +57,7 @@ class TranslateCard:
         self.blocks = []              # {"rect", "draw", "text", "orig", "src", "tgt", "bg", "fg", "px"}
         self.message = ""
         self.help = None
+        self.installing = False       # 1.36: идёт «Установить распознавание» из этой карточки
         self.show_original = False
         self.buttons = {}             # имя -> QRectF кнопки над карточкой
         self.offset = QPointF(0, 0)   # перевод отодвинут мышью в сторону от оригинала
@@ -418,6 +419,48 @@ class TranslateMixin:
         card.show_original = False
         self._tr_run(card)
 
+    def _tr_can_install(self, card) -> bool:
+        """У ошибки распознавания есть кнопка «Установить распознавание» (Windows: UAC, Linux: окно пароля системы)."""
+        from . import ocr
+        return card.state == "error" and ocr.can_install(card.help)
+
+    def _tr_install_ocr(self, card, process_factory=None, which=None, verify=None):
+        """1.36: «Установить распознавание» прямо в карточке: ход установки в тексте карточки; по «Готово» перевод
+        этого куска (и других с такой же ошибкой) запускается заново сам."""
+        from . import ocr
+        if card.installing or not self._tr_can_install(card):
+            return None
+        card.installing = True
+        me, original = self, card.message
+
+        def state(text):
+            card.message = text
+            self.update()
+
+        def done(ok, text, outcome):
+            from PyQt6 import sip
+            if sip.isdeleted(me):
+                return
+            card.installing = False
+            if ok:
+                ocr.early_forget()
+                card.message = tr("ocr.install_done_again")
+                self.update()
+                for c in self.tr_cards:
+                    if c.state == "error" and ocr.can_install(c.help):
+                        c.help = None
+                self._tr_retry_errors()
+            else:
+                card.message = text
+                self.update()
+        job = ocr.begin_install(card.help, done, state, process_factory, which, verify)
+        if job is None:
+            card.installing = False
+            card.message = original
+            return None
+        self.update()
+        return job
+
     def _tr_retry_errors(self):
         for card in self.tr_cards:
             if card.state == "error":
@@ -479,8 +522,15 @@ class TranslateMixin:
         if not self.tr_timer.isActive():
             self.tr_timer.start(80)
         confirm = (lambda need, left, job, c=card: self._tr_confirm(c, need, left, job)) if card.full else None
-        card.job = translate.start(crop, self.tr_cfg, lambda res, err, help, c=card: self._tr_done(c, res, err, help),
-                                   confirm=confirm, full=card.full)
+
+        def go():
+            if sip.isdeleted(self) or card not in self.tr_cards or card.state != "busy":
+                return
+            card.job = translate.start(crop, self.tr_cfg, lambda res, err, help, c=card: self._tr_done(c, res, err, help),
+                                       confirm=confirm, full=card.full)
+        # 1.36: при первом переводе проверка, есть ли распознавание языка интерфейса (нет: окно «Установить» до попытки)
+        from . import ocr
+        ocr.precheck(self, self.tr_cfg, go)
 
     # --- «Перевести весь экран»: большой текст, вопрос про лимит, отмена ---------------------------------
 
@@ -770,7 +820,7 @@ class TranslateMixin:
         if not text:
             return
         what = what or tr("translate_ui.copied")
-        ocr.copy_text(text)
+        ocr.copy_text(text, self)
         # окно выделения на все мониторы: сообщение у карточки, а не посередине стола
         self._tr_copy_msg(what, near if near is not None else self._tr_banner_rect().toAlignedRect())
 
@@ -802,6 +852,9 @@ class TranslateMixin:
                         card.show_original = not card.show_original
                     elif name == "view":
                         self._tr_toggle_view(card)
+                        return True
+                    elif name == "ocrinst":
+                        self._tr_install_ocr(card)
                         return True
                     elif name == "command" and card.help is not None and card.help.command:
                         self._tr_copy(card.help.command, card.region, tr("translate_ui.command_copied"))
@@ -1061,6 +1114,12 @@ class TranslateMixin:
                 items = [("email", tr("translate_ui.email_button"), True), ("setup", tr("translate_ui.connect_google"), False)]
             elif card.key_help():
                 items = [("setup", tr("translate_ui.connect_google"), True), ("usemm", tr("translate_ui.use_mymemory"), False)]
+            elif card.installing:
+                items = []   # ход установки в тексте карточки, кнопки на это время нет
+            elif self._tr_can_install(card):
+                items = [("ocrinst", tr("ocr.win_install_button"), True)]
+                if card.help.command:
+                    items.append(("command", tr("translate_ui.copy_command"), False))
             elif card.help is not None and card.help.command:
                 items = [("command", tr("translate_ui.copy_command"), True)]
             else:
@@ -3006,7 +3065,16 @@ class FullRun:
         self.box = WaitBox(wait, self.cancel)
         # окошко показывается и активируется после закрытия окна выделения (оно держит клавиатуру до тех пор)
         QTimer.singleShot(0, self._show_box)
-        self.job = translate.start(crop, cfg, self._done, confirm=self._confirm, full=True)
+        self.job = None
+        self._pre = None
+
+        def go():
+            if self.cancelled or self.closed:
+                return
+            self.job = translate.start(crop, cfg, self._done, confirm=self._confirm, full=True)
+        # 1.36: проверка распознавания до начала (первый перевод за запуск); готово: распознавание и перевод идут как раньше
+        from . import ocr
+        self._pre = ocr.precheck(None, cfg, go)
         self._state()
 
     def _show_box(self):
@@ -3053,7 +3121,8 @@ class FullRun:
             return
         self.cancelled = True
         self._close_ui()
-        self.job.cancel()
+        if self.job is not None:
+            self.job.cancel()
         self._state()
 
     def _done(self, results, error, help):

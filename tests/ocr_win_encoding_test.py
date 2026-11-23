@@ -310,7 +310,10 @@ finally:
     ocr.installed_ocr_languages = real_langs
 after = set(os.listdir(tempfile.gettempdir()))
 check(not [n for n in after - before if n.startswith("clipsd")], f"установка не создаёт файлов и папок во временной папке ({sorted(after - before)})")
-check(ocr.InstallBlock(ocr.install_help("no_rus")).install_button is None, "Tesseract без русского: кнопки Windows нет")
+_real_argv = ocr.linux_install_argv
+ocr.linux_install_argv = lambda *a, **k: None   # 1.36: на Linux кнопку даёт pkexec; здесь его нет
+check(ocr.InstallBlock(ocr.install_help("no_rus")).install_button is None, "Tesseract без русского, без pkexec: кнопки нет")
+ocr.linux_install_argv = _real_argv
 check(not hasattr(ocr, "install_windows_ocr") and not hasattr(ocr, "install_result_path"),
       "прежней команды ClipSD с правами администратора и файла итога нет")
 cli = subprocess.run([sys.executable, "-m", "clipshot", "--install-ocr-lang", "ru-RU"], capture_output=True, timeout=60,

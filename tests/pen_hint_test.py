@@ -443,13 +443,26 @@ for dark in (False, True):
         check(r >= 4.5, f"{'тёмная' if dark else 'светлая'} тема: {name} {r:.1f}:1")
     check(ratio(p["text"], p["soft"]) >= 4.5, f"{'тёмная' if dark else 'светлая'} тема: кнопка под мышью")
 ed, c = editor(RED)
+h = PenHint(ed)
+for chosen in ("#1e6fff", "#22a33a"):   # выбор меняется, пока карточка открыта: квадратик следом
+    h.pending = {"color": chosen}
+    h.show_kind("color", QColor(RED))
+    check(h.button.icon().pixmap(23, 16).toImage().pixelColor(8, 8).name() == chosen and h.button.toolTip() == chosen.upper(),
+          f"на кнопке цвет, которым будут новые линии: {chosen}")
+h.dismiss()
+h.deleteLater()
 wide, langs, cut = [], set(), []
 env_lang = os.environ.pop("CLIPSD_LANG", None)   # иначе язык из окружения важнее выбранного
 for lang in i18n.LANGUAGES:
     langs.add(i18n.set_language(lang))
     h = PenHint(ed)
     for kind in ("color", "size", "both"):
+        # 22.11.2026: с выбранным цветом на кнопке квадратик: ширина считается вместе с ним
+        h.pending = {"size": 9} if kind == "size" else {"color": "#1e6fff", **({"size": 9} if kind == "both" else {})}
         h.show_kind(kind, QColor(RED))
+        if lang == "ru":
+            check(h.button.icon().isNull() == (kind == "size"),
+                  f"{kind}: квадратик выбранного цвета на кнопке {'нет' if kind == 'size' else 'есть'}")
         if h.sizeHint().width() > 640 or h.button.width() < h.button.fontMetrics().horizontalAdvance(h.button.text()):
             wide.append((lang, kind, h.sizeHint().width()))
         for lbl in (h.title, h.sub):   # 1.34.1: длинная строка переносится по словам, но видна целиком

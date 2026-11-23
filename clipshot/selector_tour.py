@@ -42,8 +42,9 @@ def steps(sel):
 
 class SelectorTour(QWidget):
     finished = pyqtSignal()
+    snoozed = pyqtSignal(str)   # «Отложить ▾»: код времени; сразу за ним finished (затемнение уходит)
 
-    def __init__(self, selector):
+    def __init__(self, selector, snoozable: bool = False):
         super().__init__(selector)
         self.sel = selector
         self.steps = []
@@ -67,7 +68,18 @@ class SelectorTour(QWidget):
         self.text = QLabel()
         self.text.setObjectName("tourText")
         self.text.setWordWrap(True)
-        for w in (self.step_label, self.title, self.text):
+        head = QHBoxLayout()   # «Шаг 3 из 8» слева, «Отложить ▾» справа
+        head.setContentsMargins(0, 0, 0, 0)
+        head.addWidget(self.step_label)
+        head.addStretch(1)
+        self.snooze_button = None
+        if snoozable:
+            from . import otlozhit
+            self.snooze_button = otlozhit.SnoozeButton(False, compact=True)   # карточка всегда белая
+            self.snooze_button.chosen.connect(self.snooze)
+            head.addWidget(self.snooze_button)
+        box.addLayout(head)
+        for w in (self.title, self.text):
             box.addWidget(w)
         buttons = QHBoxLayout()
         self.skip = QPushButton(tr("tour.skip"))
@@ -121,7 +133,7 @@ class SelectorTour(QWidget):
         self.text.setFixedHeight(text_h)
         box = self.card.layout()
         m = box.contentsMargins()
-        self.card.setFixedHeight(m.top() + m.bottom() + 3 * box.spacing() + self.step_label.sizeHint().height()
+        self.card.setFixedHeight(m.top() + m.bottom() + 3 * box.spacing() + self.head_height()
                                  + self.title.sizeHint().height() + text_h + self.next.sizeHint().height())
         self._place_card()
         self.update()
@@ -134,6 +146,16 @@ class SelectorTour(QWidget):
 
     def prev(self):
         self.show_step(self.index - 1)
+
+    def head_height(self) -> int:
+        h = self.step_label.sizeHint().height()
+        return max(h, self.snooze_button.sizeHint().height()) if self.snooze_button is not None else h
+
+    def snooze(self, key):
+        if not self.active:
+            return
+        self.snoozed.emit(key)
+        self.finish()
 
     def finish(self):
         if not self.active:

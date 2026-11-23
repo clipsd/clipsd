@@ -211,6 +211,7 @@ class RegionSelector(TranslateMixin, QWidget):
         self.bar_hint_reserve = 0  # сколько справа в строке подсказки занято чипом языка и размером
         self.tour = None           # 1.32: идущее знакомство с окном выделения (SelectorTour)
         self.tour_force = False    # знакомство по запросу (пункт меню): показывать, даже если уже видели
+        self.snoozable_tour = False   # знакомство пришло само (не по запросу): в карточке «Отложить ▾»
         self._tour_demo = False    # рамка у знакомства показана для примера (своей области ещё нет)
         # «Снимок окна» (утверждено владельцем 21.11.2026): чип «Окна ▾» в нижней строке панели и клавиша W.
         # Список окон просится в момент Alt+W, вместе с кадром стола, и приходит сюда set_windows.
@@ -247,10 +248,14 @@ class RegionSelector(TranslateMixin, QWidget):
         cfg = self.tr_cfg if isinstance(getattr(self, "tr_cfg", None), dict) else None
         if self.tour is not None or self.translate_mode or self._done:
             return False
-        if not self.tour_force and (cfg is None or cfg.get("tour_selector_done")):
+        from . import otlozhit
+        if not self.tour_force and (cfg is None or cfg.get("tour_selector_done")
+                                    or otlozhit.is_snoozed(cfg, "tour_selector")):
             return False
+        self.snoozable_tour = not self.tour_force   # «Отложить ▾» только в знакомстве, пришедшем само
         self.tour_force = False
         if cfg is not None:
+            otlozhit.shown(cfg, "tour_selector")
             cfg["tour_selector_done"] = True   # отмечается при показе: даже закрытое сразу знакомство повторно не навязывается
             save = getattr(self, "tr_save", None)
             if callable(save):
@@ -270,10 +275,23 @@ class RegionSelector(TranslateMixin, QWidget):
             self.kept = QRect(area.center().x() - w // 2, area.center().y() - h // 2 - area.height() // 12, w, h)
             self._bar_forget()
         self.hover_button = None
-        self.tour = SelectorTour(self)
+        self.tour = SelectorTour(self, snoozable=bool(getattr(self, "snoozable_tour", False)))
+        self.snoozable_tour = False
         self.tour.finished.connect(self._tour_done)
+        self.tour.snoozed.connect(self._tour_snoozed)
         self.tour.start()
         self.update()
+
+    def _tour_snoozed(self, key):
+        """«Отложить ▾» в знакомстве с окном выделения: оно не считается показанным и придёт при выделении после срока."""
+        from . import otlozhit
+        cfg = self.tr_cfg if isinstance(getattr(self, "tr_cfg", None), dict) else None
+        if cfg is not None:
+            cfg["tour_selector_done"] = False
+            otlozhit.snooze(cfg, "tour_selector", key)
+            save = getattr(self, "tr_save", None)
+            if callable(save):
+                save()
 
     def _tour_done(self):
         self.tour = None

@@ -1,6 +1,8 @@
 {
   "settings.accent_tip": "Color of the frame and selected buttons",
   "settings.accent_tip_plain": "The frame is neutral in this style; the color stays on selected buttons",
+  "settings.applied": "Applied",
+  "settings.apply": "Apply",
   "settings.auto_save": "Save every screenshot automatically (the file is updated after edits in the editor)",
   "settings.auto_save_dir": "Autosave folder:",
   "settings.autostart": "Start with the system (tray icon)",
@@ -67,6 +69,7 @@
   "settings.ocr_ru": "Russian only",
   "settings.ocr_ru_en": "Russian and English",
   "settings.off": "Turn off",
+  "settings.ok": "OK",
   "settings.press_text": "Press the key combination you want to use (for example, Alt+W).\nThis window closes automatically.",
   "settings.press_title": "Press a key combination",
   "settings.press_wait": "Waiting for a keyboard shortcut…",

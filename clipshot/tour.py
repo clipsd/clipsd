@@ -73,8 +73,9 @@ def _steps(ed):
 
 class Tour(QWidget):
     finished = pyqtSignal()
+    snoozed = pyqtSignal(str)   # «Отложить ▾»: код времени (otlozhit.CHOICES), курс закрыт без отметки «пройдено»
 
-    def __init__(self, editor, language: bool = True, steps_fn=None):
+    def __init__(self, editor, language: bool = True, steps_fn=None, snoozable: bool = False, start_index: int = 0):
         # steps_fn(editor, language) -> шаги в том же виде, что steps(): свой короткий курс (1.34, «Показать новое»)
         # 1.32: со своей шапкой окна знакомство затемняет всю карточку окна (колокольчик, «?» и глобус в шапке),
         # поля тени вокруг неё остаются прозрачными; с системным заголовком: содержимое окна
@@ -86,6 +87,8 @@ class Tour(QWidget):
         self.steps_fn = steps_fn or steps
         self.steps = self.steps_fn(editor, language)
         self.index = 0
+        self.start_index = max(0, int(start_index or 0))   # после «Отложить»: с того же шага
+        self.snoozable = bool(snoozable)
         self.hole = QRect()
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -105,7 +108,18 @@ class Tour(QWidget):
         self.text = QLabel()
         self.text.setObjectName("tourText")
         self.text.setWordWrap(True)
-        box.addWidget(self.step_label)
+        head = QHBoxLayout()   # «Шаг 3 из 12» слева, «Отложить ▾» справа: ряд кнопок внизу остаётся прежней ширины
+        head.setContentsMargins(0, 0, 0, 0)
+        head.addWidget(self.step_label)
+        head.addStretch(1)
+        self.snooze_button = None
+        if self.snoozable:
+            from . import otlozhit
+            self.snooze_button = otlozhit.SnoozeButton(False, compact=True)   # карточка курса всегда белая
+            self.snooze_button.chosen.connect(self.snooze)
+            head.addWidget(self.snooze_button)
+        box.addLayout(head)
+        self.head_h = head
         box.addWidget(self.title)
         box.addWidget(self.text)
         self._build_language_row(box)
@@ -192,6 +206,8 @@ class Tour(QWidget):
         self.steps = self.steps_fn(self.editor, self.with_language)
         self.skip.setText(tr("tour.skip"))
         self.back.setText(tr("tour.back"))
+        if self.snooze_button is not None:
+            self.snooze_button.retranslate()
         self._fill_languages()
         self.raise_()
         self.show_step(self.index)
@@ -203,7 +219,7 @@ class Tour(QWidget):
         self.show()
         self.raise_()
         self.setFocus()
-        self.show_step(0)
+        self.show_step(self.start_index)
 
     def show_step(self, index):
         self.index = max(0, min(index, len(self.steps) - 1))
@@ -229,7 +245,7 @@ class Tour(QWidget):
         self.text.setFixedHeight(text_h)
         box = self.card.layout()
         margins = box.contentsMargins()
-        height = (margins.top() + margins.bottom() + 3 * box.spacing() + self.step_label.sizeHint().height()
+        height = (margins.top() + margins.bottom() + 3 * box.spacing() + self.head_height()
                   + self.title.sizeHint().height() + text_h + self.next.sizeHint().height())
         if self.action_slot is not None:
             height += self.action.sizeHint().height() + box.spacing()
@@ -244,6 +260,10 @@ class Tour(QWidget):
         self.hole = self._target_rect(target)
         self._place_card()
         self.update()
+
+    def head_height(self) -> int:
+        h = self.step_label.sizeHint().height()
+        return max(h, self.snooze_button.sizeHint().height()) if self.snooze_button is not None else h
 
     def _run_action(self):
         """Кнопка-переход из карточки (например, в настройки): курс закрывается, действие выполняется."""
@@ -265,6 +285,13 @@ class Tour(QWidget):
         self.parentWidget().removeEventFilter(self)
         self.hide()
         self.finished.emit()
+        self.close()
+
+    def snooze(self, key):
+        """«Отложить ▾»: курс закрывается, знакомство не считается пройденным и вернётся, когда срок выйдет."""
+        self.parentWidget().removeEventFilter(self)
+        self.hide()
+        self.snoozed.emit(key)
         self.close()
 
     # --- геометрия -----------------------------------------------------------

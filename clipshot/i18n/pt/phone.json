@@ -141,5 +141,8 @@
   "phone.wifi_text": "O celular e o computador precisam estar conectados à mesma rede Wi-Fi. Pelos dados móveis a foto não chega.",
   "phone.tile_title": "Do celular",
   "phone.tile_sub": "câmera ou imagem",
-  "phone.tile_tip": "Tire uma foto ou envie uma imagem do celular"
+  "phone.tile_tip": "Tire uma foto ou envie uma imagem do celular",
+  "phone.zoom": "Ampliar",
+  "phone.zoom_caption": "Aponte a câmera do celular para o código",
+  "phone.zoom_tip": "Mostrar o código em tamanho grande"
 }

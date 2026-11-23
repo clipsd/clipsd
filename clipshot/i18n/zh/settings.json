@@ -1,6 +1,8 @@
 {
   "settings.accent_tip": "边框和所选按钮的颜色",
   "settings.accent_tip_plain": "此样式下边框为中性色；所选按钮仍保留该颜色",
+  "settings.applied": "已应用",
+  "settings.apply": "应用",
   "settings.auto_save": "自动保存每张截图（在编辑器中修改后文件会更新）",
   "settings.auto_save_dir": "自动保存文件夹：",
   "settings.autostart": "随系统启动（托盘图标）",
@@ -67,6 +69,7 @@
   "settings.ocr_ru": "仅俄语",
   "settings.ocr_ru_en": "俄语和英语",
   "settings.off": "关闭",
+  "settings.ok": "确定",
   "settings.press_text": "按下所需的快捷键（例如 Alt+W）。\n窗口会自动关闭。",
   "settings.press_title": "按下快捷键",
   "settings.press_wait": "等待按下组合键…",

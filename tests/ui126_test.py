@@ -463,9 +463,9 @@ dlg.show()
 settle()
 area = QGuiApplication.primaryScreen().availableGeometry()
 check(dlg.height() <= area.height(), f"окно настроек не выше экрана ({dlg.height()} из {area.height()})")
-buttons = [b for b in dlg.findChildren(type(dlg.tr_email_check)) if b.text() in ("Отмена", "Сохранить")]
-check(len(buttons) == 2 and all(dlg.rect().contains(b.mapTo(dlg, QPoint(0, 0))) and b.isVisible() for b in buttons),
-      "«Отмена» и «Сохранить» видны")
+buttons = [b for b in dlg.findChildren(type(dlg.tr_email_check)) if b.text() in ("ОК", "Отмена", "Применить")]
+check(len(buttons) == 3 and all(dlg.rect().contains(b.mapTo(dlg, QPoint(0, 0))) and b.isVisible() for b in buttons),
+      "«ОК», «Отмена» и «Применить» видны")
 check(dlg.scroll.widget().sizeHint().height() > dlg.scroll.viewport().height(), "карточки прокручиваются: содержимое выше окна")
 fm = QFontMetrics(dlg.tr_email.font())
 check(fm.horizontalAdvance(dlg.tr_email.placeholderText()) < dlg.tr_email.width() - 20,

@@ -9,9 +9,11 @@
 - Первая установка: как раньше (выбор оформления, знакомство). Новинки не показываются, меток нет.
 - Обновление с прежней версии (config novoe_version меньше установленной; у настроек 1.33 и старше этого поля нет,
   там признак прежней работы: tour_done, tour_selector_done или theme_chosen): при первом открытии редактора одно окно
-  «Новое в версии X» (2-4 пункта) с кнопками «Позже» и «Показать новое». «Показать новое» проводит коротким курсом по
+  «Новое в версии X» (2-4 пункта) с кнопками «Отложить ▾» и «Показать новое». «Показать новое» проводит коротким курсом по
   новым кнопкам и потом спрашивает «Хотите узнать о других функциях программы?» («Да, показать обзор» запускает всё
-  знакомство, «Не сейчас» до следующей версии не спрашивает). Если обновление поставила сама программа, то же окно
+  знакомство, «Не сейчас» до следующей версии не спрашивает). 1.35: «Показать новое» открывает окно «Ознакомление»
+  (oznakomlenie.py) на группе новинок; короткого курса поверх рабочего окна больше нет; вопрос про другие функции
+  приходит после этого окна, если смотрели одни новинки, и ведёт в то же окно. Если обновление поставила сама программа, то же окно
   приходит вместо окна «ClipSD обновлён» в спокойную минуту (updater.py, Clipshot.show_novoe_after_update).
 - Метка «Новое» на новых кнопках (или точка, если кнопка маленькая): до первого нажатия или до трёх показов окна, где
   кнопка видна, потом исчезает навсегда.
@@ -33,7 +35,7 @@ from PyQt6.QtCore import QEvent, QObject, QPoint, QRect, QRectF, QSize, Qt, QTim
 from PyQt6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
-from . import __version__
+from . import __version__, otlozhit
 from .i18n import tr
 
 # (версия, id, где, значок). Порядок внутри версии = порядок в окне «Новое в версии» (показываются первые MAX_WINDOW).
@@ -49,17 +51,31 @@ ITEMS = (
     ("1.34.0", "phone_editor", "editor:phone_button", "phone"),
     ("1.34.0", "translate_head", "editor:tr_block|tool:translate", "translate"),
     ("1.34.0", "numbers", "editor:tool:number", "number"),
+    # 1.35.0. Цели «app:…» живут не на кнопках редактора (меню значка, окна обновления, настройки, окно «С телефона»):
+    # метки у них нет, пункт есть в окне «Новое в версии» и в «Ознакомлении». Последние три придут из других веток
+    # (otlozhit, settings_apply, phone_target): цели в этой сборке ещё нет, пункт от этого ничего не ломает.
+    ("1.35.0", "oznakomlenie", "app:tray_ozn", "info"),
+    ("1.35.0", "color_swatch", "app:pen_hint", "marker"),
+    ("1.35.0", "qr_big", "app:phone_qr", "phone"),
+    ("1.35.0", "ocr_install", "app:ocr_install", "ocr"),
+    ("1.35.0", "otlozhit", "app:otlozhit", "update"),
+    ("1.35.0", "settings_apply", "app:settings_apply", "settings"),
+    ("1.35.0", "phone_target", "editor:phone_target", "phone"),
 )
 
 MAX_WINDOW = 4        # пунктов в окне «Новое в версии»
 MAX_SHOWS = 3         # метка видна в трёх окнах, потом исчезает
-MAX_LATER = 2         # «Позже» дважды: окно само больше не приходит (в меню значка «Что нового» остаётся)
+# «Отложить ▾» (otlozhit.py, 1.35): время в config["otlozhit"]["novoe"]; после трёх откладываний подряд окно приходит
+# не раньше чем через неделю, а «Что нового» в меню значка открывает его всегда
 USE_MARKERS = ("tour_done", "tour_selector_done", "theme_chosen")   # программой уже пользовались (настройки 1.33-)
 
 # Цвет значка в окне (светлая, тёмная карточка): на мягком квадрате не ниже 3:1
 ICON_COLORS = {"window": ("#2a6df4", "#7fb2ff"), "translate": ("#0b766c", "#4fd1c5"), "number": ("#c81e1e", "#ff8a80"),
-               "phone": ("#b4236e", "#f48fc1"), "region": ("#0b4fb3", "#7fb2ff"), "form_round2": ("#6d3fd0", "#b9a4ff")}
+               "phone": ("#b4236e", "#f48fc1"), "region": ("#0b4fb3", "#7fb2ff"), "form_round2": ("#6d3fd0", "#b9a4ff"),
+               "info": ("#0b4fb3", "#7fb2ff"), "marker": ("#9a5200", "#f5b45c"), "ocr": ("#6d3fd0", "#b9a4ff"),
+               "update": ("#0b766c", "#4fd1c5"), "settings": ("#4b5563", "#aab1ba")}
 BADGE_BG = "#1660d0"      # белый текст 5,8:1 (цвет ссылки); метка значит «новое», не ошибку и не главное действие
+BADGE_GRAY = (("#666c75", "#ffffff"), ("#474d55", "#e3e6ea"))   # изучено (1.35): фон и текст метки, светлая и тёмная тема, контраст текста не ниже 4,5:1
 BADGE_RING = ("#ffffff", "#232323")   # тонкое кольцо цвета панели: метка отделена от кнопки в обеих темах
 BADGE_FONT_PX = 10
 DOT = 9
@@ -117,7 +133,9 @@ def on_start(cfg: dict, version: str = None) -> bool:
 def _upgraded(cfg, previous: str):
     cfg["novoe_from"] = previous   # "" : с версии без этой записи (1.33 и старше)
     cfg.pop("novoe_window", None)
-    cfg["novoe_later"] = 0
+    cfg.pop("novoe_later", None)
+    for topic in ("novoe", "ask", "ozn"):
+        otlozhit.clear(cfg, topic)   # откладывания прежней версии забываются
     cfg.pop("novoe_asked", None)
 
 
@@ -146,26 +164,22 @@ def window_items(cfg, version: str = None) -> list:
 def window_pending(cfg, version: str = None) -> bool:
     version = version or __version__
     return (enabled(cfg) and cfg.get("novoe_from") is not None and cfg.get("novoe_window") != version
-            and bool(items_since(cfg, version)))
+            and bool(items_since(cfg, version)) and not otlozhit.is_snoozed(cfg, "novoe"))
 
 
 def window_done(cfg, version: str = None):
     cfg["novoe_window"] = version or __version__
-
-
-def later(cfg, version: str = None):
-    """«Позже» или крестик: окно придёт при следующем редакторе, после MAX_LATER раз больше само не приходит."""
-    cfg["novoe_later"] = int(cfg.get("novoe_later") or 0) + 1
-    if cfg["novoe_later"] >= MAX_LATER:
-        window_done(cfg, version)
+    otlozhit.clear(cfg, "novoe")
 
 
 def ask_pending(cfg, version: str = None) -> bool:
-    return isinstance(cfg, dict) and cfg.get("novoe_asked") != (version or __version__)
+    return (isinstance(cfg, dict) and cfg.get("novoe_asked") != (version or __version__)
+            and not otlozhit.is_snoozed(cfg, "ask"))
 
 
 def ask_done(cfg, version: str = None):
     cfg["novoe_asked"] = version or __version__
+    otlozhit.clear(cfg, "ask")
 
 
 def badges(cfg, scope: str, version: str = None) -> dict:
@@ -234,18 +248,19 @@ def badge_rect(target: QRect, fm: QFontMetrics, room: QRect = None):
     return kind, r
 
 
-def paint_badge(p: QPainter, kind: str, rect: QRect, dark: bool = False):
+def paint_badge(p: QPainter, kind: str, rect: QRect, dark: bool = False, studied: bool = False):
     p.save()
     p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
     p.setPen(QPen(QColor(BADGE_RING[1 if dark else 0]), 1.5))
-    p.setBrush(QColor(BADGE_BG))
+    bg, fg = BADGE_GRAY[1 if dark else 0] if studied else (BADGE_BG, "#ffffff")
+    p.setBrush(QColor(bg))
     if kind == "dot":
         p.drawEllipse(QRectF(rect).adjusted(0.5, 0.5, -0.5, -0.5))
     else:
         r = QRectF(rect).adjusted(0.5, 0.5, -0.5, -0.5)
         p.drawRoundedRect(r, r.height() / 2, r.height() / 2)
         p.setFont(badge_font())
-        p.setPen(QColor("#ffffff"))
+        p.setPen(QColor(fg))
         p.drawText(rect, Qt.AlignmentFlag.AlignCenter, tr("novoe.badge"))
     p.restore()
 
@@ -471,7 +486,8 @@ def _item_row(ident: str, icon_name: str, dark: bool) -> QWidget:
 
 def make_window(version: str, items: list, parent=None, updated: bool = False, notes: bool = True, dark=None):
     """Окно «Новое в версии X»: значок программы, 2-4 пункта со значками, ссылка «Показать все изменения» (если есть
-    заметки), «Позже», зелёная «Показать новое». После закрытия choice: show, later, notes, close."""
+    заметки), «Отложить ▾» (otlozhit.SnoozeButton), зелёная «Показать новое». После закрытия choice: show, snooze
+    (box.delay: код времени), notes, close."""
     from .dialogs import ClipDialog
 
     class NovoeDialog(ClipDialog):
@@ -481,15 +497,17 @@ def make_window(version: str, items: list, parent=None, updated: bool = False, n
             self.setProperty("clipsd_closable", True)   # работы не держит: выход для обновления его просто закрывает
             self.setModal(True)
             self.choice = "close"
+            self.delay = None
             self.rows = [_item_row(ident, icon_name, self.dark) for _v, ident, _w, icon_name in items]
             for r in self.rows:
                 self.body.addWidget(r)
             self.notes_link = self.link(tr("updater.offer.show_notes")) if notes else None
-            self.later_button = self.secondary(tr("updater.button.later"))
+            self.later_button = otlozhit.SnoozeButton(self.dark)
+            self.footer_right.addWidget(self.later_button)
             self.show_button = self.primary(tr("novoe.show"))
             if self.notes_link is not None:
                 self.notes_link.clicked.connect(lambda: self._pick("notes"))
-            self.later_button.clicked.connect(lambda: self._pick("later"))
+            self.later_button.chosen.connect(lambda key: self._pick("snooze", key))
             self.show_button.clicked.connect(lambda: self._pick("show"))
             self.show_button.setFocus()
             # М6 проверки 1.34.0: язык сменили, пока окно открыто (меню значка у часов). Тексты задаются при
@@ -498,9 +516,10 @@ def make_window(version: str, items: list, parent=None, updated: bool = False, n
             self._off_lang = i18n.on_change(lambda _lang: QTimer.singleShot(0, lambda: self._pick("relang")))
             self.finished.connect(lambda _r: self._off_lang())
 
-        def _pick(self, choice):
+        def _pick(self, choice, delay=None):
             if self.isVisible() or choice != "relang":
                 self.choice = choice
+                self.delay = delay
                 self.accept()
 
         def showEvent(self, event):
@@ -514,52 +533,10 @@ def make_window(version: str, items: list, parent=None, updated: bool = False, n
 
 
 def make_question(parent=None, dark=None):
-    """«Хотите узнать о других функциях программы?»: «Не сейчас» и зелёная «Да, показать обзор»."""
+    """«Хотите узнать о других функциях программы?»: «Отложить ▾», «Не сейчас» и зелёная «Да, показать обзор».
+    После закрытия choice: primary, secondary, snooze (box.delay), close."""
     from .dialogs import MessageCard
     box = MessageCard(parent, tr("novoe.ask_title"), tr("novoe.ask_text"), "info", primary=tr("novoe.ask_yes"),
-                      secondary=tr("novoe.ask_no"), logo=True, dark=dark)
+                      secondary=tr("novoe.ask_no"), logo=True, dark=dark, snooze=True)
     box.setProperty("clipsd_closable", True)
     return box
-
-
-# --- короткий курс по новому («Показать новое») ------------------------------------------------------
-
-def tour_steps(editor, cfg, version: str = None) -> list:
-    """Шаги в виде tour.steps(): новые кнопки редактора по очереди, потом одна карточка про панель выделения."""
-    items = items_since(cfg, version) or items_of(version)
-    steps, panel = [], []
-    for _v, ident, where, _icon in items:
-        kind, _, target = where.partition(":")
-        if kind == "editor":
-            w = editor_widget(editor, target)
-            if w is not None and w.isVisible():
-                steps.append((w, title(ident), text(ident)))
-            elif w is not None:
-                steps.append((None, title(ident), text(ident)))
-        elif kind == "selector":
-            panel.append(ident)
-    if panel:
-        hotkey = (cfg or {}).get("hotkey_region") or "Alt+W"
-        lines = "\n".join(f"•  {title(i)}: {text(i)}" for i in panel)
-        steps.append((None, tr("novoe.panel_title"), tr("novoe.panel_text", hotkey=hotkey) + "\n\n" + lines))
-    if not steps:
-        steps.append((None, tr("novoe.title", version=version or __version__), tr("novoe.subtitle")))
-    return steps
-
-
-def start_tour(editor, cfg, on_done=None, version: str = None) -> bool:
-    """Короткий курс по новому поверх редактора (тот же вид, что знакомство). on_done() после последнего шага."""
-    from .tour import Tour
-    if getattr(editor, "tour", None) is not None:
-        return False
-    course = Tour(editor, language=False, steps_fn=lambda ed, _lang: tour_steps(ed, cfg, version))
-    editor.tour = course
-
-    def finished():
-        editor.tour = None
-        if on_done is not None:
-            on_done()
-
-    course.finished.connect(finished)
-    course.start()
-    return True

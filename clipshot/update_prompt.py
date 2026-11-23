@@ -92,6 +92,9 @@ def busy_reason(ctx) -> str:
     pending = getattr(ctx, "capture_pending", None)
     if pending is not None and pending():
         return "selector"   # снимок запрошен, окно выделения откроется через доли секунды (Г10 проверки гонок)
+    work = getattr(ctx, "work_window_open", None)
+    if work is not None and work():
+        return "work"   # окно текста с картинки, перевод, несохранённые пометки (1.35)
     if getattr(ctx, "editors", None):
         return "editor"
     blocker = getattr(ctx, "quit_blocker", None)

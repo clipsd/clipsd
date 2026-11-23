@@ -1,6 +1,8 @@
 {
   "settings.accent_tip": "Kolor ramki i wybranych przycisków",
   "settings.accent_tip_plain": "W tym stylu ramka jest neutralna; kolor zostaje przy wybranych przyciskach",
+  "settings.applied": "Zastosowano",
+  "settings.apply": "Zastosuj",
   "settings.auto_save": "Zapisuj każdy zrzut automatycznie (po zmianach w edytorze plik jest aktualizowany)",
   "settings.auto_save_dir": "Folder autozapisu:",
   "settings.autostart": "Uruchamiaj razem z systemem (ikona w zasobniku)",
@@ -67,6 +69,7 @@
   "settings.ocr_ru": "Tylko rosyjski",
   "settings.ocr_ru_en": "Rosyjski i angielski",
   "settings.off": "Wyłącz",
+  "settings.ok": "OK",
   "settings.press_text": "Naciśnij wybraną kombinację klawiszy (na przykład Alt+W).\nOkno zamknie się samo.",
   "settings.press_title": "Naciśnij kombinację klawiszy",
   "settings.press_wait": "Oczekiwanie na naciśnięcie klawiszy…",

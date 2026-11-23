@@ -141,5 +141,8 @@
   "phone.wifi_text": "Le téléphone et l’ordinateur doivent être connectés au même réseau Wi-Fi. Par les données mobiles, la photo n’arrivera pas.",
   "phone.tile_title": "Du téléphone",
   "phone.tile_sub": "photo ou image",
-  "phone.tile_tip": "Prenez une photo ou envoyez une image depuis le téléphone"
+  "phone.tile_tip": "Prenez une photo ou envoyez une image depuis le téléphone",
+  "phone.zoom": "Agrandir",
+  "phone.zoom_caption": "Pointez l’appareil photo du téléphone vers le code",
+  "phone.zoom_tip": "Afficher le code en grand"
 }
