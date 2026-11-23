@@ -118,5 +118,9 @@
   "settings.tray_region": "Снимка на област",
   "settings.update_check": "Проверявай автоматично за актуализации",
   "settings.update_check_tip": "Веднъж на ден ClipSD пита страницата clipsd.github.io дали има нова версия и предлага да я инсталира.",
-  "settings.version_line": "Версия на ClipSD {version}"
+  "settings.version_line": "Версия на ClipSD {version}",
+  "settings.store_updates": "Актуализациите идват през Microsoft Store, ClipSD не ги изтегля сам. Бутонът „Провери за актуализации“ отваря страницата на ClipSD в Microsoft Store.",
+  "settings.autostart_store_open": "Отвори стартирането на Windows",
+  "settings.autostart_store_user": "Автоматичното стартиране на ClipSD е изключено в настройките на Windows. Може да се включи само там: „Настройки → Приложения → Стартиране“.",
+  "settings.autostart_store_policy": "Автоматичното стартиране на ClipSD се управлява от администратора на този компютър."
 }

@@ -13,6 +13,17 @@
 При первом настоящем запуске готовой сборки настройки 1.x копируются (не переносятся) в новую папку один раз:
 config.json, ключ Google (google-translate.key) и счётчик бесплатного перевода (translate-usage.json).
 Оригиналы не трогаются. Импорт модулей (selfcheck сборки, тесты) ничего не пишет.
+
+Microsoft Store (пакет MSIX, store.py). Пакет пишет в тот же %APPDATA%\\ClipSD. Как это делает Windows, проверено
+в GitHub Actions (packaging/windows-store/store_test.ps1, Windows Server 2025, 19.11.2026):
+- папки %APPDATA%\\ClipSD ещё нет (чистая установка из Store): Windows создаёт её в личной папке пакета
+  %LOCALAPPDATA%\\Packages\\<семейство>\\LocalCache\\Roaming\\ClipSD и удаляет вместе с пакетом;
+- папка уже есть (стояла сборка с сайта): Store-сборка читает и пишет прямо в неё, обе сборки видят одни
+  настройки, удаление Store-сборки их не трогает.
+Снять перенаправление может только ограниченная возможность unvirtualizedResources, которую Microsoft даёт
+играм, а не таким программам. Поэтому из Store на сайт: обычная сборка при первом запуске, если своих настроек
+нет, один раз копирует их из личной папки установленного пакета ClipSD (migrate_store). Если пакет уже удалён,
+его настроек больше нет.
 """
 
 import os
@@ -55,6 +66,45 @@ def migrate_legacy(new_dir: Path = None, legacy_dir: Path = None) -> list:
     legacy_dir = Path(legacy_dir or legacy_config_dir())
     if new_dir == legacy_dir or (new_dir / "config.json").exists() or not (legacy_dir / "config.json").exists():
         return []
+    return _copy_settings(legacy_dir, new_dir)
+
+
+def store_settings_dirs(packages_dir: Path = None) -> list:
+    """Папки настроек установленных пакетов ClipSD из Microsoft Store, самая свежая первой (по config.json)."""
+    if packages_dir is None:
+        local = os.environ.get("LOCALAPPDATA")
+        if not local:
+            return []
+        packages_dir = Path(local) / "Packages"
+    found = []
+    try:
+        for package in Path(packages_dir).iterdir():
+            folder = package / "LocalCache" / "Roaming" / "ClipSD"
+            if "clipsd" in package.name.lower() and (folder / "config.json").is_file():
+                found.append(folder)
+    except OSError:
+        return []
+    return sorted(found, key=lambda f: (f / "config.json").stat().st_mtime, reverse=True)
+
+
+def migrate_store(new_dir: Path = None, packages_dir: Path = None) -> list:
+    """Обычная сборка Windows без своих настроек: один раз скопировать настройки установленной Store-сборки.
+    Сама Store-сборка (и всё, что запущено из пакета) ничего не копирует: она и так видит свою папку."""
+    if packages_dir is None:
+        if sys.platform != "win32" or not is_package_build():
+            return []
+        from . import store
+        if store.has_package_identity():
+            return []
+    new_dir = Path(new_dir or config_dir())
+    if (new_dir / "config.json").exists():
+        return []
+    sources = store_settings_dirs(packages_dir)
+    return _copy_settings(sources[0], new_dir) if sources else []
+
+
+def _copy_settings(src_dir: Path, new_dir: Path) -> list:
+    """Скопировать LEGACY_FILES, которых в new_dir ещё нет; config.json последним. Права только владельцу."""
     copied = []
     try:
         new_dir.mkdir(parents=True, exist_ok=True)
@@ -62,7 +112,7 @@ def migrate_legacy(new_dir: Path = None, legacy_dir: Path = None) -> list:
         return []
     # config.json последним: по нему видно, что перенос закончен
     for name in sorted(LEGACY_FILES, key=lambda n: n == "config.json"):
-        src, dst = legacy_dir / name, new_dir / name
+        src, dst = src_dir / name, new_dir / name
         if not src.is_file() or dst.exists():
             continue
         try:

@@ -23,6 +23,8 @@ permissions:
 
 jobs:
   build:
+    # на ветках store/** собирается только пакет Store (задание store)
+    if: ${{ !startsWith(github.ref, 'refs/heads/store/') }}
     runs-on: windows-latest
     timeout-minutes: 60
     env:
@@ -38,8 +40,14 @@ jobs:
       - name: Inno Setup 6
         shell: pwsh
         run: |
-          # always exactly 6.7.1 (a preinstalled other version is replaced)
-          choco install innosetup --version=6.7.1 -y --no-progress --allow-downgrade --force
+          # always exactly 6.7.1 (a preinstalled other version is replaced). The feed of Chocolatey sometimes answers
+          # 503: three tries; if all fail, the version check below decides (the image may already have 6.7.1)
+          foreach ($try in 1..3) {
+            choco install innosetup --version=6.7.1 -y --no-progress --allow-downgrade --force
+            if ($LASTEXITCODE -eq 0) { break }
+            Write-Host "::warning::choco install innosetup: код $LASTEXITCODE (попытка $try из 3)"
+            if ($try -lt 3) { Start-Sleep -Seconds 20 }
+          }
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { throw "Inno Setup не установился" }
           # ISCC.exe of the choco package reports ProductVersion 0.0.0.0: the version is read from every source
@@ -64,6 +72,7 @@ jobs:
           if (-not $vers) { throw "Версия Inno Setup не определилась ($($seen -join '; '))" }
           $other = $vers | Where-Object { -not $_.StartsWith("6.7.1") }
           if ($other) { throw "Inno Setup $($other -join ', ') вместо 6.7.1" }
+          exit 0   # the checks above passed: an exit code left by a failed choco try is not the result
 
       # Placeholders (TODO keys, .invalid addresses) fail a v* tag, warn otherwise.
       - name: Проверка выпуска
@@ -221,3 +230,128 @@ jobs:
           name: ClipSD-Setup-proba
           path: winbuild/proba/dist/*-proba-Setup.exe
           if-no-files-found: error
+
+  # Microsoft Store: MSIX package (packaging/windows-store), the owner's decision 19.11.2026. A separate job: the
+  # ordinary installer above is not touched. The Store signs the package itself; here it is built unsigned (for
+  # Partner Center) and once more with a throwaway test certificate, installed, started and removed.
+  # Result: Actions -> run -> Artifacts -> ClipSD-Store-MSIX.
+  store:
+    # только на ветках store/** и вручную (на main и метках v* не нужен)
+    if: ${{ startsWith(github.ref, 'refs/heads/store/') || github.event_name == 'workflow_dispatch' }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Раскладка исходников для Microsoft Store
+        run: python packaging/stage_windows.py winbuild/store --store
+
+      # Only ClipSD-app.exe: Windows starts it from the package, the Store updates it (no launcher, no Setup.exe)
+      - name: Сборка программы (без запускателя и установщика)
+        working-directory: winbuild/store
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File packaging\build.ps1 -AppOnly
+          if ($LASTEXITCODE -ne 0) { throw "build.ps1 -AppOnly завершился с ошибкой" }
+          $report = Get-Content build\selfcheck.txt -Encoding utf8
+          if (-not ($report -contains "build: store")) { throw "selfcheck Store-сборки: нет 'build: store'" }
+          if (-not ($report -contains "package: none")) { throw "selfcheck вне пакета: ожидали 'package: none'" }
+
+      - name: Автотест вида сборки Store и раскладки пакета
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          & winbuild\store\.venv-build\Scripts\python.exe -X utf8 tests\store_test.py . winbuild\store\test-out\store_test
+          if ($LASTEXITCODE -ne 0) { throw "store_test не прошёл" }
+
+      - name: Раскладка пакета MSIX (манифест, значки, описание на 12 языках)
+        working-directory: winbuild/store
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          & .venv-build\Scripts\python.exe -X utf8 packaging\store\make_msix_layout.py --app dist\ClipSD-app --out build\msix
+          if ($LASTEXITCODE -ne 0) { throw "make_msix_layout.py не удался" }
+
+      - name: MSIX (makepri, makeappx) и копия с тестовой подписью
+        working-directory: winbuild/store
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File packaging\store\build_msix.ps1 `
+            -Layout build\msix\layout -PriSource build\msix\pri -OutDir dist\msix -TestSign
+          if ($LASTEXITCODE -ne 0) { throw "build_msix.ps1 завершился с ошибкой" }
+
+      # 1.31.2 in the Store had boxes instead of "Clip" and "SD" on its tiles: the tile inside the built package
+      # must look like the logo of ClipSD (packaging/windows-store/logo_assets.py, reference/icon-512.png)
+      - name: Значок пакета похож на логотип ClipSD (нет квадратиков вместо букв)
+        working-directory: winbuild/store
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $msix = (Get-ChildItem dist\msix\ClipSD-*-x64.msix | Where-Object { $_.Name -notlike "*testsigned*" })[0].FullName
+          & .venv-build\Scripts\python.exe -X utf8 packaging\store\logo_assets.py --check-msix $msix
+          if ($LASTEXITCODE -ne 0) { throw "значок пакета не похож на логотип ClipSD" }
+
+      - name: Установка тестового MSIX, запуск, настройки обычной сборки, удаление
+        working-directory: winbuild/store
+        shell: pwsh
+        run: |
+          $pkg = (Get-ChildItem dist\msix\*-testsigned.msix)[0].FullName
+          powershell -NoProfile -ExecutionPolicy Bypass -File packaging\store\store_test.ps1 `
+            -Package $pkg -Cert dist\msix\ClipSD-test-signing.cer -Manifest build\msix\layout\AppxManifest.xml `
+            -LogDir test-out\store -KeepCert
+          if ($LASTEXITCODE -ne 0) { throw "Проверка пакета MSIX не прошла" }
+
+      # Windows App Certification Kit: the same checks as the Store runs. Not a part of the image of the runner
+      # (its Windows SDK is installed without it): the WACK feature of the same SDK is added, the installer is
+      # checked for a valid Microsoft signature first. Informational: the job does not fail on it.
+      - name: WACK (Windows App Certification Kit)
+        continue-on-error: true
+        working-directory: winbuild/store
+        shell: pwsh
+        run: |
+          $appcert = "${env:ProgramFiles(x86)}\Windows Kits\10\App Certification Kit\appcert.exe"
+          if (-not (Test-Path $appcert)) {
+            $setup = Join-Path $env:RUNNER_TEMP "winsdksetup.exe"
+            Invoke-WebRequest "https://go.microsoft.com/fwlink/?linkid=2349110" -OutFile $setup
+            $sig = Get-AuthenticodeSignature $setup
+            if ($sig.Status -ne "Valid" -or $sig.SignerCertificate.Subject -notmatch "O=Microsoft Corporation") {
+              throw "winsdksetup.exe: подпись $($sig.Status), $($sig.SignerCertificate.Subject)"
+            }
+            $p = Start-Process $setup -ArgumentList "/features OptionId.WindowsSoftwareLogoToolkit /q /norestart /ceip off" -Wait -PassThru
+            Write-Host "winsdksetup: код $($p.ExitCode)"
+          }
+          if (-not (Test-Path $appcert)) { throw "appcert.exe не найден" }
+          $pkg = (Get-ChildItem dist\msix\*-testsigned.msix)[0].FullName
+          $report = Join-Path (Resolve-Path test-out).Path "wack-report.xml"
+          & $appcert reset
+          & $appcert test -appxpackagepath $pkg -reportoutputpath $report
+          if (-not (Test-Path $report)) { throw "WACK не записал отчёт" }
+          [xml]$r = Get-Content $report
+          Write-Host "WACK: $($r.REPORT.OVERALL_RESULT)"
+          foreach ($t in $r.SelectNodes("//TEST")) {
+            $res = $t.SelectSingleNode("RESULT").InnerText
+            if ($res -and $res -ne "PASS") { Write-Host "::warning title=WACK::$($t.NAME): $res" }
+          }
+          if ($r.REPORT.OVERALL_RESULT -eq "FAIL") { throw "WACK: FAIL (подробности в отчёте)" }
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        if: always()
+        with:
+          retention-days: 14
+          name: ClipSD-Store-MSIX
+          path: |
+            winbuild/store/dist/msix/**
+            winbuild/store/build/msix/layout/AppxManifest.xml
+            winbuild/store/build/selfcheck.txt
+            winbuild/store/test-out/**
+          if-no-files-found: warn

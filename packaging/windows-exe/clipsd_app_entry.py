@@ -2,12 +2,16 @@
 # SPDX-License-Identifier: GPL-3.0-or-later.
 # Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 # Shortcuts start the C launcher {app}\ClipSD.exe (launcher/clipsd_launcher.c), which starts this program.
+# In the Microsoft Store package (packaging/windows-store) there is no launcher: Windows starts this exe itself.
 #
 # Internal command (never shown to the user, used by build.ps1 and CI):
 #   ClipSD-app.exe --selfcheck REPORT_FILE
 #     import everything the program needs, verify an Ed25519 vector through the update channel code,
 #     check the bundled certificate store (no network); write the result into REPORT_FILE and exit
-#     0 or 1. The exe is windowed (no console, an uncaught error would open a dialog), so the result goes
+#     0 or 1. The last line is "build: release|preview|store"; a Store build adds "package: <full name>|none"
+#     and, inside its package, "startup task: <state>".
+#   ClipSD-app.exe --selfcheck-startup REPORT_FILE
+#     Store package only, for CI: the start at login on and off again (see _selfcheck_startup). The exe is windowed (no console, an uncaught error would open a dialog), so the result goes
 #     to a file and every error is caught.
 import os
 import sys
@@ -59,11 +63,14 @@ def _selfcheck(report_path):
         crypto = _check_signature()
         certs = _check_tls()
         from clipshot import build_info
-        kind = "preview" if build_info.is_preview() else "release"
+        kind = build_info.kind()   # preview | store | release
         from clipshot import i18n
         lines = i18n.selfcheck_lines()   # translation catalogs of all 12 languages are inside the build
         if not lines[0].startswith("i18n ok"):
             raise AssertionError("\n".join(lines))
+        if kind == "store":   # Microsoft Store: package identity and the start at login (none outside the package)
+            from clipshot import store
+            lines += store.selfcheck_lines()
         text = (f"ClipSD {clipshot.__version__} selfcheck ok (PyQt6 {PYQT_VERSION_STR}, cryptography {crypto},"
                 f" signature ok, certifi {certs})\n" + "\n".join(lines) + f"\nbuild: {kind}\n")   # build.ps1 and the workflows check it
         code = 0
@@ -76,10 +83,40 @@ def _selfcheck(report_path):
     return code
 
 
+def _selfcheck_startup(report_path):
+    """Microsoft Store package only (CI, packaging/windows-store/store_test.ps1): turn the start at login on and
+    off again through the same code as the settings window (store.set_startup, WinRT StartupTask) and write the
+    state after each step into REPORT_FILE. Exit 0 when it was "enabled" after turning on and "disabled" after
+    turning off. Ends with the start at login off, as before."""
+    lines = []
+    code = 1
+    try:
+        from clipshot import store
+        lines.append(f"package: {store.package_full_name() or 'none'}")
+        lines.append(f"before: {store.startup_state()}")
+        results = {}
+        for name, want in (("enable", True), ("disable", False)):
+            try:
+                results[name] = store.set_startup(want)
+            except store.StartupError as exc:
+                results[name] = f"refused {exc.state}"
+            lines.append(f"{name}: {results[name]}")
+        lines.append(f"after: {store.startup_state()}")
+        code = 0 if results == {"enable": "enabled", "disable": "disabled"} else 1
+    except BaseException:  # noqa: BLE001 (windowed exe)
+        import traceback
+        lines.append("FAILED\n" + traceback.format_exc())
+    with open(report_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    return code
+
+
 def main():
     args = sys.argv[1:]
     if args[:1] == ["--selfcheck"] and len(args) == 2:
         return _selfcheck(args[1])
+    if args[:1] == ["--selfcheck-startup"] and len(args) == 2:
+        return _selfcheck_startup(args[1])
     from clipshot.app import main as app_main
     return app_main()
 

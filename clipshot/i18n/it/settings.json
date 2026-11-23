@@ -118,5 +118,9 @@
   "settings.tray_region": "Cattura un'area",
   "settings.update_check": "Controlla automaticamente gli aggiornamenti",
   "settings.update_check_tip": "Una volta al giorno ClipSD chiede a clipsd.github.io se c'è una nuova versione e propone di installarla.",
-  "settings.version_line": "Versione di ClipSD {version}"
+  "settings.version_line": "Versione di ClipSD {version}",
+  "settings.store_updates": "Gli aggiornamenti arrivano tramite Microsoft Store: ClipSD non li scarica da solo. «Controlla aggiornamenti» apre la pagina di ClipSD in Microsoft Store.",
+  "settings.autostart_store_open": "Apri le app di avvio di Windows",
+  "settings.autostart_store_user": "L'avvio automatico di ClipSD è disattivato nelle impostazioni di Windows. Si può riattivare solo lì: «Impostazioni → App → Avvio».",
+  "settings.autostart_store_policy": "L'avvio automatico di ClipSD è gestito dall'amministratore di questo computer."
 }

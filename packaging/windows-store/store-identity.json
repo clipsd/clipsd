@@ -1,0 +1,7 @@
+{
+  "_comment": "Identity of the Microsoft Store package. Partner Center: app ClipSD > Product management > Product identity (reserved 19.11.2026). Package Family Name: ClipSD.ClipSD_ynnabdvwaxkfc; Store page: https://apps.microsoft.com/detail/9NSWT4W953L9. Not secrets.",
+  "name": "ClipSD.ClipSD",
+  "publisher": "CN=079DE278-715A-4263-8FDC-88C654643F05",
+  "publisher_display_name": "ClipSD",
+  "store_product_id": "9NSWT4W953L9"
+}

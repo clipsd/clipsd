@@ -118,5 +118,9 @@
   "settings.tray_region": "区域截图",
   "settings.update_check": "自动检查更新",
   "settings.update_check_tip": "ClipSD 每天向 clipsd.github.io 查询一次是否有新版本，并提示安装。",
-  "settings.version_line": "ClipSD 版本 {version}"
+  "settings.version_line": "ClipSD 版本 {version}",
+  "settings.store_updates": "更新通过 Microsoft Store 提供，ClipSD 不会自行下载。“检查更新”会打开 Microsoft Store 中的 ClipSD 页面。",
+  "settings.autostart_store_open": "打开 Windows 启动应用设置",
+  "settings.autostart_store_user": "Windows 设置中已关闭 ClipSD 开机自启动，只能在那里重新开启：“设置 → 应用 → 启动”。",
+  "settings.autostart_store_policy": "ClipSD 的开机自启动由此电脑的管理员管理。"
 }

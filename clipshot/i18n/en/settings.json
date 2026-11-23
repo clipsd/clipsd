@@ -118,5 +118,9 @@
   "settings.tray_region": "Capture an area",
   "settings.update_check": "Check for updates automatically",
   "settings.update_check_tip": "Once a day, ClipSD checks clipsd.github.io for a new version and offers to install it.",
-  "settings.version_line": "ClipSD version {version}"
+  "settings.version_line": "ClipSD version {version}",
+  "settings.store_updates": "Updates come through Microsoft Store; ClipSD does not download them itself. “Check for updates” opens the ClipSD page in Microsoft Store.",
+  "settings.autostart_store_open": "Open Windows startup apps",
+  "settings.autostart_store_user": "Starting ClipSD with Windows is turned off in Windows Settings. It can only be turned on there: “Settings → Apps → Startup”.",
+  "settings.autostart_store_policy": "Starting ClipSD with Windows is managed by the administrator of this computer."
 }

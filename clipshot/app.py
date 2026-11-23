@@ -105,6 +105,9 @@ def write_json_atomic(path, data) -> None:
 def load_config(migrate: bool = False) -> dict:
     """migrate=True только при настоящем запуске программы: готовая сборка один раз копирует настройки 1.x."""
     if migrate:
+        copied = paths.migrate_store(CONFIG_PATH.parent)   # Windows: с Microsoft Store на сборку с сайта
+        if copied:
+            print(f"Настройки ClipSD из Microsoft Store скопированы в {CONFIG_PATH.parent}: {', '.join(copied)}")
         copied = paths.migrate_legacy(CONFIG_PATH.parent)
         if copied:
             print(f"Настройки ClipSD 1.x скопированы в {CONFIG_PATH.parent}: {', '.join(copied)}")
@@ -329,6 +332,12 @@ class Clipshot(QObject):
         from . import updater
         updater.start(self)   # итог прошлой попытки, метка запуска, проверка раз в сутки
         self._start_rating()
+        # Microsoft Store: при первом запуске галочка «Запускать ClipSD вместе с Windows» (вместо окна установщика)
+        QTimer.singleShot(1500, self._store_first_run)
+
+    def _store_first_run(self):
+        from .store_welcome import offer_startup
+        self._store_offer = offer_startup(self)   # None вне пакета Store и после первого раза
 
     # --- оценка программы (1.32, feedback.py) ---------------------------------
 
@@ -1541,8 +1550,18 @@ class Clipshot(QObject):
         if self.tray is not None:
             self.tray.setToolTip(self._tray_tip())
         if autostart is not None and autostart != autostart_enabled():
+            from . import store
             try:
                 set_autostart(autostart)
+            except store.StartupError as exc:
+                # Microsoft Store: Windows keeps another state of the StartupTask
+                if exc.state == "disabled_by_user":   # turned off by the person: only Windows Settings may turn it on
+                    self.notify(tr("app.autostart_store_user"))
+                    store.open_startup_settings()
+                elif exc.state in ("disabled_by_policy", "enabled_by_policy"):
+                    self.notify(tr("settings.autostart_store_policy"))
+                else:
+                    self.notify(tr("app.autostart_failed", error=exc))
             except (OSError, subprocess.SubprocessError) as exc:
                 errors.append((("autostart",), tr("app.autostart_failed", error=exc)))
         from . import themes
@@ -1846,8 +1865,10 @@ def main() -> int:
     if is_wayland() and "QT_QPA_PLATFORM" not in os.environ:
         os.environ["QT_QPA_PLATFORM"] = "xcb"
 
-    if sys.platform == "win32":
-        # Своя группа в панели задач Windows и свой значок вместо значка Python.
+    from . import store
+    if sys.platform == "win32" and not store.has_package_identity():
+        # Своя группа в панели задач Windows и свой значок вместо значка Python. В пакете Microsoft Store свой
+        # AppUserModelID задавать нельзя: его даёт пакет (иначе окна не связываются с плиткой и значком пакета).
         try:
             import ctypes
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("SergeyDayneko.ClipSD")

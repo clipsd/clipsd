@@ -118,5 +118,9 @@
   "settings.tray_region": "Capturar uma área",
   "settings.update_check": "Verificar atualizações automaticamente",
   "settings.update_check_tip": "Uma vez por dia, o ClipSD consulta clipsd.github.io para saber se há uma versão nova e oferece instalá-la.",
-  "settings.version_line": "Versão do ClipSD {version}"
+  "settings.version_line": "Versão do ClipSD {version}",
+  "settings.store_updates": "As atualizações chegam pela Microsoft Store; o ClipSD não as baixa sozinho. “Verificar atualizações” abre a página do ClipSD na Microsoft Store.",
+  "settings.autostart_store_open": "Abrir aplicativos de inicialização do Windows",
+  "settings.autostart_store_user": "A inicialização automática do ClipSD está desativada nas configurações do Windows. Ela só pode ser ativada lá: “Configurações → Aplicativos → Inicialização”.",
+  "settings.autostart_store_policy": "A inicialização automática do ClipSD é gerenciada pelo administrador deste computador."
 }
