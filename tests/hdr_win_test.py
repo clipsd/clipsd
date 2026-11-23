@@ -52,11 +52,22 @@ def check(ok, text):
         fails.append(text)
 
 
+def step(name, fn, *args):
+    """Одна проверка: исключение -> FAIL с трассировкой, дальше следующие (один прогон показывает все ошибки)."""
+    try:
+        return fn(*args)
+    except Exception as exc:   # noqa: BLE001
+        import traceback
+        traceback.print_exc()
+        check(False, f"{name}: {type(exc).__name__}: {exc}")
+        return None
+
+
 ENV_ERRORS = (wh.E_ACCESSDENIED, wh.DXGI_ERROR_UNSUPPORTED, wh.DXGI_ERROR_NOT_CURRENTLY_AVAILABLE,
               wh.DXGI_ERROR_SESSION_DISCONNECTED)
 
 # --- 1. DisplayConfig ----------------------------------------------------------------------------------------------
-states = wh.display_states()
+states = step("DisplayConfig", wh.display_states) or []
 print("INFO мониторы:", wh.states_line(states))
 check(isinstance(states, list), "DisplayConfig прочитан без исключений")
 
@@ -108,49 +119,66 @@ for y in range(H):
         i = y * W + x
         vals.append((lin(i % 256) * 2.5, (x / W) * 4.0 - 0.3, lin((i * 7) % 256) * 3.75))
 raw = b"".join(struct.pack("<eeee", r, g, b, 1.0) for r, g, b in vals)
+def pixel_worst(img, ref):
+    worst = 0
+    for y in range(img.height()):
+        for x in range(img.width()):
+            c = img.pixelColor(x, y)
+            k = (y * img.width() + x) * 3
+            worst = max(worst, abs(c.red() - ref[k]), abs(c.green() - ref[k + 1]), abs(c.blue() - ref[k + 2]))
+    return worst
+
+
 refs = wh._Refs()
-try:
-    entry = make_device(refs)
+entry = step("устройство D3D11", make_device, refs)
+src = None
+if entry is not None:
     print(f"INFO D3D11: уровень 0x{entry['level']:X}")
     buf = ctypes.create_string_buffer(raw, len(raw))
-    src = cap._texture(refs, entry["device"], W, H, wh.FMT_R16G16B16A16_FLOAT, wh.USAGE_DEFAULT,
-                       wh.BIND_SHADER_RESOURCE, init=buf, pitch=W * 8)
+    src = step("текстура FP16 с данными", cap._texture, refs, entry["device"], W, H, wh.FMT_R16G16B16A16_FLOAT,
+               wh.USAGE_DEFAULT, wh.BIND_SHADER_RESOURCE, 0, buf, W * 8)
+if src is not None:
     for white in (80, 200, 300):
         gain = wh.gain_for(wh.MODE_HDR, white)
         ref = wh.tonemap_reference(raw, gain)
-        out = cap.gpu_tonemap(entry, refs, src, W, H, gain)
-        check(out is not None, f"{white} нит: шейдер собран и выполнен")
-        if out is None:
-            continue
-        worst = 0
-        for y in range(H):
-            for x in range(W):
-                c = out.pixelColor(x, y)
-                k = (y * W + x) * 3
-                worst = max(worst, abs(c.red() - ref[k]), abs(c.green() - ref[k + 1]), abs(c.blue() - ref[k + 2]))
-        check(worst <= 1, f"{white} нит: видеокарта не дальше 1 от эталона (наибольшее {worst})")
-        cpu = wh.tonemap_qimage(cap._read(entry, refs, src, W, H, wh.FMT_R16G16B16A16_FLOAT, 8), gain)
-        worst = max(abs(getattr(cpu.pixelColor(x, y), ch)() - ref[(y * W + x) * 3 + n])
-                    for y in range(H) for x in range(W) for n, ch in enumerate(("red", "green", "blue")))
-        check(worst <= 1, f"{white} нит: чтение FP16 и процессор не дальше 1 от эталона (наибольшее {worst})")
-    # время на 4K
+
+        def gpu():
+            out = cap.gpu_tonemap(entry, refs, src, W, H, gain)
+            check(out is not None, f"{white} нит: шейдер собран и выполнен")
+            if out is not None:
+                worst = pixel_worst(out, ref)
+                check(worst <= 1, f"{white} нит: видеокарта не дальше 1 от эталона (наибольшее {worst})")
+
+        def cpu():
+            img = wh.tonemap_qimage(cap._read(entry, refs, src, W, H, wh.FMT_R16G16B16A16_FLOAT, 8), gain)
+            worst = pixel_worst(img, ref)
+            check(worst <= 1, f"{white} нит: чтение FP16 и процессор не дальше 1 от эталона (наибольшее {worst})")
+
+        step(f"{white} нит, видеокарта", gpu)
+        step(f"{white} нит, чтение FP16 и процессор", cpu)
+
+
+def timing_4k():
     BW, BH = 3840, 2160
     row = b"".join(struct.pack("<eeee", (i / BW) * 3.0, 0.5, 2.5, 1.0) for i in range(BW))
     bigbuf = ctypes.create_string_buffer(row * BH, BW * BH * 8)
     big = cap._texture(refs, entry["device"], BW, BH, wh.FMT_R16G16B16A16_FLOAT, wh.USAGE_DEFAULT,
-                       wh.BIND_SHADER_RESOURCE, init=bigbuf, pitch=BW * 8)
+                       wh.BIND_SHADER_RESOURCE, 0, bigbuf, BW * 8)
     t0 = time.perf_counter()
-    out = cap.gpu_tonemap(entry, refs, big, BW, BH, 0.4)
+    out = step("4K видеокарта", cap.gpu_tonemap, entry, refs, big, BW, BH, 0.4)
     ms_gpu = (time.perf_counter() - t0) * 1000
     t0 = time.perf_counter()
-    cpu = wh.tonemap_qimage(cap._read(entry, refs, big, BW, BH, wh.FMT_R16G16B16A16_FLOAT, 8), 0.4)
+    cpu = step("4K процессор", lambda: wh.tonemap_qimage(
+        cap._read(entry, refs, big, BW, BH, wh.FMT_R16G16B16A16_FLOAT, 8), 0.4))
     ms_cpu = (time.perf_counter() - t0) * 1000
     print(f"INFO 3840x2160: шейдер с чтением {ms_gpu:.0f} мс, чтение FP16 и процессор {ms_cpu:.0f} мс")
-    check(out is not None and out.width() == BW and cpu.width() == BW, "4K: оба пути дают кадр")
-except Exception as exc:   # noqa: BLE001
-    check(False, f"шейдер на синтетическом кадре: {type(exc).__name__}: {exc}")
-finally:
-    refs.close()
+    check(out is not None and out.width() == BW, "4K: видеокарта дала кадр")
+    check(cpu is not None and cpu.width() == BW, "4K: процессор дал кадр")
+
+
+if entry is not None:
+    step("время на 4K", timing_4k)
+refs.close()
 
 # --- 4. дублирование B8G8R8A8 против GDI -----------------------------------------------------------------------------
 
@@ -220,14 +248,22 @@ for o in outs[:2]:
             continue
         check(False, f"дублирование {o.device}: ошибка вызова {exc}")
         continue
-    t0 = time.perf_counter()
-    gdi = gdi_grab(x, y, w, h)
-    ms_gdi = (time.perf_counter() - t0) * 1000
-    print(f"INFO {o.device} {w}x{h}: DXGI {ms_dup:.0f} мс (первый, с устройством), {ms_dup2:.0f} мс (второй), "
-          f"GDI {ms_gdi:.0f} мс, путь «{cap.last_path}»")
+    except Exception as exc:   # noqa: BLE001 — ошибка в коде (TypeError и т.п.): FAIL, проверка идёт дальше
+        import traceback
+        traceback.print_exc()
+        check(False, f"дублирование {o.device}: {type(exc).__name__}: {exc}")
+        continue
     check((img.width(), img.height()) == (w, h), f"{o.device}: кадр DXGI размером с монитор ({img.width()}x{img.height()})")
-    share, total = compare(img, gdi)
-    check(share >= 0.98, f"{o.device}: DXGI и GDI совпадают в {share * 100:.1f} % из {total} точек")
+    t0 = time.perf_counter()
+    gdi = step(f"{o.device}: снимок GDI", gdi_grab, x, y, w, h)
+    ms_gdi = (time.perf_counter() - t0) * 1000
+    print(f"INFO {o.device} {w}x{h}: DXGI {ms_dup:.0f} мс (первый), {ms_dup2:.0f} мс (второй), "
+          f"GDI {ms_gdi:.0f} мс, путь «{cap.last_path}»")
+    if gdi is not None:
+        res = step(f"{o.device}: сравнение с GDI", compare, img, gdi)
+        if res is not None:
+            share, total = res
+            check(share >= 0.98, f"{o.device}: DXGI и GDI совпадают в {share * 100:.1f} % из {total} точек")
     dup_ok = True
 if not dup_ok:
     print("INFO дублирование не проверено на живом столе (см. SKIP выше); шейдер и выходы проверены")

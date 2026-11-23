@@ -402,20 +402,51 @@ D3D_DRIVER_TYPE_UNKNOWN, D3D_DRIVER_TYPE_HARDWARE, D3D_DRIVER_TYPE_WARP = 0, 1, 
 FL_11_0 = 0xB000
 D3D11_SDK_VERSION = 7
 
-# Номера методов в таблицах COM (порядок методов в mingw-w64 d3d11.h, dxgi.h, dxgi1_2.h, dxgi1_5.h).
-RELEASE = 2
-QUERY_INTERFACE = 0
-FACTORY1_ENUM_ADAPTERS1 = 12
-ADAPTER_ENUM_OUTPUTS, ADAPTER1_GET_DESC1 = 7, 10
-OUTPUT_GET_DESC, OUTPUT5_DUPLICATE_OUTPUT1 = 7, 26
-DUPL_GET_DESC, DUPL_ACQUIRE_NEXT_FRAME, DUPL_RELEASE_FRAME = 7, 8, 14
-DEV_CREATE_BUFFER, DEV_CREATE_TEXTURE2D, DEV_CREATE_SRV, DEV_CREATE_UAV = 3, 5, 7, 8
-DEV_CREATE_COMPUTE_SHADER, DEV_GET_FEATURE_LEVEL, DEV_GET_DEVICE_REMOVED_REASON = 18, 37, 39
-CTX_MAP, CTX_UNMAP, CTX_DISPATCH, CTX_COPY_RESOURCE = 14, 15, 41, 47
-CTX_CS_SET_SRV, CTX_CS_SET_UAV, CTX_CS_SET_SHADER, CTX_CS_SET_CB = 67, 68, 69, 71
-TEX2D_GET_DESC = 10
-DXGIDEVICE_GET_ADAPTER = 7
-BLOB_GET_POINTER, BLOB_GET_SIZE = 3, 4
+# Методы COM: имя -> (номер в таблице методов, тип ответа, типы аргументов БЕЗ скрытого this). Номера и списки
+# аргументов сверены с mingw-w64 (d3d11.h, dxgi.h, dxgi1_2.h, dxgi1_5.h, d3dcommon.h) и проверяются тестом
+# tests/hdr_test.py: число аргументов здесь против SDK и число аргументов в каждом вызове com()/com_hr() против этой
+# таблицы (ошибка числа аргументов иначе видна только на Windows).
+_P, _PP, _G = ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p), ctypes.c_void_p   # _G: REFIID (адрес GUID)
+METHODS = {
+    "IUnknown.QueryInterface": (0, I32, [_G, _PP]),
+    "IUnknown.Release": (2, U32, []),
+    "IDXGIFactory1.EnumAdapters1": (12, I32, [U32, _PP]),
+    "IDXGIAdapter.EnumOutputs": (7, I32, [U32, _PP]),
+    "IDXGIAdapter1.GetDesc1": (10, I32, [_P]),
+    "IDXGIOutput.GetDesc": (7, I32, [_P]),
+    "IDXGIOutput5.DuplicateOutput1": (26, I32, [_P, U32, U32, _P, _PP]),
+    "IDXGIDevice.GetAdapter": (7, I32, [_PP]),
+    "IDXGIOutputDuplication.AcquireNextFrame": (8, I32, [U32, _P, _PP]),
+    "IDXGIOutputDuplication.ReleaseFrame": (14, I32, []),
+    "ID3D11Device.CreateBuffer": (3, I32, [_P, _P, _PP]),
+    "ID3D11Device.CreateTexture2D": (5, I32, [_P, _P, _PP]),
+    "ID3D11Device.CreateShaderResourceView": (7, I32, [_P, _P, _PP]),
+    "ID3D11Device.CreateUnorderedAccessView": (8, I32, [_P, _P, _PP]),
+    "ID3D11Device.CreateComputeShader": (18, I32, [ctypes.c_char_p, ctypes.c_size_t, _P, _PP]),
+    "ID3D11Device.GetDeviceRemovedReason": (39, I32, []),
+    "ID3D11DeviceContext.Map": (14, I32, [_P, U32, U32, U32, _P]),
+    "ID3D11DeviceContext.Unmap": (15, None, [_P, U32]),
+    "ID3D11DeviceContext.Dispatch": (41, None, [U32, U32, U32]),
+    "ID3D11DeviceContext.CopyResource": (47, None, [_P, _P]),
+    "ID3D11DeviceContext.CSSetShaderResources": (67, None, [U32, U32, _P]),
+    "ID3D11DeviceContext.CSSetUnorderedAccessViews": (68, None, [U32, U32, _P, _P]),
+    "ID3D11DeviceContext.CSSetShader": (69, None, [_P, _P, U32]),
+    "ID3D11DeviceContext.CSSetConstantBuffers": (71, None, [U32, U32, _P]),
+    "ID3D11Texture2D.GetDesc": (10, None, [_P]),
+    "ID3DBlob.GetBufferPointer": (3, _P, []),
+    "ID3DBlob.GetBufferSize": (4, ctypes.c_size_t, []),
+}
+
+# Функции DLL: имя -> (DLL, тип ответа, типы аргументов); число аргументов тоже проверяет tests/hdr_test.py.
+EXPORTS = {
+    "CreateDXGIFactory1": ("dxgi", I32, [_P, _PP]),
+    # pAdapter, DriverType, Software, Flags, pFeatureLevels, FeatureLevels, SDKVersion, ppDevice, pFeatureLevel,
+    # ppImmediateContext (d3d11.h): 10 аргументов (в 1f7614c не хватало SDKVersion, Windows CI: TypeError)
+    "D3D11CreateDevice": ("d3d11", I32, [_P, U32, _P, U32, ctypes.POINTER(U32), U32, U32, _PP, ctypes.POINTER(U32),
+                                         _PP]),
+    "D3DCompile": ("d3dcompiler_47", I32, [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_char_p, _P, _P,
+                                           ctypes.c_char_p, ctypes.c_char_p, U32, U32, _PP, _PP]),
+}
 
 
 class GUID(ctypes.Structure):
@@ -509,7 +540,11 @@ _protos = {}
 
 
 def vcall(obj, index, restype, argtypes, *args):
-    """Вызов метода COM номер index у объекта obj (адрес int)."""
+    """Вызов метода COM номер index у объекта obj (адрес int); this передаётся первым сам."""
+    if not obj:
+        raise CaptureFailed("пустой указатель COM")
+    if len(args) != len(argtypes):
+        raise CaptureFailed(f"метод {index}: {len(args)} аргументов вместо {len(argtypes)}")
     key = (restype, tuple(argtypes))
     proto = _protos.get(key)
     if proto is None:
@@ -519,17 +554,32 @@ def vcall(obj, index, restype, argtypes, *args):
     return proto(fn)(obj, *args)
 
 
-def hr_call(what, obj, index, argtypes, *args):
-    hr = vcall(obj, index, I32, argtypes, *args)
+def com(name, obj, *args):
+    """Метод COM по имени из METHODS."""
+    index, restype, argtypes = METHODS[name]
+    return vcall(obj, index, restype, argtypes, *args)
+
+
+def com_hr(name, obj, *args):
+    """Метод COM, который отвечает HRESULT: ошибка -> HResultError."""
+    hr = com(name, obj, *args)
     if hr < 0:
-        raise HResultError(what, hr)
+        raise HResultError(name, hr)
     return hr
+
+
+def export(lib, name):
+    """Функция DLL с типами из EXPORTS."""
+    _dll, restype, argtypes = EXPORTS[name]
+    fn = getattr(lib, name)
+    fn.argtypes, fn.restype = argtypes, restype
+    return fn
 
 
 def release(obj):
     if obj:
         try:
-            vcall(obj, RELEASE, U32, [])
+            com("IUnknown.Release", obj)
         except Exception:   # noqa: BLE001
             pass
 
@@ -603,13 +653,9 @@ class DxgiCapturer:
 
     def _libs(self):
         if self._dxgi is None:
-            dxgi = ctypes.WinDLL("dxgi")
-            dxgi.CreateDXGIFactory1.argtypes = [ctypes.POINTER(GUID), PP]
-            dxgi.CreateDXGIFactory1.restype = I32
-            d3d11 = ctypes.WinDLL("d3d11")
-            d3d11.D3D11CreateDevice.argtypes = [ctypes.c_void_p, U32, ctypes.c_void_p, U32, ctypes.POINTER(U32), U32,
-                                                PP, ctypes.POINTER(U32), PP]
-            d3d11.D3D11CreateDevice.restype = I32
+            dxgi, d3d11 = ctypes.WinDLL("dxgi"), ctypes.WinDLL("d3d11")
+            export(dxgi, "CreateDXGIFactory1")
+            export(d3d11, "D3D11CreateDevice")
             self._dxgi, self._d3d11 = dxgi, d3d11
         return self._dxgi, self._d3d11
 
@@ -623,10 +669,7 @@ class DxgiCapturer:
                 lib = ctypes.WinDLL(os.path.join(_system_dir(), "d3dcompiler_47.dll"))
             except (OSError, ImportError):
                 lib = ctypes.WinDLL("d3dcompiler_47")
-            fn = lib.D3DCompile
-            fn.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p,
-                           ctypes.c_char_p, ctypes.c_char_p, U32, U32, PP, PP]
-            fn.restype = I32
+            fn = export(lib, "D3DCompile")
             self._compile = fn
         return self._compile
 
@@ -639,12 +682,12 @@ class DxgiCapturer:
                 if hr < 0 or not code.value:
                     msg = ""
                     if errors.value:
-                        p = vcall(errors.value, BLOB_GET_POINTER, ctypes.c_void_p, [])
-                        n = vcall(errors.value, BLOB_GET_SIZE, ctypes.c_size_t, [])
+                        p = com("ID3DBlob.GetBufferPointer", errors.value)
+                        n = com("ID3DBlob.GetBufferSize", errors.value)
                         msg = ctypes.string_at(p, n).decode("ascii", "replace").strip()[:200]
                     raise HResultError(f"D3DCompile {msg}", hr)
-                p = vcall(code.value, BLOB_GET_POINTER, ctypes.c_void_p, [])
-                n = vcall(code.value, BLOB_GET_SIZE, ctypes.c_size_t, [])
+                p = com("ID3DBlob.GetBufferPointer", code.value)
+                n = com("ID3DBlob.GetBufferSize", code.value)
                 self._shader_code = ctypes.string_at(p, n)
             finally:
                 release(code.value)
@@ -667,20 +710,20 @@ class DxgiCapturer:
         found = []
         for a in range(16):
             adapter = ctypes.c_void_p()
-            if vcall(factory, FACTORY1_ENUM_ADAPTERS1, I32, [ctypes.c_uint32, PP], a, ctypes.byref(adapter)) < 0:
+            if com("IDXGIFactory1.EnumAdapters1", factory, a, ctypes.byref(adapter)) < 0:
                 break
             refs.add(adapter.value)
             ad = DXGI_ADAPTER_DESC1()
-            hr_call("GetDesc1", adapter.value, ADAPTER1_GET_DESC1, [ctypes.c_void_p], ctypes.byref(ad))
+            com_hr("IDXGIAdapter1.GetDesc1", adapter.value, ctypes.byref(ad))
             luid = (ad.AdapterLuid.LowPart, ad.AdapterLuid.HighPart)
             for o in range(16):
                 output = ctypes.c_void_p()
-                if vcall(adapter.value, ADAPTER_ENUM_OUTPUTS, I32, [ctypes.c_uint32, PP], o,
+                if com("IDXGIAdapter.EnumOutputs", adapter.value, o,
                          ctypes.byref(output)) < 0:
                     break
                 refs.add(output.value)
                 od = DXGI_OUTPUT_DESC()
-                hr_call("IDXGIOutput::GetDesc", output.value, OUTPUT_GET_DESC, [ctypes.c_void_p], ctypes.byref(od))
+                com_hr("IDXGIOutput.GetDesc", output.value, ctypes.byref(od))
                 if od.AttachedToDesktop:
                     found.append((adapter.value, luid, output.value, od))
         return found
@@ -705,7 +748,7 @@ class DxgiCapturer:
     def _device(self, adapter, luid, fresh=False):
         entry = self.devices.get(luid)
         if entry is not None and not fresh:
-            if vcall(entry["device"], DEV_GET_DEVICE_REMOVED_REASON, I32, []) == S_OK:
+            if com("ID3D11Device.GetDeviceRemovedReason", entry["device"]) == S_OK:
                 return entry
             fresh = True
         if entry is not None and fresh:
@@ -741,8 +784,7 @@ class DxgiCapturer:
                 raise CaptureFailed("уровень D3D ниже 11.0")
             code = self.shader_code()
             cs = ctypes.c_void_p()
-            hr_call("CreateComputeShader", entry["device"], DEV_CREATE_COMPUTE_SHADER,
-                    [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_void_p, PP], code, len(code), None, ctypes.byref(cs))
+            com_hr("ID3D11Device.CreateComputeShader", entry["device"], code, len(code), None, ctypes.byref(cs))
             entry["cs"] = cs.value
         except Exception as exc:   # noqa: BLE001
             entry["cs_failed"] = True
@@ -757,8 +799,7 @@ class DxgiCapturer:
         if init is not None:
             data = D3D11_SUBRESOURCE_DATA(ctypes.cast(init, ctypes.c_void_p), pitch, 0)
         tex = ctypes.c_void_p()
-        hr_call("CreateTexture2D", dev, DEV_CREATE_TEXTURE2D, [ctypes.c_void_p, ctypes.c_void_p, PP],
-                ctypes.byref(desc), ctypes.byref(data) if data is not None else None, ctypes.byref(tex))
+        com_hr("ID3D11Device.CreateTexture2D", dev, ctypes.byref(desc), ctypes.byref(data) if data is not None else None, ctypes.byref(tex))
         return refs.add(tex.value)
 
     def _read(self, entry, refs, tex, w, h, fmt, bpp):
@@ -766,12 +807,12 @@ class DxgiCapturer:
         from PyQt6.QtGui import QImage
         dev, ctx = entry["device"], entry["context"]
         staging = self._texture(refs, dev, w, h, fmt, USAGE_STAGING, 0, CPU_ACCESS_READ)
-        vcall(ctx, CTX_COPY_RESOURCE, None, [ctypes.c_void_p, ctypes.c_void_p], staging, tex)
+        com("ID3D11DeviceContext.CopyResource", ctx, staging, tex)
         qfmt = {FMT_R8G8B8A8_UNORM: QImage.Format.Format_RGBX8888, FMT_B8G8R8A8_UNORM: QImage.Format.Format_RGB32,
                 FMT_R16G16B16A16_FLOAT: QImage.Format.Format_RGBX16FPx4}[fmt]
         img = QImage(w, h, qfmt)
         mapped = D3D11_MAPPED_SUBRESOURCE()
-        hr_call("Map", ctx, CTX_MAP, [ctypes.c_void_p, U32, U32, U32, ctypes.c_void_p], staging, 0, MAP_READ, 0,
+        com_hr("ID3D11DeviceContext.Map", ctx, staging, 0, MAP_READ, 0,
                 ctypes.byref(mapped))
         try:
             bits = img.bits()
@@ -783,7 +824,7 @@ class DxgiCapturer:
                 for y in range(h):
                     ctypes.memmove(base + y * bpl, mapped.pData + y * mapped.RowPitch, row)
         finally:
-            vcall(ctx, CTX_UNMAP, None, [ctypes.c_void_p, U32], staging, 0)
+            com("ID3D11DeviceContext.Unmap", ctx, staging, 0)
         return img
 
     def gpu_tonemap(self, entry, refs, src_f16, w, h, gain):
@@ -793,32 +834,29 @@ class DxgiCapturer:
             return None
         dev, ctx = entry["device"], entry["context"]
         srv, uav, cb = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
-        hr_call("CreateShaderResourceView", dev, DEV_CREATE_SRV, [ctypes.c_void_p, ctypes.c_void_p, PP],
-                src_f16, None, ctypes.byref(srv))
+        com_hr("ID3D11Device.CreateShaderResourceView", dev, src_f16, None, ctypes.byref(srv))
         refs.add(srv.value)
         out = self._texture(refs, dev, w, h, FMT_R8G8B8A8_UNORM, USAGE_DEFAULT, BIND_UNORDERED_ACCESS)
-        hr_call("CreateUnorderedAccessView", dev, DEV_CREATE_UAV, [ctypes.c_void_p, ctypes.c_void_p, PP],
-                out, None, ctypes.byref(uav))
+        com_hr("ID3D11Device.CreateUnorderedAccessView", dev, out, None, ctypes.byref(uav))
         refs.add(uav.value)
         params = struct.pack("<fIII", gain, w, h, 0)
         pbuf = ctypes.create_string_buffer(params, 16)
         bdesc = D3D11_BUFFER_DESC(16, USAGE_IMMUTABLE, BIND_CONSTANT_BUFFER, 0, 0, 0)
         bdata = D3D11_SUBRESOURCE_DATA(ctypes.cast(pbuf, ctypes.c_void_p), 16, 0)
-        hr_call("CreateBuffer", dev, DEV_CREATE_BUFFER, [ctypes.c_void_p, ctypes.c_void_p, PP],
-                ctypes.byref(bdesc), ctypes.byref(bdata), ctypes.byref(cb))
+        com_hr("ID3D11Device.CreateBuffer", dev, ctypes.byref(bdesc), ctypes.byref(bdata), ctypes.byref(cb))
         refs.add(cb.value)
         one = ctypes.c_void_p
         srvs, uavs, cbs = (one * 1)(srv.value), (one * 1)(uav.value), (one * 1)(cb.value)
         none = (one * 1)(None)
-        vcall(ctx, CTX_CS_SET_SHADER, None, [ctypes.c_void_p, ctypes.c_void_p, U32], cs, None, 0)
-        vcall(ctx, CTX_CS_SET_SRV, None, [U32, U32, ctypes.c_void_p], 0, 1, srvs)
-        vcall(ctx, CTX_CS_SET_UAV, None, [U32, U32, ctypes.c_void_p, ctypes.c_void_p], 0, 1, uavs, None)
-        vcall(ctx, CTX_CS_SET_CB, None, [U32, U32, ctypes.c_void_p], 0, 1, cbs)
-        vcall(ctx, CTX_DISPATCH, None, [U32, U32, U32], (w + 15) // 16, (h + 15) // 16, 1)
-        vcall(ctx, CTX_CS_SET_SRV, None, [U32, U32, ctypes.c_void_p], 0, 1, none)
-        vcall(ctx, CTX_CS_SET_UAV, None, [U32, U32, ctypes.c_void_p, ctypes.c_void_p], 0, 1, none, None)
-        vcall(ctx, CTX_CS_SET_CB, None, [U32, U32, ctypes.c_void_p], 0, 1, none)
-        vcall(ctx, CTX_CS_SET_SHADER, None, [ctypes.c_void_p, ctypes.c_void_p, U32], None, None, 0)
+        com("ID3D11DeviceContext.CSSetShader", ctx, cs, None, 0)
+        com("ID3D11DeviceContext.CSSetShaderResources", ctx, 0, 1, srvs)
+        com("ID3D11DeviceContext.CSSetUnorderedAccessViews", ctx, 0, 1, uavs, None)
+        com("ID3D11DeviceContext.CSSetConstantBuffers", ctx, 0, 1, cbs)
+        com("ID3D11DeviceContext.Dispatch", ctx, (w + 15) // 16, (h + 15) // 16, 1)
+        com("ID3D11DeviceContext.CSSetShaderResources", ctx, 0, 1, none)
+        com("ID3D11DeviceContext.CSSetUnorderedAccessViews", ctx, 0, 1, none, None)
+        com("ID3D11DeviceContext.CSSetConstantBuffers", ctx, 0, 1, none)
+        com("ID3D11DeviceContext.CSSetShader", ctx, None, None, 0)
         return self._read(entry, refs, out, w, h, FMT_R8G8B8A8_UNORM, 4)
 
     # --- снимок ---
@@ -852,8 +890,7 @@ class DxgiCapturer:
 
     def _duplicate(self, refs, entry, output, hdr):
         out5 = ctypes.c_void_p()
-        hr_call("QueryInterface IDXGIOutput5", output, QUERY_INTERFACE, [ctypes.POINTER(GUID), PP],
-                ctypes.byref(GUID.parse(IID_IDXGIOutput5)), ctypes.byref(out5))
+        com_hr("IUnknown.QueryInterface", output, ctypes.byref(GUID.parse(IID_IDXGIOutput5)), ctypes.byref(out5))
         refs.add(out5.value)
         fmts = [FMT_R16G16B16A16_FLOAT, FMT_B8G8R8A8_UNORM] if hdr else [FMT_B8G8R8A8_UNORM]
         arr = (U32 * len(fmts))(*fmts)
@@ -866,8 +903,7 @@ class DxgiCapturer:
             set_dpi.argtypes, set_dpi.restype = [ctypes.c_void_p], ctypes.c_void_p
             before = set_dpi(ctypes.c_void_p(-4))   # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
         try:
-            hr_call("DuplicateOutput1", out5.value, OUTPUT5_DUPLICATE_OUTPUT1,
-                    [ctypes.c_void_p, U32, U32, ctypes.c_void_p, PP], entry["device"], 0, len(fmts), arr,
+            com_hr("IDXGIOutput5.DuplicateOutput1", out5.value, entry["device"], 0, len(fmts), arr,
                     ctypes.byref(dup))
         finally:
             if before:
@@ -880,19 +916,18 @@ class DxgiCapturer:
         выход из текущего перечисления."""
         try:
             dxgi_dev, adapter = ctypes.c_void_p(), ctypes.c_void_p()
-            hr_call("QueryInterface IDXGIDevice", entry["device"], QUERY_INTERFACE, [ctypes.POINTER(GUID), PP],
-                    ctypes.byref(GUID.parse(IID_IDXGIDevice)), ctypes.byref(dxgi_dev))
+            com_hr("IUnknown.QueryInterface", entry["device"], ctypes.byref(GUID.parse(IID_IDXGIDevice)), ctypes.byref(dxgi_dev))
             refs.add(dxgi_dev.value)
-            hr_call("IDXGIDevice::GetAdapter", dxgi_dev.value, DXGIDEVICE_GET_ADAPTER, [PP], ctypes.byref(adapter))
+            com_hr("IDXGIDevice.GetAdapter", dxgi_dev.value, ctypes.byref(adapter))
             refs.add(adapter.value)
             for o in range(16):
                 output = ctypes.c_void_p()
-                if vcall(adapter.value, ADAPTER_ENUM_OUTPUTS, I32, [ctypes.c_uint32, PP], o,
+                if com("IDXGIAdapter.EnumOutputs", adapter.value, o,
                          ctypes.byref(output)) < 0:
                     break
                 refs.add(output.value)
                 od = DXGI_OUTPUT_DESC()
-                hr_call("IDXGIOutput::GetDesc", output.value, OUTPUT_GET_DESC, [ctypes.c_void_p], ctypes.byref(od))
+                com_hr("IDXGIOutput.GetDesc", output.value, ctypes.byref(od))
                 if wstr(od.DeviceName) == device_name:
                     return output.value
         except CaptureFailed:
@@ -916,13 +951,13 @@ class DxgiCapturer:
 
         def acquire(timeout_ms):
             info, res = DXGI_OUTDUPL_FRAME_INFO(), ctypes.c_void_p()
-            hr = vcall(holder["dup"], DUPL_ACQUIRE_NEXT_FRAME, I32, [U32, ctypes.c_void_p, PP], timeout_ms,
+            hr = com("IDXGIOutputDuplication.AcquireNextFrame", holder["dup"], timeout_ms,
                        ctypes.byref(info), ctypes.byref(res))
             return hr, info, res.value
 
         def release_frame(res):
             release(res)
-            vcall(holder["dup"], DUPL_RELEASE_FRAME, I32, [])
+            com("IDXGIOutputDuplication.ReleaseFrame", holder["dup"])
 
         def recreate():   # DXGI_ERROR_ACCESS_LOST: смена режима, стола; дублирование создаётся заново
             refs.drop(holder["dup"])
@@ -931,11 +966,10 @@ class DxgiCapturer:
         _info, res = acquire_frame(acquire, release_frame, recreate)
         try:
             tex = ctypes.c_void_p()
-            hr_call("QueryInterface ID3D11Texture2D", res, QUERY_INTERFACE, [ctypes.POINTER(GUID), PP],
-                    ctypes.byref(GUID.parse(IID_ID3D11Texture2D)), ctypes.byref(tex))
+            com_hr("IUnknown.QueryInterface", res, ctypes.byref(GUID.parse(IID_ID3D11Texture2D)), ctypes.byref(tex))
             refs.add(tex.value)
             td = D3D11_TEXTURE2D_DESC()
-            vcall(tex.value, TEX2D_GET_DESC, None, [ctypes.c_void_p], ctypes.byref(td))
+            com("ID3D11Texture2D.GetDesc", tex.value, ctypes.byref(td))
             w, h, fmt = td.Width, td.Height, td.Format
             dev, ctx = entry["device"], entry["context"]
             if hdr and fmt != FMT_R16G16B16A16_FLOAT:
@@ -945,7 +979,7 @@ class DxgiCapturer:
             if fmt == FMT_R16G16B16A16_FLOAT:
                 # своя копия с привязкой для шейдера (у текстуры DXGI её может не быть)
                 copy = self._texture(refs, dev, w, h, fmt, USAGE_DEFAULT, BIND_SHADER_RESOURCE)
-                vcall(ctx, CTX_COPY_RESOURCE, None, [ctypes.c_void_p, ctypes.c_void_p], copy, tex.value)
+                com("ID3D11DeviceContext.CopyResource", ctx, copy, tex.value)
                 try:
                     img = self.gpu_tonemap(entry, refs, copy, w, h, gain)
                 except HResultError as exc:   # нехватка памяти видеокарты и т.п.: перевод на процессоре

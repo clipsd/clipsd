@@ -61,6 +61,70 @@ check((g.Data1, g.Data2, g.Data3, list(g.Data4)) == (0x80a07424, 0xab52, 0x42eb,
                                                      [0x83, 0x3c, 0x0c, 0x42, 0xfd, 0x28, 0x2d, 0x98]),
       "GUID IDXGIOutput5 разобран как в dxgi1_5.h")
 
+# --- 1б. сигнатуры COM и функций DLL (класс ошибки 1f7614c: D3D11CreateDevice без SDKVersion, Windows CI) -----------
+# Эталон выписан из mingw-w64 (d3d11.h, dxgi.h, dxgi1_2.h, dxgi1_5.h, d3dcommon.h, d3dcompiler.h) скриптом по *Vtbl:
+# имя -> (номер метода, число аргументов без this, метод void).
+SDK = {
+    "IUnknown.QueryInterface": (0, 2, False), "IUnknown.Release": (2, 0, False),
+    "IDXGIFactory1.EnumAdapters1": (12, 2, False), "IDXGIAdapter.EnumOutputs": (7, 2, False),
+    "IDXGIAdapter1.GetDesc1": (10, 1, False), "IDXGIOutput.GetDesc": (7, 1, False),
+    "IDXGIOutput5.DuplicateOutput1": (26, 5, False), "IDXGIDevice.GetAdapter": (7, 1, False),
+    "IDXGIOutputDuplication.AcquireNextFrame": (8, 3, False), "IDXGIOutputDuplication.ReleaseFrame": (14, 0, False),
+    "ID3D11Device.CreateBuffer": (3, 3, False), "ID3D11Device.CreateTexture2D": (5, 3, False),
+    "ID3D11Device.CreateShaderResourceView": (7, 3, False), "ID3D11Device.CreateUnorderedAccessView": (8, 3, False),
+    "ID3D11Device.CreateComputeShader": (18, 4, False), "ID3D11Device.GetDeviceRemovedReason": (39, 0, False),
+    "ID3D11DeviceContext.Map": (14, 5, False), "ID3D11DeviceContext.Unmap": (15, 2, True),
+    "ID3D11DeviceContext.Dispatch": (41, 3, True), "ID3D11DeviceContext.CopyResource": (47, 2, True),
+    "ID3D11DeviceContext.CSSetShaderResources": (67, 3, True),
+    "ID3D11DeviceContext.CSSetUnorderedAccessViews": (68, 4, True),
+    "ID3D11DeviceContext.CSSetShader": (69, 3, True), "ID3D11DeviceContext.CSSetConstantBuffers": (71, 3, True),
+    "ID3D11Texture2D.GetDesc": (10, 1, True), "ID3DBlob.GetBufferPointer": (3, 0, False),
+    "ID3DBlob.GetBufferSize": (4, 0, False),
+}
+SDK_EXPORTS = {"CreateDXGIFactory1": 2, "D3D11CreateDevice": 10, "D3DCompile": 11}
+bad = [n for n, (idx, nargs, void) in SDK.items()
+       if n not in wh.METHODS or wh.METHODS[n][0] != idx or len(wh.METHODS[n][2]) != nargs
+       or (wh.METHODS[n][1] is None) != void]
+check(not bad and set(wh.METHODS) <= set(SDK), f"METHODS: номера, число аргументов и void как в SDK {bad}")
+bad = [n for n, k in SDK_EXPORTS.items() if len(wh.EXPORTS[n][2]) != k]
+check(not bad and set(wh.EXPORTS) == set(SDK_EXPORTS), f"EXPORTS: число аргументов как в SDK {bad}")
+
+import ast
+here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+problems, seen = [], 0
+for rel in ("clipshot/win_hdr.py", "tests/hdr_win_test.py"):
+    tree = ast.parse(open(os.path.join(here, rel), encoding="utf-8").read())
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or any(isinstance(a, ast.Starred) for a in node.args) or node.keywords:
+            continue
+        f = node.func
+        fname = f.id if isinstance(f, ast.Name) else f.attr if isinstance(f, ast.Attribute) else None
+        if fname in ("com", "com_hr") and node.args and isinstance(node.args[0], ast.Constant):
+            name, given = node.args[0].value, len(node.args) - 2
+            want = len(wh.METHODS[name][2]) if name in wh.METHODS else None
+            seen += 1
+            if want != given:
+                problems.append(f"{rel}:{node.lineno} {name}: {given} вместо {want}")
+        elif fname in wh.EXPORTS:
+            seen += 1
+            if len(node.args) != len(wh.EXPORTS[fname][2]):
+                problems.append(f"{rel}:{node.lineno} {fname}: {len(node.args)} вместо {len(wh.EXPORTS[fname][2])}")
+        elif isinstance(f, ast.Call) and isinstance(f.func, ast.Attribute) and f.func.attr == "_compiler":
+            seen += 1
+            if len(node.args) != len(wh.EXPORTS["D3DCompile"][2]):
+                problems.append(f"{rel}:{node.lineno} D3DCompile: {len(node.args)} аргументов")
+check(not problems and seen >= 40, f"каждый вызов COM и DLL с числом аргументов по таблице ({seen} вызовов) {problems}")
+try:
+    wh.vcall(0x1000, 3, wh.I32, [wh.U32], 1, 2)
+    check(False, "лишний аргумент отклоняется до вызова")
+except wh.CaptureFailed:
+    check(True, "лишний аргумент к методу COM отклоняется до вызова (не падение, а откат на GDI)")
+try:
+    wh.com("IUnknown.Release", None)
+    check(False, "пустой указатель COM отклоняется")
+except wh.CaptureFailed:
+    check(True, "пустой указатель COM отклоняется до вызова")
+
 # --- 2. перевод цвета --------------------------------------------------------------------------------------------
 check(wh.gain_for(wh.MODE_HDR, 80) == 1.0, "HDR, белый 80 нит: множитель 1")
 check(abs(wh.gain_for(wh.MODE_HDR, 200) - 0.4) < 1e-12, "HDR, белый 200 нит: множитель 0.4")
