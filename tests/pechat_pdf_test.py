@@ -36,7 +36,7 @@ from PyQt6.QtCore import QObject, QRect, QRectF, Qt, QTimer, pyqtSignal  # noqa:
 from PyQt6.QtGui import QColor, QImage, QPageLayout  # noqa: E402
 from PyQt6.QtPrintSupport import QPrinter, QPrinterInfo  # noqa: E402
 from PyQt6.QtTest import QTest  # noqa: E402
-from PyQt6.QtWidgets import QApplication, QFileDialog  # noqa: E402
+from PyQt6.QtWidgets import QApplication, QDialog, QFileDialog  # noqa: E402
 
 qapp = QApplication(sys.argv)
 qapp.setQuitOnLastWindowClosed(False)
@@ -388,6 +388,38 @@ cw = pechat.PrintWindow(None, wide, a.config)
 before = len(made)
 cw.reject()
 check(not cw.printed and len(made) == before, "«Отмена»: ничего не напечатано")
+
+# «Настройки принтера…» (В1 проверки 1.36.1): итог системного окна не выбрасывается
+FakeDialog.answer = 0
+sw = pechat.PrintWindow(None, wide, a.config)
+before = len(made)
+check(sw.system_settings() is False and not sw.printed and sw.result() == 0
+      and not os.path.exists(made[-1].out) and len(made) == before + 1,
+      "системное окно отменено: ничего не напечатано, окно ClipSD открыто")
+FakeDialog.answer = 1
+sw = pechat.PrintWindow(None, wide, a.config)
+sw.copies.setValue(2)
+sw.fit.setCurrentIndex(sw.fit.findData("actual"))
+ok_sys = sw.system_settings()
+sp = dialogs_made[-1].printer
+check(ok_sys and sw.printed and sw.result() == QDialog.DialogCode.Accepted.value, "системное окно принято: напечатано, окно ClipSD закрыто как напечатанное")
+check(sp is made[-1] and os.path.exists(sp.out) and pdf_info(sp.out)["pages"] == 1, "печать идёт тем же QPrinter, что настроен в системном окне")
+check(sp.copyCount() == 2 and sp.pageLayout().orientation() == QPageLayout.Orientation.Landscape,
+      "копии и ориентация ClipSD сохранены, если драйвер их не менял")
+
+
+class DriverDialog(FakeDialog):
+    def exec(self):
+        self.printer.setPageOrientation(QPageLayout.Orientation.Portrait)   # человек выбрал «Книжная» в окне драйвера
+        return 1
+
+
+pechat.QPrintDialog = DriverDialog
+sw = pechat.PrintWindow(None, wide, a.config)
+check(sw.system_settings() and made[-1].pageLayout().orientation() == QPageLayout.Orientation.Portrait,
+      "ориентация, выбранная в окне драйвера, не перебивается")
+pechat.QPrintDialog = FakeDialog
+dialogs_made.clear()
 
 # вписывание: пропорции, поля, по центру
 for pw, ph, iw, ih in ((600, 800, 900, 500), (800, 600, 400, 900), (800, 600, 100, 50), (500, 500, 500, 500)):

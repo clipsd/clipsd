@@ -119,9 +119,15 @@ def test_find():
         check(got == [("iban", iban)], f"IBAN найден: {iban} -> {got}")
     for bad in ("DE89 3704",):
         check(kinds("IBAN: " + bad) == [], f"неверный IBAN ничего не закрывает (даже кусками): {bad} -> {kinds('IBAN: ' + bad)}")
-    for bad in ("DE89 3704 0044 0532 0130 01", "GB82 WEST 1234 5698 7654 33", "XX00 1234 5678 9012 3456"):   # после подписи IBAN: «Похоже» (1.36.1)   # 1.36.1: похоже на IBAN, сумма не сошлась: строка «Похоже», не закрыто само
+    for bad in ("DE89 3704 0044 0532 0130 01", "GB82 WEST 1234 5698 7654 33", "XX00 1234 5678 9012 3456"):   # 1.36.1: сумма не сошлась: строка «Похоже»
         got = [f for f in privacy.find(words_of("IBAN: " + bad)[0])]
-        check(len(got) == 1 and got[0].maybe and got[0].kind == "iban", f"IBAN с неверной суммой: «Похоже на IBAN, проверьте», само не закрывается: {bad}")
+        check(len(got) == 1 and got[0].maybe and got[0].kind == "iban" and got[0].near_label and got[0].hide_by_default,
+              f"IBAN с неверной суммой после подписи IBAN: «Похоже на IBAN», закрывается сразу (В3): {bad}")
+        if bad.startswith("XX"):
+            continue   # без подписи и без известной страны не находится вовсе
+        got = [f for f in privacy.find(words_of("Получатель " + bad)[0])]
+        check(len(got) == 1 and got[0].maybe and not got[0].near_label and not got[0].hide_by_default,
+              f"IBAN с неверной суммой без подписи счёта: «Похоже на IBAN, проверьте», само не закрывается: {bad}")
     check(kinds(LINK) == [("link", LINK)], "ссылка с token=")
     check(kinds("www.example.com/?key=abcdefgh") == [("link", "www.example.com/?key=abcdefgh")], "ссылка www с key=")
     check(kinds("https://example.com/page?id=42&lang=ru") == [], "обычная ссылка не закрывается")
@@ -525,6 +531,30 @@ def test_link_image_and_list():
     finish(ed)
 
 
+def test_maybe_iban_defaults():
+    """В3 проверки 1.36.1: «Похоже на IBAN» рядом с подписью счёта закрыто сразу (открыть можно), без подписи: открыто."""
+    ed, img, words = make("IBAN: DE89 3704 0044 0532 0130 01\nПолучатель GB82 WEST 1234 5698 7654 33")
+    ed.hide_personal()
+    settle()
+    s = ed.privacy_session
+    check(s is not None and len(s.findings) == 2, f"две находки «Похоже»: {len(s.findings) if s else None}")
+    if s is None or len(s.findings) != 2:
+        finish(ed)
+        return
+    near = [i for i, f in enumerate(s.findings) if f.near_label]
+    far = [i for i, f in enumerate(s.findings) if not f.near_label]
+    check(len(near) == 1 and s.modes[near[0]] == "full" and s.shapes.get(near[0]), "рядом с подписью IBAN: закрыто сразу")
+    check(len(far) == 1 and s.modes[far[0]] == "open" and not s.shapes.get(far[0]), "без подписи счёта: не закрыто само")
+    rows = ed.privacy_panel.rows
+    tips = [r.label.toolTip() for r in rows]
+    check(any(t.startswith(tr("privacy.maybe_iban_label")) for t in tips) and any(t.startswith(tr("privacy.maybe_iban") + "\n") for t in tips),
+          "подсказки строк: «рядом подпись счёта, закрыто сразу» и «не закрыто само»")
+    check(all(r.label.text().startswith(tr("privacy.maybe_short")) for r in rows), "обе строки помечены «Похоже:»")
+    s.set_mode(near[0], "open")
+    check(not s.shapes.get(near[0]) and s.modes[near[0]] == "open", "закрытое «Похоже» можно открыть")
+    finish(ed)
+
+
 def test_nothing_found():
     ed, img, words = make("Привет, это обычный текст\nбез личных данных 2026 год")
     ed.hide_personal()
@@ -643,7 +673,7 @@ def test_languages():
     settle()
     ref = i18n._load("ru")
     keys = [k for k in ref if k.startswith("privacy.")]
-    check(len(keys) == 46, f"46 строк privacy.* в ru: {len(keys)}")
+    check(len(keys) == 47, f"47 строк privacy.* в ru: {len(keys)}")
     for lang in i18n.LANGUAGES:
         cat = i18n._load(lang)
         check(all(cat.get(k, "").strip() for k in keys), f"{lang}: все строки есть")

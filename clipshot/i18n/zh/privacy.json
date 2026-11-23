@@ -16,6 +16,7 @@
   "privacy.kind_phone": "电话",
   "privacy.manual": "手动框选",
   "privacy.maybe_iban": "疑似 IBAN，请检查。校验和不匹配，所以没有自动隐藏。如果它是 IBAN，请选择“完全隐藏”。",
+  "privacy.maybe_iban_label": "疑似 IBAN，请检查。旁边有账户标签，所以已立即隐藏。如果它不是 IBAN，请选择“完全显示”。",
   "privacy.maybe_short": "疑似：",
   "privacy.mode_country_last4": "显示国家代码和后 4 位",
   "privacy.mode_domain": "仅显示域名",

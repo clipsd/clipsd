@@ -51,7 +51,8 @@ class PrivacySession:
         self.canvas = canvas
         self.words = list(words)
         self.findings = list(findings)
-        self.modes = ["open" if getattr(f, "maybe", False) else "full" for f in self.findings]   # «Похоже на IBAN»: не закрыто само
+        # «Похоже на IBAN» без подписи счёта рядом: не закрыто само; рядом с подписью (IBAN, Сметка, Account): закрыто (В3)
+        self.modes = ["full" if getattr(f, "hide_by_default", not getattr(f, "maybe", False)) else "open" for f in self.findings]
         self.custom = [False] * len(self.findings)   # размытие этого значения правили мышью («Открыть кусок»)
         self.shapes = {}    # номер находки -> её размытия на холсте
         self.extra = []     # размытия, добавленные «Скрыть кусок»
@@ -263,7 +264,8 @@ class PrivacyRow(QFrame):
         self.label.setToolTip(text)
         if getattr(self.finding, "maybe", False):   # сумма IBAN не сошлась: подсказка вместо тишины, закрыть можно в меню
             self.label.setText(self.label.fontMetrics().elidedText(tr("privacy.maybe_short") + " " + text, Qt.TextElideMode.ElideRight, 150))
-            self.label.setToolTip(tr("privacy.maybe_iban") + "\n" + text)
+            hint = "privacy.maybe_iban_label" if getattr(self.finding, "near_label", False) else "privacy.maybe_iban"
+            self.label.setToolTip(tr(hint) + "\n" + text)
         name = "custom" if custom else mode
         short = tr(SHORT_KEYS[name])
         self.button.setText(self.button.fontMetrics().elidedText(short + "  ▾", Qt.TextElideMode.ElideRight,

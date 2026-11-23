@@ -562,7 +562,8 @@ def make_window(version: str, items: list, parent=None, updated: bool = False, n
             # М6 проверки 1.34.0: язык сменили, пока окно открыто (меню значка у часов). Тексты задаются при
             # создании, поэтому окно закрывается с choice "relang", и Clipshot.show_novoe открывает его заново.
             from . import i18n
-            self._off_lang = i18n.on_change(lambda _lang: QTimer.singleShot(0, lambda: self._pick("relang")))
+            from .later import later
+            self._off_lang = i18n.on_change(lambda _lang: later(self, 0, lambda: self._pick("relang")))
             self.finished.connect(lambda _r: self._off_lang())
 
         def rows_height(self, width: int) -> int:

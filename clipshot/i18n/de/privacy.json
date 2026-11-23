@@ -16,6 +16,7 @@
   "privacy.kind_phone": "Telefonnummern",
   "privacy.manual": "Von Hand markieren",
   "privacy.maybe_iban": "Sieht aus wie eine IBAN, bitte prüfen. Die Prüfsumme stimmt nicht, daher wird sie nicht automatisch verdeckt. Wenn es eine IBAN ist, wählen Sie „Vollständig verbergen“.",
+  "privacy.maybe_iban_label": "Sieht aus wie eine IBAN, bitte prüfen. Daneben steht eine Kontobezeichnung, daher wird sie sofort verdeckt. Wenn es keine IBAN ist, wählen Sie „Ganz zeigen“.",
   "privacy.maybe_short": "Sieht aus wie:",
   "privacy.mode_country_last4": "Ländercode und letzte 4 zeigen",
   "privacy.mode_domain": "Nur Domain zeigen",

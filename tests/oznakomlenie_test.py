@@ -20,6 +20,7 @@ import json
 import os
 import re
 import sys
+import time
 import tempfile
 
 here = os.path.dirname(os.path.abspath(__file__))
@@ -409,8 +410,34 @@ fresh()
 win = a.open_oznakomlenie()
 settle(100)
 called = []
-a.capture_region = lambda delay=0: (called.append(("region", delay)), setattr(a, "selector", True))
-a.capture_fullscreen = lambda delay=0: (called.append(("full", delay)), setattr(a, "selector", True))
+# С4 проверки 1.36.1: пометка «Ознакомления» для окна выделения ставится только при настоящем старте выделения
+real_region, real_full = a.capture_region, a.capture_fullscreen
+real_start = a._start_region
+starts = []
+a._start_region = lambda full=False, translate=False: starts.append(getattr(a, "_guide", None))
+a.last_trigger = time.monotonic()   # только что было другое срабатывание: _busy() откажет
+win.select("region")
+settle(100)
+win.real_button.click()
+check(getattr(a, "_guide", None) is None, "выделение не началось (занято): подсказка «Ознакомления» не остаётся")
+if win._real_wait is not None:
+    win._real_wait.stop()
+a.last_trigger = 0.0
+a.capture_region()   # следующий обычный Alt+W
+settle(300)
+check(starts == [None], f"следующий обычный Alt+W без подсказки «Ознакомления» ({starts})")
+starts.clear()
+a.last_trigger = 0.0
+win.real_button.click()
+check(getattr(a, "_guide", None) == "region", "настоящий старт выделения из «Ознакомления»: подсказка поставлена")
+settle(700)
+check(starts == ["region"], f"окно выделения получило подсказку пункта ({starts})")
+if win._real_wait is not None:
+    win._real_wait.stop()
+win.showNormal()
+a._start_region, a._guide, a.last_trigger = real_start, None, 0.0
+a.capture_region = lambda delay=0, **kw: (called.append(("region", delay)), setattr(a, "selector", True))
+a.capture_fullscreen = lambda delay=0, **kw: (called.append(("full", delay)), setattr(a, "selector", True))
 a.open_phone = lambda target=None: called.append(("phone", target))
 for ident, real in (("windows", "region"), ("other_area", "region"), ("phone_tile", "phone"), ("full", "full")):
     win.select(ident)

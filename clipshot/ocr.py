@@ -1996,7 +1996,8 @@ def show_result(text: str, error: str, parent=None, help: InstallHelp = None, ag
         copy_text(text, parent)
     dlg = TextResultDialog(text, error, parent, help, again=again)
     if text and not error:
-        QTimer.singleShot(150, lambda: toast(dlg))
+        from .later import later
+        later(dlg, 150, lambda: toast(dlg))
     # у окна нет рамки системы: ставим по центру родителя (или экрана), иначе оно прижмётся к углу
     area = (parent.frameGeometry() if parent is not None and parent.isVisible()
             else _screen_for(parent).availableGeometry())

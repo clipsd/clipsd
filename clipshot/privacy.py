@@ -178,7 +178,13 @@ class Finding:
     kind: str
     value: str
     chars: list = field(default_factory=list)
-    maybe: bool = False   # 1.36.1: «Похоже на IBAN, проверьте»: сумма не сошлась, по умолчанию НЕ закрыто, человек решает
+    maybe: bool = False   # 1.36.1: «Похоже на IBAN, проверьте»: сумма не сошлась, без подписи счёта рядом НЕ закрыто, человек решает
+    near_label: bool = False   # «Похоже на IBAN» рядом с подписью счёта (IBAN, Сметка, Account): закрыто сразу, как обычное (В3)
+
+    @property
+    def hide_by_default(self) -> bool:
+        """Закрывать ли значение сразу: всё найденное, кроме «Похоже» без подписи счёта рядом."""
+        return not self.maybe or self.near_label
 
     def _glyphs(self) -> str:
         return self.value.replace(" ", "").replace("\n", "")
@@ -564,7 +570,7 @@ def find(words, countries=()) -> list:
         if sure:
             add(IBAN, start, end)
         elif not any(taken[start:end]):
-            if add(IBAN, start, end):   # не закрываем само, но и не молчим: отдельная строка «Похоже на IBAN»
+            if add(IBAN, start, end):   # не молчим (без подписи счёта не закрываем само): отдельная строка «Похоже на IBAN»
                 found[-1][1].maybe = True
     # слова -> диапазоны в тексте
     spans_of = {}
@@ -572,13 +578,22 @@ def find(words, countries=()) -> list:
         if pr is not None:
             a, b = spans_of.get(pr[0], (ti, ti))
             spans_of[pr[0]] = (min(a, ti), max(b, ti))
-    for first, last in label_candidates(words):   # 1.36.1: подпись «IBAN» и рядом длинный значок: «Похоже», не закрыто само
-        if first in spans_of and last in spans_of and add(IBAN, spans_of[first][0], spans_of[last][1] + 1):
-            found[-1][1].maybe = True
+    label_spans = []
+    for first, last in label_candidates(words):   # 1.36.1: подпись «IBAN» и рядом длинный значок: «Похоже», закрыто сразу (В3)
+        if first in spans_of and last in spans_of:
+            span = (spans_of[first][0], spans_of[last][1] + 1)
+            label_spans.append(span)
+            if add(IBAN, *span):
+                found[-1][1].maybe = True
     page_cc = [m.group(1) for m in re.finditer(r"(?<![A-Za-z0-9])([A-Z]{2})\d{2}[A-Z0-9]", text) if m.group(1) in IBAN_LENGTHS]
     for i, cc in bban_candidates(words, list(dict.fromkeys(page_cc + list(countries)))):
         if i in spans_of and add(IBAN, spans_of[i][0], spans_of[i][1] + 1):
             found[-1][1].maybe = True
+    for start, f in found:   # «Похоже» рядом с подписью счёта (и то, что сумма не сошлась, но стоит после «IBAN:»)
+        if f.kind == IBAN and f.maybe:
+            end = start + len(f.value)
+            before = text[max(0, start - 40):start].split()[-2:]   # «IBAN: …», «Сметка IBAN: …» прямо перед значением
+            f.near_label = any(a < end and start < b for a, b in label_spans) or any(_label_word(t) for t in before)
     for m in _CARD.finditer(text):
         raw = m.group(0)
         spans = [(g.start(), g.end()) for g in re.finditer(r"\d+", raw)]

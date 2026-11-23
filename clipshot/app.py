@@ -832,13 +832,22 @@ class Clipshot(QObject):
         self._flush_clipboard()
         return steps
 
+    RECOVERY_DPR_TEXT = "clipsd-dpr"   # масштаб снимка и в самой PNG (запасной путь, если JSON не записался)
+
     def _save_editors_for_restart(self) -> int:
         """Несохранённые редакторы: исходная картинка и пометки (JSON) в recovery, список в настройках; редактор помечается
         сохранённым, чтобы выход не ждал его. После перезапуска restore_after_restart открывает их с теми же правимыми
-        пометками. Не вышло записать пометки: картинка с вплавленными пометками (как раньше)."""
-        import json
+        пометками. Не вышло записать пометки: картинка с вплавленными пометками (как раньше).
+
+        Масштаб снимка (devicePixelRatio, 125-200 % экрана) PNG сама не хранит: он пишется в JSON и текстом в PNG, иначе
+        после перезапуска холст вырос бы вдвое, а пометки (в логических точках) съехали бы (Б2 проверки 1.36.1). Имя
+        файла уникально (uuid): два вызова в одну секунду не перезаписывают друг друга (С5)."""
+        import uuid
         from .shapes import shape_to_dict
         entries = []
+        saved = getattr(self, "_recovery_saved", None)
+        if saved is None:
+            saved = self._recovery_saved = []
         for editor in list(self.editors):
             canvas = getattr(editor, "canvas", None)
             if canvas is None or getattr(editor, "exported", False):
@@ -848,34 +857,81 @@ class Clipshot(QObject):
             try:
                 folder = self.recovery_dir()
                 folder.mkdir(parents=True, exist_ok=True)
-                stem = f"{int(time.time())}-{len(entries) + 1}"
+                stem = f"{int(time.time())}-{uuid.uuid4().hex[:12]}"
                 path = folder / f"{stem}.png"
-                marks = None
+                marks = folder / f"{stem}.json"
+                written = False
                 try:
                     canvas.commit_text()
-                    if canvas.base.save(str(path), "PNG"):
-                        marks = folder / f"{stem}.json"
-                        marks.write_text(json.dumps({"shapes": [shape_to_dict(s) for s in canvas.shapes]}), encoding="utf-8")
-                    else:
-                        marks = None
+                    base = QImage(canvas.base)
+                    dpr = float(base.devicePixelRatio() or 1.0)
+                    base.setText(self.RECOVERY_DPR_TEXT, repr(dpr))
+                    if base.save(str(path), "PNG"):
+                        marks.write_text(json.dumps({"dpr": dpr, "shapes": [shape_to_dict(s) for s in canvas.shapes]}),
+                                         encoding="utf-8")
+                        written = True
                 except Exception:   # noqa: BLE001 - пометки не записались: запасной путь ниже
-                    marks = None
-                if marks is None:
-                    if not editor.render_image().save(str(path), "PNG"):
+                    written = False
+                if not written:
+                    flat = editor.render_image()
+                    dpr = float(flat.devicePixelRatio() or 1.0)
+                    flat.setText(self.RECOVERY_DPR_TEXT, repr(dpr))
+                    if not flat.save(str(path), "PNG"):
                         continue
+                    try:
+                        marks.write_text(json.dumps({"dpr": dpr, "shapes": []}), encoding="utf-8")
+                    except OSError:
+                        pass   # масштаб есть и в самой PNG
             except Exception as exc:   # noqa: BLE001 - не сохранилось: редактор остаётся и держит выход
                 print(f"Спасение снимка перед обновлением не удалось: {exc}")
                 continue
             entries.append(str(path))
+            saved.append((str(path), editor))
             editor.exported = True
         if entries:
             self.config[self.RECOVERY_KEY] = list(self.config.get(self.RECOVERY_KEY) or []) + entries
             self.save_config()
         return len(entries)
 
+    @staticmethod
+    def _drop_recovery_files(name) -> None:
+        for f in (Path(name), Path(name).with_suffix(".json")):
+            try:
+                f.unlink()
+            except OSError:
+                pass
+
+    def drop_restart_restore(self) -> int:
+        """Смена версии сорвалась после освобождения окон (updater._fail_attempt): программа продолжает работать, спасённые
+        этим запуском снимки открыты здесь же. Записи restart_restore этого запуска и их файлы убираются, иначе при
+        следующем запуске открылись бы копии давно сохранённых снимков (С3 проверки 1.36.1); редакторы снова считаются
+        несохранёнными (закрытие спросит, как раньше). Записи прошлого запуска не трогаются. Возвращает число убранных."""
+        saved = list(getattr(self, "_recovery_saved", None) or [])
+        if not saved:
+            return 0
+        self._recovery_saved = []
+        names = {name for name, _ in saved}
+        listed = list(self.config.get(self.RECOVERY_KEY) or [])
+        left = [n for n in listed if n not in names]
+        if left:
+            self.config[self.RECOVERY_KEY] = left
+        else:
+            self.config.pop(self.RECOVERY_KEY, None)
+        if left != listed:
+            self.save_config()
+        from PyQt6 import sip
+        for name, editor in saved:
+            self._drop_recovery_files(name)
+            try:
+                if not sip.isdeleted(editor) and editor in self.editors:
+                    editor.exported = False
+            except (RuntimeError, TypeError):
+                pass
+        return len(saved)
+
     def restore_after_restart(self) -> int:
-        """После обновления: снимки, спасённые перед перезапуском, открываются снова с теми же пометками."""
-        import json
+        """После обновления: снимки, спасённые перед перезапуском, открываются снова с теми же пометками и тем же
+        масштабом. Запись, которую не удалось прочитать, убирается вместе с файлами."""
         from .shapes import shape_from_dict
         listed = list(self.config.get(self.RECOVERY_KEY) or [])
         if not listed:
@@ -884,16 +940,32 @@ class Clipshot(QObject):
         self.save_config()
         opened = 0
         for name in listed:
-            image = QImage(str(name))
+            try:
+                image = QImage(str(name))
+            except Exception:   # noqa: BLE001 - запись не путь (испорчены настройки)
+                continue
             if image.isNull():
+                self._drop_recovery_files(name)
                 continue
             marks = Path(name).with_suffix(".json")
             shapes = []
+            dpr = None
             if marks.exists():
                 try:
-                    shapes = [shape_from_dict(d) for d in json.loads(marks.read_text(encoding="utf-8")).get("shapes", [])]
+                    data = json.loads(marks.read_text(encoding="utf-8"))
+                    dpr = data.get("dpr")
+                    shapes = [shape_from_dict(d) for d in data.get("shapes", [])]
                 except Exception as exc:   # noqa: BLE001 - пометки не читаются: открывается картинка без них
                     print(f"Пометки восстановления не прочитаны: {exc}")
+                    shapes = []
+            if not isinstance(dpr, (int, float)) or isinstance(dpr, bool):
+                try:
+                    dpr = float(image.text(self.RECOVERY_DPR_TEXT) or 1.0)
+                except ValueError:
+                    dpr = 1.0
+            if not (0.5 <= float(dpr) <= 8.0):
+                dpr = 1.0
+            image.setDevicePixelRatio(float(dpr))
             editor = self.open_editor(image, None)
             if editor is not None:
                 if shapes:
@@ -901,11 +973,7 @@ class Clipshot(QObject):
                     editor.canvas.update()
                 editor.canvas.modified = True   # не сохранён: при закрытии спросит, как раньше
                 opened += 1
-            for f in (Path(name), marks):
-                try:
-                    f.unlink()
-                except OSError:
-                    pass
+            self._drop_recovery_files(name)
         if opened:
             self.notify(tr("app.restored", n=opened))
         return opened
@@ -1068,9 +1136,12 @@ class Clipshot(QObject):
     def _capture_requested(self):
         self._capture_at = time.monotonic()
 
-    def capture_region(self, delay=0):
+    def capture_region(self, delay=0, guide=None):
+        """guide: id пункта «Ознакомления», чьи шаги покажет окно выделения. Ставится только при настоящем старте
+        выделения: отказ _busy() не оставляет подсказку следующему обычному Alt+W (С4 проверки 1.36.1)."""
         if not self._busy():
             self._capture_requested()
+            self._guide = guide
             QTimer.singleShot(max(delay, self.clear_way_for_capture()), self._start_region)
 
     def capture_translate(self):
@@ -1330,10 +1401,12 @@ class Clipshot(QObject):
         from . import zakrepit
         return zakrepit.pin(self, image, top_left)
 
-    def capture_fullscreen(self, delay=0):
-        """Весь экран: окно выделения сразу с рамкой по краю экрана, надписью и кнопками в центре."""
+    def capture_fullscreen(self, delay=0, guide=None):
+        """Весь экран: окно выделения сразу с рамкой по краю экрана, надписью и кнопками в центре. guide: как у
+        capture_region (только при настоящем старте)."""
         if not self._busy():
             self._capture_requested()
+            self._guide = guide
             QTimer.singleShot(max(delay, self.clear_way_for_capture()), lambda: self._start_region(full=True))
 
     def open_editor(self, image: QImage, origin):

@@ -290,6 +290,7 @@ def floating_toast(text: str, global_center: QPoint = None):
             _toast_windows.remove(host)
         host.close()
         host.deleteLater()
-    QTimer.singleShot(Toast.FADE_IN + 2200 + Toast.FADE_OUT + 300, close)
+    from .later import later
+    later(host, Toast.FADE_IN + 2200 + Toast.FADE_OUT + 300, close)
     host.toast = bubble
     return host

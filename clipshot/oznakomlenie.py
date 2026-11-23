@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QLabel, QPushBut
 
 from . import icons, novoe, otlozhit
 from .i18n import tr
+from .later import later
 from .ozn_lesson import Cursor, Dimmer, Lesson
 
 # --- каталог функций ----------------------------------------------------------------------------------------
@@ -523,7 +524,7 @@ class OznakomlenieWindow(QWidget):
         QApplication.instance().installEventFilter(self)   # Esc во время обучения (lesson.escape)
         self.new_list = new_ids(app.config)
         if focus_new and self.new_list:
-            QTimer.singleShot(0, lambda: self.select(self.new_list[0]))
+            later(self, 0, lambda: self.select(self.new_list[0]))
 
     # --- построение ---------------------------------------------------------------------------------------
 
@@ -1155,8 +1156,9 @@ QPushButton#oznBtn:disabled {{ color: {c['muted']}; }}
             self._real_wait.timeout.connect(self._real_poll)
             self._real_wait.start()
             self._real_since = 0
-            app._guide = ident   # окно выделения покажет шаги и подсветит нужную кнопку
-            action(delay=400)
+            # окно выделения покажет шаги и подсветит нужную кнопку; пометка ставится в capture_* только при настоящем
+            # старте выделения (отказ «занято» не оставляет её следующему Alt+W, С4 проверки 1.36.1)
+            action(delay=400, guide=ident)
         else:
             action()
             self.lesson.note("real")

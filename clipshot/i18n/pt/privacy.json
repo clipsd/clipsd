@@ -16,6 +16,7 @@
   "privacy.kind_phone": "Telefones",
   "privacy.manual": "Selecionar à mão",
   "privacy.maybe_iban": "Parece um IBAN, verifique. A soma de controle não confere, por isso não é ocultado automaticamente. Se for um IBAN, escolha «Ocultar totalmente».",
+  "privacy.maybe_iban_label": "Parece um IBAN, verifique. Está junto a uma indicação de conta, por isso é ocultado de imediato. Se não for um IBAN, escolha «Mostrar totalmente».",
   "privacy.maybe_short": "Parece:",
   "privacy.mode_country_last4": "Mostrar código do país e últimos 4",
   "privacy.mode_domain": "Mostrar só o domínio",

@@ -16,6 +16,7 @@
   "privacy.kind_phone": "Telefonlar",
   "privacy.manual": "Elle seç",
   "privacy.maybe_iban": "IBAN'a benziyor, kontrol edin. Sağlama toplamı tutmadığı için kendiliğinden gizlenmedi. IBAN ise «Tamamen gizle» seçin.",
+  "privacy.maybe_iban_label": "IBAN'a benziyor, kontrol edin. Yanında hesap etiketi olduğu için hemen gizlendi. IBAN değilse «Tamamen göster» seçin.",
   "privacy.maybe_short": "Benziyor:",
   "privacy.mode_country_last4": "Ülke kodunu ve son 4’ü göster",
   "privacy.mode_domain": "Yalnızca alan adını göster",

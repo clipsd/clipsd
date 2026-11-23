@@ -103,7 +103,10 @@ check(ok_countries == len(others), f"страны: найдено {ok_countries}
 # неверная сумма: не молчим и не закрываем само
 bad = BG[:-1] + ("1" if BG[-1] != "1" else "2")
 got = ibans("IBAN: " + bad)
-check(len(got) == 1 and got[0].maybe, "сумма не сошлась: строка «Похоже на IBAN» (maybe), не закрывается само")
+check(len(got) == 1 and got[0].maybe and got[0].near_label and got[0].hide_by_default,
+      "сумма не сошлась после подписи IBAN: строка «Похоже на IBAN» (maybe), закрывается сразу (В3)")
+got = ibans("Получатель " + bad)
+check(len(got) == 1 and got[0].maybe and not got[0].hide_by_default, "сумма не сошлась, подписи счёта нет: «Похоже», не закрывается само")
 check(not [f for f in found("Заказ 123456789012 на 4 500,00 лв., версия 1.36.1, BG 2026") if f.kind == privacy.IBAN], "обычные числа и слова не принимаются за IBAN")
 check(not [f for f in found("Total: BG12 abc") if f.kind == privacy.IBAN], "короткая строка с кодом страны не IBAN")
 
@@ -137,13 +140,19 @@ def kinds_maybe(ws, countries=()):
     return [(f.kind, f.value, f.maybe) for f in privacy.find(ws, countries)]
 
 
+def hidden_now(ws, countries=()):
+    return [f.hide_by_default for f in privacy.find(ws, countries)]
+
+
 one_line = [RW("IBAN", 10, 100), RW("ABCD*****1234", 300, 100, 140)]
 got = kinds_maybe(one_line)
-check(got == [("iban", "ABCD*****1234", True)], f"подпись IBAN и маска справа: «Похоже на IBAN», само не закрыто: {got}")
+check(got == [("iban", "ABCD*****1234", True)] and hidden_now(one_line) == [True],
+      f"подпись IBAN и маска справа: «Похоже на IBAN», закрыто сразу (В3): {got}")
 far = [RW("Сметка", 10, 100), RW("Ф", 100, 100, 10), RW("BNBG9661", 900, 101, 80), RW("1020345678", 985, 101, 90)]
 check(kinds_maybe(far)[0][2] and kinds_maybe(far)[0][0] == "iban", f"подпись «Сметка», значение далеко справа группами: {kinds_maybe(far)}")
 below = [RW("Account", 10, 100), RW("BNBG9661102034", 12, 120, 160)]
-check(kinds_maybe(below) == [("iban", "BNBG9661102034", True)], f"значение прямо под подписью: {kinds_maybe(below)}")
+check(kinds_maybe(below) == [("iban", "BNBG9661102034", True)] and hidden_now(below) == [True], f"значение прямо под подписью: {kinds_maybe(below)}")
+check(hidden_now(far) == [True], "подпись «Сметка», значение далеко справа: закрыто сразу")
 for lab in ("IBAN:", "ІВАN", "ИБАН", "Konto", "Compte", "Cuenta", "Conto", "Rachunek", "Hesap", "Рахунок", "Рачун", "账户"):
     check(kinds_maybe([RW(lab, 10, 100), RW("XXXX12345678", 300, 100, 120)]) != [], f"подпись «{lab}» распознаётся")
 check(kinds_maybe([RW("Сумма", 10, 100), RW("ABCD*****1234", 300, 100, 140)]) == [], "без подписи маска не берётся")
@@ -152,7 +161,8 @@ check(kinds_maybe([RW("Account", 10, 100), RW("2026", 300, 100)]) == [], "кор
 # BBAN без кода страны и контрольных цифр: код со страницы или из подсказки языка
 bban = [RW("BNBG96611020345678", 100, 200, 160)]   # 18 знаков: BG (22) без «BGxx»
 check(kinds_maybe(bban) == [], "без подсказки страны BBAN не угадывается")
-check(kinds_maybe(bban, ("BG",)) == [("iban", "BNBG96611020345678", True)], "BBAN + страна из подсказки языка: «Похоже»")
+check(kinds_maybe(bban, ("BG",)) == [("iban", "BNBG96611020345678", True)] and hidden_now(bban, ("BG",)) == [False],
+      "BBAN + страна из подсказки языка, подписи нет: «Похоже», не закрыто само")
 check(kinds_maybe(bban + [RW("BG80", 10, 10), RW("XX", 60, 10)], ())[:1] != [] or True, "страна со страницы")
 check(privacy.countries_hint("bg") == ("BG",) and privacy.countries_hint("de") == ("DE", "BG"), "подсказки стран по языку интерфейса")
 # потеря первых четырёх знаков (BGxx) при слитной записи

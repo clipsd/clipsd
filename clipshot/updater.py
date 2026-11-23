@@ -1993,6 +1993,14 @@ class Updater(QObject):
         remove_staging(record, self.kind, self.installed, keep_download=True)
         _unlink(attempt_path())
         self.busy = False
+        # 1.36.1 (С3): the program keeps running, so the snapshots saved for the restart (app.release_for_restart) are
+        # still open here; their restore records go, or the next start would reopen copies of long-saved snapshots
+        drop = getattr(self.ctx, "drop_restart_restore", None)
+        if drop is not None:
+            try:
+                drop()
+            except Exception as exc:   # noqa: BLE001 - the failure window must still be shown
+                log.warning("restore records of this run not dropped: %s", exc)
         telemetry_event("update_failed", reason=reason, stage="switch", **attempt_fields(record))
         self._show_failure(record, reason, "switch")
 

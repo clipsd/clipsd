@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import QApplication, QFrame, QHBoxLayout, QLabel, QPushButt
 
 from . import novoe
 from .i18n import tr
+from .later import later
 
 TIME_SCALE = 1.0          # тесты ставят меньше: задержки сжимаются, плановая длительность считается без сжатия
 IDLE_MS = 15000           # столько ничего не происходит: мягкая подсказка
@@ -385,7 +386,7 @@ def plan(ed, win, ident: str) -> list:
             act = next((a for a in menu.actions() if a.text() == tr("deco.menu")), None)
             if act is not None:
                 menu.setActiveAction(act)   # подсветка пункта самим меню
-                QTimer.singleShot(700, act.trigger)
+                later(act, 700, act.trigger)
 
         def panel():
             p = getattr(ed, "_deco_panel", None)
@@ -669,7 +670,7 @@ class Lesson:
                 return
             except RuntimeError:
                 return
-            QTimer.singleShot(max(1, int(ms * TIME_SCALE)), step)
+            later(self.win, max(1, int(ms * TIME_SCALE)), step)   # окно закрыли во время показа: шаг не вызывается
         step()
 
     def _wait(self, ms):

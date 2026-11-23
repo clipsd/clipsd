@@ -23,6 +23,7 @@ from . import forma, hidpi, icons, otdelno, pipetka, qr_read, stickers, ten_ramk
 from .dialogs import PALETTES as CARD_PALETTES, ClipDialog
 from .frame_extents import track_frame_extents
 from .i18n import dynamic, tr
+from .later import later
 from .menus import style_menu
 from .selector import force_foreground, span_rect
 from .privacy_ui import PrivacyPanel, PrivacySession, already_hidden
@@ -6339,7 +6340,7 @@ class EditorWindow(QMainWindow):
             old_rects = [QRectF(self.canvas.words[i].rect) for i in sorted(self.canvas.text_sel)
                          if i < len(self.canvas.words)]
         if dialog is not None and not panel and not sip.isdeleted(dialog):
-            QTimer.singleShot(1200, dialog.close)
+            later(dialog, 1200, dialog.close)
         self.canvas.words, self.canvas.text_sel = [], set()   # старые слова (с каракулями) не годятся
         self._ocr_reselect = old_rects
         self._start_text_mode_now()
@@ -6472,6 +6473,7 @@ class EditorWindow(QMainWindow):
             self.privacy_panel.setFocus()
             return
         self.canvas.commit_text()
+        self._cancel_privacy_pass2()   # прежний второй проход (если ещё идёт) больше ничего не пишет
         if self.canvas.has_words():
             self._privacy_run(list(self.canvas.words))
             return
@@ -6547,15 +6549,18 @@ class EditorWindow(QMainWindow):
 
         def done(text, error, help=None):
             from PyQt6 import sip
-            if sip.isdeleted(self):
-                return
             try:
                 spinner.stop()
             except RuntimeError:
-                pass
+                pass   # кружок удалён вместе с окном
+            if sip.isdeleted(self) or getattr(self, "_privacy_pass2", None) is not job:
+                return   # окно закрыто или проход отменён новым нажатием «Скрыть личные данные» (В2 проверки 1.36.1)
             self._privacy_pass2 = None
+            self._privacy_pass2_spinner = None
+            if self.canvas.base.cacheKey() != key:
+                return   # снимок успели обрезать или отменить: старые слова к нему не относятся (как у первого прохода)
             extra = []
-            if not error and self.canvas.base.cacheKey() == key:
+            if not error:
                 from .ocr import Word
                 extra = [Word(w.text, QRectF(w.rect.x() / ratio, w.rect.y() / ratio, w.rect.width() / ratio,
                                             w.rect.height() / ratio), w.line) for w in getattr(job, "words", [])]
@@ -6568,7 +6573,20 @@ class EditorWindow(QMainWindow):
             spinner.stop()
             return False
         self._privacy_pass2 = job
+        self._privacy_pass2_spinner = spinner
         return True
+
+    def _cancel_privacy_pass2(self) -> None:
+        """Второй проход распознавания больше не нужен (окно закрывается, новое нажатие «Скрыть личные данные»): его
+        итог игнорируется, кружок убирается."""
+        self._privacy_pass2 = None
+        spinner = getattr(self, "_privacy_pass2_spinner", None)
+        self._privacy_pass2_spinner = None
+        if spinner is not None:
+            try:
+                spinner.stop()
+            except RuntimeError:
+                pass
 
     def _after_panel(self):
         self._update_info()
@@ -7205,7 +7223,7 @@ class EditorWindow(QMainWindow):
             top_left = canvas.mapTo(self.scroll.widget(), QPoint(0, 0))
             self.scroll.horizontalScrollBar().setValue(round(top_left.x() + logical.x() * canvas.zoom - view_pt.x()))
             self.scroll.verticalScrollBar().setValue(round(top_left.y() + logical.y() * canvas.zoom - view_pt.y()))
-        QTimer.singleShot(0, keep_point)   # после пересчёта полос прокрутки
+        later(self, 0, keep_point)   # после пересчёта полос прокрутки; окно закрыли раньше: не вызывается (CI 45288065564)
 
     def zoom_by(self, factor: float, anchor=None):
         self.set_zoom(self.canvas.zoom * factor, anchor)
@@ -7554,6 +7572,7 @@ class EditorWindow(QMainWindow):
         self._remove_key_filter()
         self._ocr_job = None        # распознавание, которое ещё идёт, больше ничего не пишет в это окно (Г1)
         self._ocr_spinner = None    # кружок удаляется вместе с окном
+        self._cancel_privacy_pass2()   # второй проход «Скрыть личные данные» тоже (В2 проверки 1.36.1)
         layer = getattr(self, "tr_layer", None)
         if layer is not None:
             layer.shutdown()   # перевод и вопрос про лимит отменяются, окошки закрываются вместе с редактором

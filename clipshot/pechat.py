@@ -355,11 +355,29 @@ class PrintWindow(QDialog):
             self.accept()
         return ok
 
-    def system_settings(self):
-        """Параметры драйвера (лоток, качество): системное окно, только по желанию человека."""
+    def system_settings(self) -> bool:
+        """Параметры драйвера (лоток, качество): системное окно, только по желанию человека. Окно принято («Печать» в
+        нём): печатается этим же QPrinter, с ориентацией, копиями и цветом ClipSD, если человек не поменял их в окне
+        драйвера, и размером ClipSD («По странице» / «Как есть»); окно ClipSD закрывается как напечатанное (В1 проверки
+        1.36.1: раньше итог окна выбрасывался, и «Печать» в нём не печатала ничего). Отменено: ничего не меняется.
+        True: страница отправлена."""
         printer = self.make_printer()
         dialog = QPrintDialog(printer, self)
-        dialog.exec()
+        if dialog.exec() != QDialog.DialogCode.Accepted.value:
+            return False
+        ok = paint_to_printer(printer, self.image, self.fit.currentData() == "actual")
+        if ok:
+            self.printed = True
+            try:
+                name = printer.printerName()
+            except Exception:   # noqa: BLE001
+                name = ""
+            if name and self.printer_box.findData(name) >= 0:
+                self.cfg[PRINTER_KEY] = name
+            elif self.printer_box.currentData():
+                self.cfg[PRINTER_KEY] = self.printer_box.currentData()
+            self.accept()
+        return ok
 
 
 def preview_image(parent, image: QImage, cfg=None, save_pdf=None) -> str:

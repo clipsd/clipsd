@@ -16,6 +16,7 @@
   "privacy.kind_phone": "Telefony",
   "privacy.manual": "Zaznacz ręcznie",
   "privacy.maybe_iban": "Wygląda jak IBAN, sprawdź. Suma kontrolna się nie zgadza, więc nie jest ukryty automatycznie. Jeśli to IBAN, wybierz „Ukryj całkowicie”.",
+  "privacy.maybe_iban_label": "Wygląda jak IBAN, sprawdź. Obok jest opis konta, więc jest ukryty od razu. Jeśli to nie IBAN, wybierz „Pokaż całość”.",
   "privacy.maybe_short": "Wygląda jak:",
   "privacy.mode_country_last4": "Pokaż kod kraju i ostatnie 4",
   "privacy.mode_domain": "Pokaż tylko domenę",

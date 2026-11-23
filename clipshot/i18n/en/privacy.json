@@ -16,6 +16,7 @@
   "privacy.kind_phone": "Phones",
   "privacy.manual": "Select by hand",
   "privacy.maybe_iban": "Looks like an IBAN, please check. The checksum did not match, so it is not hidden automatically. If it is an IBAN, choose Hide completely.",
+  "privacy.maybe_iban_label": "Looks like an IBAN, please check. It is next to an account label, so it is hidden right away. If it is not an IBAN, choose Show completely.",
   "privacy.maybe_short": "Looks like:",
   "privacy.mode_country_last4": "Show country code and last 4",
   "privacy.mode_domain": "Show domain only",
