@@ -13,7 +13,7 @@
   "deco.title": "Görüntünün gölgesi, çerçevesi ve kenar boşluğu",
   "editor.acc_sticker": "çıkartma",
   "editor.shape_sticker": "çıkartma",
-  "editor.tip_sticker": "Çıkartma (S)\nEmojiler, yazılı etiketler ve daire içinde numaralar\nTıkla: yerleştir, sürükle: boyutu ayarla\nPalet: düğmeye tıkla veya yeniden S\nDöndür: çıkartmanın üstündeki yuvarlak tutamak",
+  "editor.tip_sticker": "Çıkartma (S ▾)\nEmojiler, yazılı etiketler ve daire içinde numaralar\nSeçim: düğmeye tıkla veya yeniden S ile ad aramalı paleti aç\nTıkla: yerleştir, sürükle: boyutu ayarla\nDöndür: çıkartmanın üstündeki yuvarlak tutamak",
   "stiker.emoji": "Emojiler",
   "stiker.found": "Bulunanlar",
   "stiker.none": "Sonuç yok. Başka bir sözcük deneyin.",

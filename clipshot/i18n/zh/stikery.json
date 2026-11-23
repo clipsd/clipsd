@@ -13,7 +13,7 @@
   "deco.title": "截图的阴影、边框和边距",
   "editor.acc_sticker": "贴纸",
   "editor.shape_sticker": "贴纸",
-  "editor.tip_sticker": "贴纸 (S)\n表情符号、文字标牌和圈内编号\n单击放置，拖动设定大小\n调色板：点击按钮或再按一次 S\n旋转：贴纸上方的圆形手柄",
+  "editor.tip_sticker": "贴纸 (S ▾)\n表情符号、文字标牌和圈内编号\n选择：点击按钮或再按一次 S 打开调色板，可按名称搜索\n单击放置，拖动设定大小\n旋转：贴纸上方的圆形手柄",
   "stiker.emoji": "表情符号",
   "stiker.found": "搜索结果",
   "stiker.none": "没有找到。请换个词试试。",

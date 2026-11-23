@@ -363,8 +363,42 @@ def plan(ed, win, ident: str) -> list:
         return [tool_step("sticker"),
                 Step("click", img((640, 300), (640, 300), 50), lambda: shaped("sticker"), path=[(640, 300)])]
     if demo == "ten_ramka":
+        # 1.36.1 (слова владельца: «её надо открыть ещё изначально»): путь целиком: «Форма снимка ▾» → меню → «Тень, рамка и
+        # поля…» → панель → тень, рамка и поля применены к снимку. Меню показывается без блокировки (popup), пункт подсвечен.
+        from PyQt6.QtWidgets import QApplication, QMenu
         from . import ten_ramka
-        return [Step("press", target, lambda: cv.deco.active,
+
+        def open_menu():
+            menu = ed.build_form_menu()
+            ed._ozn_menu = menu
+            anchor = form_target()
+            menu.popup(anchor.mapToGlobal(QPoint(0, anchor.height() + 2)))
+
+        def active_menu():
+            m = QApplication.activePopupWidget()
+            return m if isinstance(m, QMenu) else getattr(ed, "_ozn_menu", None)
+
+        def choose_item():
+            menu = active_menu()
+            if menu is None:
+                return
+            act = next((a for a in menu.actions() if a.text() == tr("deco.menu")), None)
+            if act is not None:
+                menu.setActiveAction(act)   # подсветка пункта самим меню
+                QTimer.singleShot(700, act.trigger)
+
+        def panel():
+            p = getattr(ed, "_deco_panel", None)
+            try:
+                return p if p is not None and p.isVisible() else None
+            except RuntimeError:
+                return None
+        def form_target():   # узкое окно: «Форма снимка» живёт в «⋯ Все инструменты»
+            return ed.form_button if ed.form_button.isVisible() else ed.more_button
+        return [Step("press", form_target, lambda: active_menu() is not None and active_menu().isVisible() or panel() is not None
+                     or cv.deco.active, do=open_menu),
+                Step("press", active_menu, lambda: panel() is not None or cv.deco.active, do=choose_item),
+                Step("press", lambda: panel() or form_target(), lambda: cv.deco.active,
                      do=lambda: cv.set_deco(ten_ramka.Deco(True, 18, 40, True, 4, "#1e78ff", False)))]
     if ident == "ocr":
         return [tool_step("ocr"),
@@ -376,8 +410,14 @@ def plan(ed, win, ident: str) -> list:
         return [tool_step("translate", target)]
     if ident in ("save", "copy"):
         return [Step("press", target, lambda: ident in noted, do=getattr(ed, target).click)]
-    if ident == "pechat":   # у кнопки меню: нажатие открыло бы выпадающий список, действие вызывается напрямую
-        return [Step("press", target, lambda: ident in noted, do=ed.print_image)]
+    if ident == "pechat":   # показ: окно предпросмотра само не открывается (оно модальное), только плашка; настоящее нажатие человека откроет его
+        return [Step("press", target, lambda: ident in noted, do=lambda: (win.lesson.note("pechat"), ed.show_toast(tr("ozn.pechat_demo"))))]
+    if ident == "pdf":   # PDF: кнопка «Печать ▾» (стрелка: «Сохранить в PDF…») и окно «Сохранить»; показ только плашка
+        return [Step("press", target, lambda: "pdf" in noted,
+                     do=lambda: (noted.add("pdf"), ed.show_toast(tr("ozn.pdf_demo"))))]
+    if ident == "qr_chtenie":   # на учебном снимке нарисован код: кнопка «QR» появляется в шапке, когда он прочитан
+        return [Step("press", target, lambda: getattr(ed, "qr_dialog", None) is not None, do=ed.show_qr,
+                     wait=lambda: ed.qr_button.isVisible())]
     if ident in ("settings", "help"):
         return [Step("press", target, lambda: ident in noted)]
     if ident == "phone_editor":
@@ -451,7 +491,7 @@ class Lesson:
             w = getattr(ed, "more_button", None)
         if w is None or not w.isVisible():
             return None
-        return QRect(w.mapTo(ed, QPoint(0, 0)), w.size())
+        return QRect(ed.mapFromGlobal(w.mapToGlobal(QPoint(0, 0))), w.size())   # через экран: работает и для всплывающих окон
 
     def point_img(self, p):
         ed = self.win.editor
@@ -523,6 +563,7 @@ class Lesson:
             except RuntimeError:
                 pass
         self.win.refresh_panel_dim()
+        self.win.refresh_primary()
         if self.phase != "you":
             return
         if self.win.is_panel(self.ident):

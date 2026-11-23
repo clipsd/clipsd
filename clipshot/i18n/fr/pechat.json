@@ -1,10 +1,24 @@
 {
-  "pechat.dialog_title": "Imprimer la capture",
+  "pechat.cancel": "Annuler",
+  "pechat.color": "Couleur",
+  "pechat.color_color": "Couleur",
+  "pechat.color_gray": "Noir et blanc",
+  "pechat.copies": "Copies",
   "pechat.failed": "Impossible d'imprimer la capture",
+  "pechat.fit": "Taille sur la page",
+  "pechat.fit_actual": "Taille réelle",
+  "pechat.fit_page": "Ajuster à la page",
   "pechat.none_close": "Fermer",
   "pechat.none_pdf": "Enregistrer en PDF",
   "pechat.none_text": "Aucune imprimante n'est configurée sur cet ordinateur. La capture peut être enregistrée en PDF puis imprimée plus tard ou sur un autre ordinateur.",
   "pechat.none_title": "Aucune imprimante trouvée",
-  "pechat.preview_title": "Aperçu avant impression",
-  "pechat.sent": "Envoyé à l'imprimante"
+  "pechat.orient": "Orientation",
+  "pechat.orient_auto": "Selon la capture",
+  "pechat.orient_landscape": "Paysage",
+  "pechat.orient_portrait": "Portrait",
+  "pechat.print_button": "Imprimer",
+  "pechat.printer": "Imprimante",
+  "pechat.sent": "Envoyé à l'imprimante",
+  "pechat.system_settings": "Réglages de l'imprimante…",
+  "pechat.win_title": "Imprimer"
 }

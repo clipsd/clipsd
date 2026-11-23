@@ -64,5 +64,6 @@
   "app.menu_sec_capture": "Aufnahme",
   "app.menu_sec_tools": "Werkzeuge",
   "app.menu_learn": "Lernen",
-  "app.menu_help": "Hilfe"
+  "app.menu_help": "Hilfe",
+  "app.restored": "Nach dem Update wieder geöffnet: {n} Screenshot(s)."
 }

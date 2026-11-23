@@ -330,6 +330,14 @@ class Clipshot(QObject):
         from . import updater
         updater.start(self)   # итог прошлой попытки, метка запуска, проверка раз в 6 часов
         self._start_rating()
+        QTimer.singleShot(1800, self.restore_after_restart)
+        if os.name == "nt":
+            try:
+                from . import win_hdr
+                import logging
+                logging.getLogger("clipsd.hdr").warning("start: %s", win_hdr.states_line())   # цвет экрана Windows в журнал
+            except Exception:   # noqa: BLE001
+                pass
 
     # --- оценка программы (1.32, feedback.py) ---------------------------------
 
@@ -701,6 +709,13 @@ class Clipshot(QObject):
         """Человек сам нажал «Перезапустить сейчас»: помощник смены версии спросит программу (quit-for-update) ещё раз,
         и без этой пометки спрятанное окно «С телефона» снова ответило бы «busy» (бесконечное мигание окна)."""
         self._restart_asked_at = time.monotonic()
+        self._explicit_at = time.monotonic()
+
+    EXPLICIT_S = 1800   # «Обновить» нажато недавно: помощник смены версии может прийти позже (скачивание, установка)
+
+    def explicit_restart(self) -> bool:
+        at = getattr(self, "_explicit_at", None)
+        return at is not None and 0 <= time.monotonic() - at < self.EXPLICIT_S
 
     def restart_asked(self) -> bool:
         at = getattr(self, "_restart_asked_at", None)
@@ -733,6 +748,179 @@ class Clipshot(QObject):
             return "dialog"   # a message of the updater («Что нового», an error) is simply closed on quitting
         return ""
 
+    # --- перезапуск по решению человека (1.36.1) -------------------------------------------------------
+
+    RECOVERY_KEY = "restart_restore"
+
+    @staticmethod
+    def recovery_dir() -> Path:
+        return CONFIG_PATH.parent / "recovery"
+
+    def blocker_widget(self, reason: str):
+        """Окно, которое держит обновление (чтобы назвать его и вывести вперёд), или None."""
+        if reason == "dialog":
+            return QApplication.activeModalWidget()
+        if reason == "selector":
+            return self.selector
+        if reason in ("text", "unsaved"):
+            for editor in list(self.editors):
+                canvas = getattr(editor, "canvas", None)
+                if canvas is not None and (getattr(canvas, "text_edit", None) is not None or not getattr(editor, "exported", False)):
+                    return editor
+        if reason == "phone":
+            from . import phone_ui
+            return phone_ui.current_window()
+        return None
+
+    def release_for_restart(self) -> list:
+        """Человек сам нажал «Обновить» или «Перезапустить сейчас»: освободить всё, что держало выход, не теряя работу.
+        Вводимый текст фиксируется; окно выделения закрывается; приём с телефона останавливается; окна без работы
+        закрываются, настройки применяются (OK), «О программе» и справочные окна закрываются; редакторы с несохранёнными
+        пометками записываются в папку recovery (пометки вплавлены в картинку) и открываются заново после перезапуска.
+        Буфер обмена не держит (человек согласился). Возвращает список сделанных шагов (для журнала); что не удалось
+        закрыть само, остаётся причиной в quit_blocker."""
+        steps = []
+        for editor in list(self.editors):
+            canvas = getattr(editor, "canvas", None)
+            if canvas is not None and getattr(canvas, "text_edit", None) is not None:
+                try:
+                    canvas.commit_text()
+                    steps.append("text committed")
+                except Exception as exc:   # noqa: BLE001
+                    steps.append(f"text commit failed: {exc}")
+        if self.selector is not None:
+            try:
+                self.selector._finish(None)
+                steps.append("selector cancelled")
+            except Exception as exc:   # noqa: BLE001
+                steps.append(f"selector cancel failed: {exc}")
+        if self.insert_target is not None:
+            self.insert_target = None
+            steps.append("insert target dropped")
+        try:
+            from . import phone_ui
+            if phone_ui.is_busy(ignore_hidden=True) or phone_ui.current_window() is not None:
+                phone_ui.stop_all()
+                steps.append("phone window closed")
+        except Exception as exc:   # noqa: BLE001
+            steps.append(f"phone close failed: {exc}")
+        for _ in range(8):   # окно в окне: по одному, начиная с верхнего
+            modal = QApplication.activeModalWidget()
+            if modal is None or not modal.isVisible():
+                break
+            name = type(modal).__name__
+            from PyQt6.QtWidgets import QDialog
+            before = modal.isVisible()
+            if modal is getattr(self, "_settings", None):
+                modal.accept()   # настройки применяются и закрываются; не вышло применить: окно остаётся, это будет названо
+                steps.append("settings applied and closed" if not modal.isVisible() else "settings could not be applied")
+            elif isinstance(modal, QDialog):
+                modal.reject()
+                steps.append(f"dialog {name} closed")
+            else:
+                modal.close()
+                steps.append(f"window {name} closed")
+            QApplication.processEvents()
+            from PyQt6 import sip
+            if sip.isdeleted(modal) or not modal.isVisible():
+                continue   # закрыто (WA_DeleteOnClose удаляет окно)
+            if before:
+                break
+        saved = self._save_editors_for_restart()
+        if saved:
+            steps.append(f"editors saved for restore: {saved}")
+        self._flush_clipboard()
+        return steps
+
+    def _save_editors_for_restart(self) -> int:
+        """Несохранённые редакторы: исходная картинка и пометки (JSON) в recovery, список в настройках; редактор помечается
+        сохранённым, чтобы выход не ждал его. После перезапуска restore_after_restart открывает их с теми же правимыми
+        пометками. Не вышло записать пометки: картинка с вплавленными пометками (как раньше)."""
+        import json
+        from .shapes import shape_to_dict
+        entries = []
+        for editor in list(self.editors):
+            canvas = getattr(editor, "canvas", None)
+            if canvas is None or getattr(editor, "exported", False):
+                continue
+            if not (getattr(canvas, "modified", False) or getattr(editor, "only_in_memory", False)):
+                continue
+            try:
+                folder = self.recovery_dir()
+                folder.mkdir(parents=True, exist_ok=True)
+                stem = f"{int(time.time())}-{len(entries) + 1}"
+                path = folder / f"{stem}.png"
+                marks = None
+                try:
+                    canvas.commit_text()
+                    if canvas.base.save(str(path), "PNG"):
+                        marks = folder / f"{stem}.json"
+                        marks.write_text(json.dumps({"shapes": [shape_to_dict(s) for s in canvas.shapes]}), encoding="utf-8")
+                    else:
+                        marks = None
+                except Exception:   # noqa: BLE001 - пометки не записались: запасной путь ниже
+                    marks = None
+                if marks is None:
+                    if not editor.render_image().save(str(path), "PNG"):
+                        continue
+            except Exception as exc:   # noqa: BLE001 - не сохранилось: редактор остаётся и держит выход
+                print(f"Спасение снимка перед обновлением не удалось: {exc}")
+                continue
+            entries.append(str(path))
+            editor.exported = True
+        if entries:
+            self.config[self.RECOVERY_KEY] = list(self.config.get(self.RECOVERY_KEY) or []) + entries
+            self.save_config()
+        return len(entries)
+
+    def restore_after_restart(self) -> int:
+        """После обновления: снимки, спасённые перед перезапуском, открываются снова с теми же пометками."""
+        import json
+        from .shapes import shape_from_dict
+        listed = list(self.config.get(self.RECOVERY_KEY) or [])
+        if not listed:
+            return 0
+        self.config.pop(self.RECOVERY_KEY, None)
+        self.save_config()
+        opened = 0
+        for name in listed:
+            image = QImage(str(name))
+            if image.isNull():
+                continue
+            marks = Path(name).with_suffix(".json")
+            shapes = []
+            if marks.exists():
+                try:
+                    shapes = [shape_from_dict(d) for d in json.loads(marks.read_text(encoding="utf-8")).get("shapes", [])]
+                except Exception as exc:   # noqa: BLE001 - пометки не читаются: открывается картинка без них
+                    print(f"Пометки восстановления не прочитаны: {exc}")
+            editor = self.open_editor(image, None)
+            if editor is not None:
+                if shapes:
+                    editor.canvas.shapes = shapes
+                    editor.canvas.update()
+                editor.canvas.modified = True   # не сохранён: при закрытии спросит, как раньше
+                opened += 1
+            for f in (Path(name), marks):
+                try:
+                    f.unlink()
+                except OSError:
+                    pass
+        if opened:
+            self.notify(tr("app.restored", n=opened))
+        return opened
+
+    @staticmethod
+    def _flush_clipboard():
+        """Windows: то, что программа скопировала, остаётся в буфере и после выхода (OleFlushClipboard)."""
+        if os.name != "nt":
+            return
+        try:
+            import ctypes
+            ctypes.windll.ole32.OleFlushClipboard()
+        except Exception:   # noqa: BLE001
+            pass
+
     CLIPBOARD_HOLD_S = 120   # отложенное обновление ждёт столько после копирования снимка или текста (Г4)
 
     def _clipboard_changed(self):
@@ -757,11 +945,19 @@ class Clipshot(QObject):
         return self._owns_clipboard()
 
     def answer_quit_for_update(self) -> str:
-        """Ответ на quit-for-update: «ok» (программа сейчас выйдет) или «busy» (обновление отложено)."""
+        """Ответ на quit-for-update: «ok» (программа сейчас выйдет) или «busy» (обновление отложено). Если человек сам
+        решил обновиться («Обновить», «Перезапустить сейчас»), сначала освобождается всё, что можно без потери работы
+        (release_for_restart): обновление не откладывается из-за окон, которые он не просил держать."""
+        if self.explicit_restart() and self.quit_blocker():
+            steps = self.release_for_restart()
+            import logging
+            logging.getLogger("clipsd.updater").warning("explicit update: released the blockers: %s", steps)
         blocker = self.quit_blocker()
         if not blocker:
             return "ok"
         print(f"Обновление отложено: {blocker}")
+        import logging
+        logging.getLogger("clipsd.updater").warning("update deferred, still blocked by: %s", blocker)
         from . import updater
         updater.get_updater(self).note_deferred(blocker)
         return f"busy:{blocker}"   # the helper, install.sh and uninstall.sh name the reason
@@ -888,6 +1084,7 @@ class Clipshot(QObject):
         QTimer.singleShot(max(300, self.clear_way_for_capture()), lambda: self._start_region(translate=True))
 
     def _start_region(self, full=False, translate=False):
+        guide, self._guide = getattr(self, "_guide", None), None   # 1.36.1: подсказка шагов из «Ознакомления» (id пункта)
         self._capture_at = None   # дальше занятость видна по самому окну выделения
         self._note_activity()
         modal = self._modal_in_the_way()
@@ -906,6 +1103,7 @@ class Clipshot(QObject):
             self.selector.ocr_enabled = self.config.get("ocr_enabled", True)
             self.selector.tr_cfg, self.selector.tr_save = self.config, self.save_config
             self.selector.lang_ctx = self
+            self.selector.guide = guide
             self._attach_windows(self.selector)
             self.selector.finished.connect(self._region_done)
             self.selector.start_selection()
@@ -920,6 +1118,7 @@ class Clipshot(QObject):
         selector.ocr_enabled = self.config.get("ocr_enabled", True)
         selector.tr_cfg, selector.tr_save = self.config, self.save_config
         selector.lang_ctx = self
+        selector.guide = guide
         self._attach_windows(selector)
         selector.finished.connect(self._region_done)
         self.selector = selector
@@ -1988,6 +2187,9 @@ def main() -> int:
     from . import themes
     themes.apply_app(qapp, app.config)
     app.start(server_name, command)
+    if sys.platform == "win32":
+        from .grab import prewarm_hdr
+        QTimer.singleShot(3000, prewarm_hdr)   # HDR-мониторы: видеокарта и шейдер готовы к первому снимку
     errorlog.set_loop_running(True)
     rc = qapp.exec()
     errorlog.set_loop_running(False)

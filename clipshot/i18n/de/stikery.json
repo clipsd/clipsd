@@ -13,7 +13,7 @@
   "deco.title": "Schatten, Rahmen und Rand des Bildes",
   "editor.acc_sticker": "Sticker",
   "editor.shape_sticker": "Sticker",
-  "editor.tip_sticker": "Sticker (S)\nEmojis, Textschilder und nummerierte Kreise\nKlick: setzen, ziehen: Größe festlegen\nPalette: Klick auf die Schaltfläche oder erneut S\nDrehen: runder Griff über dem Sticker",
+  "editor.tip_sticker": "Sticker (S ▾)\nEmojis, Textschilder und nummerierte Kreise\nAuswahl: Klick auf die Schaltfläche oder erneut S öffnet die Palette, mit Suche nach Namen\nKlick: setzen, ziehen: Größe festlegen\nDrehen: runder Griff über dem Sticker",
   "stiker.emoji": "Emojis",
   "stiker.found": "Gefunden",
   "stiker.none": "Nichts gefunden. Versuchen Sie ein anderes Wort.",

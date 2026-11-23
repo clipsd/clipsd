@@ -1,10 +1,24 @@
 {
-  "pechat.dialog_title": "Друк знімка",
+  "pechat.cancel": "Скасувати",
+  "pechat.color": "Колір",
+  "pechat.color_color": "Кольорова",
+  "pechat.color_gray": "Чорно-біла",
+  "pechat.copies": "Копії",
   "pechat.failed": "Не вдалося надрукувати знімок",
+  "pechat.fit": "Розмір на сторінці",
+  "pechat.fit_actual": "Як є",
+  "pechat.fit_page": "Вписати в сторінку",
   "pechat.none_close": "Закрити",
   "pechat.none_pdf": "Зберегти в PDF",
   "pechat.none_text": "У системі немає жодного принтера. Знімок можна зберегти в PDF і роздрукувати пізніше або на іншому комп'ютері.",
   "pechat.none_title": "Принтер не знайдено",
-  "pechat.preview_title": "Попередній перегляд друку",
-  "pechat.sent": "Надіслано на друк"
+  "pechat.orient": "Орієнтація",
+  "pechat.orient_auto": "За знімком",
+  "pechat.orient_landscape": "Альбомна",
+  "pechat.orient_portrait": "Книжкова",
+  "pechat.print_button": "Друк",
+  "pechat.printer": "Принтер",
+  "pechat.sent": "Надіслано на друк",
+  "pechat.system_settings": "Налаштування принтера…",
+  "pechat.win_title": "Друк"
 }

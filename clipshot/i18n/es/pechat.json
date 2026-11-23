@@ -1,10 +1,24 @@
 {
-  "pechat.dialog_title": "Imprimir captura",
+  "pechat.cancel": "Cancelar",
+  "pechat.color": "Color",
+  "pechat.color_color": "Color",
+  "pechat.color_gray": "Blanco y negro",
+  "pechat.copies": "Copias",
   "pechat.failed": "No se pudo imprimir la captura",
+  "pechat.fit": "Tamaño en la página",
+  "pechat.fit_actual": "Tamaño real",
+  "pechat.fit_page": "Ajustar a la página",
   "pechat.none_close": "Cerrar",
   "pechat.none_pdf": "Guardar como PDF",
   "pechat.none_text": "Este equipo no tiene ninguna impresora configurada. La captura se puede guardar como PDF e imprimir más tarde o en otro equipo.",
   "pechat.none_title": "No se encontró ninguna impresora",
-  "pechat.preview_title": "Vista previa de impresión",
-  "pechat.sent": "Enviado a la impresora"
+  "pechat.orient": "Orientación",
+  "pechat.orient_auto": "Según la captura",
+  "pechat.orient_landscape": "Horizontal",
+  "pechat.orient_portrait": "Vertical",
+  "pechat.print_button": "Imprimir",
+  "pechat.printer": "Impresora",
+  "pechat.sent": "Enviado a la impresora",
+  "pechat.system_settings": "Ajustes de la impresora…",
+  "pechat.win_title": "Imprimir"
 }

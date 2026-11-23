@@ -4,8 +4,9 @@
 # Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """«Закрепить поверх окон» (1.36): снимок висит отдельным окошком без рамки поверх всех окон, как стикер.
 
-Окошко тянется мышью, колесо меняет размер, Ctrl+колесо прозрачность, двойной щелчок или Esc закрывает, правая
-кнопка открывает меню (копировать, сохранить, открыть в редакторе, прозрачность, закрыть). Закреплённых окон можно
+Окошко тянется мышью, размер меняется за края и углы (пропорции снимка сохраняются, 1.36.1) и колесом, Ctrl+колесо
+прозрачность, крестик в углу, двойной щелчок или Esc открепляют, правая кнопка открывает меню (копировать, сохранить,
+открыть в редакторе, прозрачность, открепить). Закреплённых окон можно
 держать сколько угодно: их список здесь же (OPEN), у каждого своя картинка, размер и прозрачность.
 
 Поверх всех окон: Qt.WindowStaysOnTopHint. Программа на Linux под Wayland по умолчанию работает через XWayland
@@ -31,9 +32,16 @@ OPACITY_MIN = 0.2
 OPACITY_STEP = 0.1
 OPACITY_CHOICES = (1.0, 0.75, 0.5, 0.25)
 MIN_SIDE = 40             # меньше этого по короткой стороне окошко не сжимается
-CROSS = 22                # крестик в углу, появляется под мышью
+CROSS = 28                # крестик в углу, виден, пока мышь над окошком (1.36.1: крупнее и контрастнее)
+EDGE = 8                  # px (логические, Qt сам умножает на масштаб экрана): полоса у края и угла, за которую тянется размер
 HINT_MS = 7000
 DRAG_START = 3            # px: до этого щелчок, не перенос
+
+LEFT, RIGHT, TOP, BOTTOM = 1, 2, 4, 8   # какие края схвачены при изменении размера
+CURSORS = {LEFT: Qt.CursorShape.SizeHorCursor, RIGHT: Qt.CursorShape.SizeHorCursor,
+           TOP: Qt.CursorShape.SizeVerCursor, BOTTOM: Qt.CursorShape.SizeVerCursor,
+           LEFT | TOP: Qt.CursorShape.SizeFDiagCursor, RIGHT | BOTTOM: Qt.CursorShape.SizeFDiagCursor,
+           RIGHT | TOP: Qt.CursorShape.SizeBDiagCursor, LEFT | BOTTOM: Qt.CursorShape.SizeBDiagCursor}
 
 OPEN: list = []           # закреплённые окошки (держат себя от сборщика мусора)
 
@@ -60,6 +68,7 @@ class PinnedWindow(QWidget):
         self.opacity = 1.0
         self.hint_text = ""
         self.flash_text = ""
+        self._resize = None           # (края, геометрия окна, позиция мыши) при изменении размера за край
         self._drag = None             # (позиция мыши на экране, позиция окна) при переносе вручную
         self._press = None
         self._hover = False
@@ -135,12 +144,12 @@ class PinnedWindow(QWidget):
         if self._hover:
             r = self.cross_rect()
             p.setRenderHint(QPainter.RenderHint.Antialiasing)
-            p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QColor(20, 22, 26, 215))
-            p.drawEllipse(r)
-            p.setPen(QPen(QColor("#ffffff"), 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            p.setPen(QPen(QColor("#ffffff"), 2))   # белое кольцо: крестик виден и на тёмном, и на светлом снимке
+            p.setBrush(QColor(196, 43, 28, 245))
+            p.drawEllipse(r.adjusted(1, 1, -1, -1))
+            p.setPen(QPen(QColor("#ffffff"), 2.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
             c = r.center()
-            d = 4.5
+            d = 5.5
             p.drawLine(QPointF(c.x() - d, c.y() - d), QPointF(c.x() + d, c.y() + d))
             p.drawLine(QPointF(c.x() - d, c.y() + d), QPointF(c.x() + d, c.y() - d))
         text = self.flash_text or self.hint_text
@@ -180,8 +189,52 @@ class PinnedWindow(QWidget):
 
     def leaveEvent(self, event):
         self._hover = False
+        if self._resize is None:
+            self.setCursor(Qt.CursorShape.SizeAllCursor)
         self.update()
         super().leaveEvent(event)
+
+    def edges_at(self, pos) -> int:
+        """Какие края под точкой (логические точки окна): полоса EDGE у края, в углу два края. Под крестиком краёв нет."""
+        x, y = pos.x(), pos.y()
+        if self._hover and self.cross_rect().contains(QPointF(x, y)):
+            return 0
+        edges = 0
+        if x < EDGE:
+            edges |= LEFT
+        elif x >= self.width() - EDGE:
+            edges |= RIGHT
+        if y < EDGE:
+            edges |= TOP
+        elif y >= self.height() - EDGE:
+            edges |= BOTTOM
+        return edges
+
+    def _update_cursor(self, pos):
+        shape = CURSORS.get(self.edges_at(pos), Qt.CursorShape.SizeAllCursor)
+        if self.cursor().shape() != shape:
+            self.setCursor(shape)
+
+    def resize_by_edges(self, edges: int, start: QRect, delta: QPoint):
+        """Размер за край или угол с сохранением пропорций снимка: окно растёт от противоположного края (угла)."""
+        base, low, high = self._limits()
+        w0, h0 = max(1, start.width()), max(1, start.height())
+        dx = delta.x() * (1 if edges & RIGHT else -1 if edges & LEFT else 0)
+        dy = delta.y() * (1 if edges & BOTTOM else -1 if edges & TOP else 0)
+        kx = (w0 + dx) / w0 if (edges & (LEFT | RIGHT)) else None
+        ky = (h0 + dy) / h0 if (edges & (TOP | BOTTOM)) else None
+        k = max(v for v in (kx, ky) if v is not None)   # в углу побеждает та сторона, которую потянули дальше
+        scale = max(low, min(high, self.scale_of(start) * k))
+        size = QSize(max(1, round(base.width() * scale)), max(1, round(base.height() * scale)))
+        x = start.right() + 1 - size.width() if edges & LEFT else start.x()
+        y = start.bottom() + 1 - size.height() if edges & TOP else start.y()
+        self.scale = scale
+        self.setGeometry(QRect(QPoint(x, y), size))
+        self.update()
+
+    def scale_of(self, rect: QRect) -> float:
+        base = logical_size(self.image)
+        return rect.width() / max(1, base.width())
 
     def mousePressEvent(self, event):
         self.setFocus()
@@ -192,13 +245,26 @@ class PinnedWindow(QWidget):
             return
         self._press = event.globalPosition().toPoint()
         self._drag = None
+        self._resize = None
         if self._hover and self.cross_rect().contains(event.position()):
             self._press = "close"
+            return
+        edges = self.edges_at(event.position())
+        if edges:
+            self._resize = (edges, QRect(self.geometry()), event.globalPosition().toPoint())
+            self._press = "resize"
             return
         self._drag = (event.globalPosition().toPoint(), self.pos())
 
     def mouseMoveEvent(self, event):
-        if self._drag is None or not (event.buttons() & Qt.MouseButton.LeftButton):
+        if not (event.buttons() & Qt.MouseButton.LeftButton):
+            self._update_cursor(event.position())
+            return
+        if self._resize is not None:
+            edges, start, origin = self._resize
+            self.resize_by_edges(edges, start, event.globalPosition().toPoint() - origin)
+            return
+        if self._drag is None:
             return
         start, origin = self._drag
         delta = event.globalPosition().toPoint() - start
@@ -217,8 +283,11 @@ class PinnedWindow(QWidget):
         if event.button() == Qt.MouseButton.LeftButton and self._press == "close" \
                 and self.cross_rect().contains(event.position()):
             self.close()
+            return
         self._drag = None
+        self._resize = None
         self._press = None
+        self._update_cursor(event.position())
 
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -346,8 +415,14 @@ def pin(ctx, image: QImage, top_left=None, scale: float = 1.0, opacity: float = 
     _place(win, top_left)
     win.show()
     win.raise_()
-    if native_wayland() and not _hint_enough(ctx):
-        win.show_hint(tr("zakrepit.wayland_hint"))
+    howto = not _howto_enough(ctx)
+    wayland = native_wayland() and not _hint_enough(ctx)
+    if howto or wayland:
+        win.show_hint("\n".join(([tr("zakrepit.howto")] if howto else []) + ([tr("zakrepit.wayland_hint")] if wayland else [])),
+                      HINT_MS + (3000 if howto else 0))
+    if howto:
+        _note_howto(ctx)
+    if wayland:
         _note_hint(ctx)
     return win
 
@@ -371,6 +446,28 @@ def _note_hint(ctx):
         cfg["zakrepit_hint_shown"] = int(cfg.get("zakrepit_hint_shown", 0) or 0) + 1
     except (TypeError, ValueError):
         cfg["zakrepit_hint_shown"] = 1
+    save = getattr(ctx, "save_config", None)
+    if callable(save):
+        save()
+
+
+def _howto_enough(ctx) -> bool:
+    """Как менять размер и как открепить: показывается при первых закреплениях (HINT_TIMES), потом человек знает."""
+    cfg = getattr(ctx, "config", None)
+    if not isinstance(cfg, dict):
+        return True   # учебный или пробный ctx без настроек: ничего не запоминаем и не показываем
+    try:
+        return int(cfg.get("zakrepit_howto_shown", 0) or 0) >= HINT_TIMES
+    except (TypeError, ValueError):
+        return False
+
+
+def _note_howto(ctx):
+    cfg = getattr(ctx, "config", None)
+    try:
+        cfg["zakrepit_howto_shown"] = int(cfg.get("zakrepit_howto_shown", 0) or 0) + 1
+    except (TypeError, ValueError):
+        cfg["zakrepit_howto_shown"] = 1
     save = getattr(ctx, "save_config", None)
     if callable(save):
         save()

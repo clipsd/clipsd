@@ -117,8 +117,11 @@ def test_find():
                  "DE89370400440532013000"):
         got = kinds("IBAN: " + iban)
         check(got == [("iban", iban)], f"IBAN найден: {iban} -> {got}")
-    for bad in ("DE89 3704 0044 0532 0130 01", "GB82 WEST 1234 5698 7654 33", "XX00 1234 5678 9012 3456", "DE89 3704"):
+    for bad in ("DE89 3704",):
         check(kinds("IBAN: " + bad) == [], f"неверный IBAN ничего не закрывает (даже кусками): {bad} -> {kinds('IBAN: ' + bad)}")
+    for bad in ("DE89 3704 0044 0532 0130 01", "GB82 WEST 1234 5698 7654 33", "XX00 1234 5678 9012 3456"):   # после подписи IBAN: «Похоже» (1.36.1)   # 1.36.1: похоже на IBAN, сумма не сошлась: строка «Похоже», не закрыто само
+        got = [f for f in privacy.find(words_of("IBAN: " + bad)[0])]
+        check(len(got) == 1 and got[0].maybe and got[0].kind == "iban", f"IBAN с неверной суммой: «Похоже на IBAN, проверьте», само не закрывается: {bad}")
     check(kinds(LINK) == [("link", LINK)], "ссылка с token=")
     check(kinds("www.example.com/?key=abcdefgh") == [("link", "www.example.com/?key=abcdefgh")], "ссылка www с key=")
     check(kinds("https://example.com/page?id=42&lang=ru") == [], "обычная ссылка не закрывается")
@@ -171,7 +174,7 @@ def test_masks():
 
 class Ctx:
     def __init__(self, **kw):
-        self.config = dict(appmod.DEFAULTS, tour_done=True, theme_chosen=True, **kw)
+        self.config = dict(appmod.DEFAULTS, tour_done=True, theme_chosen=True, privacy_second_pass=False, **kw)
         self.icon = appmod.make_icon()
 
     def save_config(self):
@@ -640,7 +643,7 @@ def test_languages():
     settle()
     ref = i18n._load("ru")
     keys = [k for k in ref if k.startswith("privacy.")]
-    check(len(keys) == 39, f"39 строк privacy.* в ru: {len(keys)}")
+    check(len(keys) == 46, f"46 строк privacy.* в ru: {len(keys)}")
     for lang in i18n.LANGUAGES:
         cat = i18n._load(lang)
         check(all(cat.get(k, "").strip() for k in keys), f"{lang}: все строки есть")

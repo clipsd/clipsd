@@ -1,10 +1,24 @@
 {
-  "pechat.dialog_title": "Ekran görüntüsünü yazdır",
+  "pechat.cancel": "İptal",
+  "pechat.color": "Renk",
+  "pechat.color_color": "Renkli",
+  "pechat.color_gray": "Siyah beyaz",
+  "pechat.copies": "Kopya",
   "pechat.failed": "Ekran görüntüsü yazdırılamadı",
+  "pechat.fit": "Sayfadaki boyut",
+  "pechat.fit_actual": "Gerçek boyut",
+  "pechat.fit_page": "Sayfaya sığdır",
   "pechat.none_close": "Kapat",
   "pechat.none_pdf": "PDF olarak kaydet",
   "pechat.none_text": "Bu bilgisayarda kurulu bir yazıcı yok. Ekran görüntüsü PDF olarak kaydedilip daha sonra veya başka bir bilgisayarda yazdırılabilir.",
   "pechat.none_title": "Yazıcı bulunamadı",
-  "pechat.preview_title": "Baskı önizleme",
-  "pechat.sent": "Yazıcıya gönderildi"
+  "pechat.orient": "Yönlendirme",
+  "pechat.orient_auto": "Görüntüye göre",
+  "pechat.orient_landscape": "Yatay",
+  "pechat.orient_portrait": "Dikey",
+  "pechat.print_button": "Yazdır",
+  "pechat.printer": "Yazıcı",
+  "pechat.sent": "Yazıcıya gönderildi",
+  "pechat.system_settings": "Yazıcı ayarları…",
+  "pechat.win_title": "Yazdır"
 }

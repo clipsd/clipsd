@@ -573,3 +573,41 @@ class Shape:
         p.setPen(self.label_color())
         for i, line in enumerate(self.text.split("\n")):
             p.drawText(box.topLeft() + QPointF(CALLOUT_PAD, CALLOUT_PAD + fm.ascent() + i * fm.lineSpacing()), line)
+
+
+# --- запись пометок на диск (1.36.1: восстановление несохранённых снимков после перезапуска для обновления) -------------
+
+def shape_to_dict(s: Shape) -> dict:
+    """Пометка в словарь для JSON: всё, что нужно, чтобы рисовать её так же и править дальше."""
+    import base64
+    from PyQt6.QtCore import QBuffer, QIODevice
+    out = {"kind": s.kind, "color": s.color.name(QColor.NameFormat.HexArgb), "size": s.size, "filled": bool(s.filled),
+           "points": [[p.x(), p.y()] for p in s.points], "text": s.text, "number": s.number,
+           "text_color": s.text_color.name(QColor.NameFormat.HexArgb) if s.text_color is not None else None,
+           "erasures": [[w, [[p.x(), p.y()] for p in pts]] for w, pts in s.erasures], "sticker": s.sticker,
+           "solid": bool(s.solid), "angle": s.angle, "image": None}
+    if s.image is not None and not s.image.isNull():
+        buf = QBuffer()
+        buf.open(QIODevice.OpenModeFlag.WriteOnly)
+        s.image.save(buf, "PNG")
+        out["image"] = base64.b64encode(bytes(buf.data())).decode("ascii")
+    return out
+
+
+def shape_from_dict(d: dict) -> Shape:
+    import base64
+    pts = [QPointF(x, y) for x, y in d["points"]]
+    s = Shape(d["kind"], QColor(d["color"]), d["size"], pts[0] if pts else QPointF(), bool(d.get("filled")))
+    s.points = pts or s.points
+    s.text = d.get("text", "")
+    s.number = d.get("number", 0)
+    s.text_color = QColor(d["text_color"]) if d.get("text_color") else None
+    s.erasures = [(w, [QPointF(x, y) for x, y in p]) for w, p in d.get("erasures", [])]
+    s.sticker = d.get("sticker", "")
+    s.solid = bool(d.get("solid"))
+    s.angle = d.get("angle", 0.0)
+    if d.get("image"):
+        img = QImage()
+        img.loadFromData(base64.b64decode(d["image"]), "PNG")
+        s.image = img
+    return s

@@ -13,7 +13,7 @@
   "deco.title": "Sombra, marco y márgenes de la captura",
   "editor.acc_sticker": "pegatina",
   "editor.shape_sticker": "pegatina",
-  "editor.tip_sticker": "Pegatina (S)\nEmojis, etiquetas con texto y números en círculos\nClic: colocar, arrastrar: elegir el tamaño\nPaleta: clic en el botón o pulsar S otra vez\nGirar: tirador redondo sobre la pegatina",
+  "editor.tip_sticker": "Pegatina (S ▾)\nEmojis, etiquetas con texto y números en círculos\nElegir: clic en el botón o pulsar S otra vez abre la paleta, con búsqueda por nombre\nClic: colocar, arrastrar: elegir el tamaño\nGirar: tirador redondo sobre la pegatina",
   "stiker.emoji": "Emojis",
   "stiker.found": "Encontrados",
   "stiker.none": "No se encontró nada. Pruebe con otra palabra.",

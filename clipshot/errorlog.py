@@ -120,7 +120,14 @@ def system_line() -> str:
     except Exception:
         osname = sys.platform
     kind = "собрана" if getattr(sys, "frozen", False) else "из исходников"
-    return scrub(f"ClipSD {__version__} ({kind}), {osname}, Python {platform.python_version()}")
+    extra = ""
+    if os.name == "nt":   # 1.36.1: цвет экрана Windows (тусклые снимки), чтобы увидеть без вопросов владельцу
+        try:
+            from . import win_hdr
+            extra = "display color: " + win_hdr.states_line()
+        except Exception:   # noqa: BLE001
+            extra = ""
+    return scrub(f"ClipSD {__version__} ({kind}), {osname}, Python {platform.python_version()}" + (f"\n{extra}" if extra else ""))
 
 
 def make_report(where: str, exc_type, exc, tb) -> str:

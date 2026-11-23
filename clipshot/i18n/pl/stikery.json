@@ -13,7 +13,7 @@
   "deco.title": "Cień, ramka i marginesy zrzutu",
   "editor.acc_sticker": "naklejkę",
   "editor.shape_sticker": "naklejka",
-  "editor.tip_sticker": "Naklejka (S)\nEmoji, plakietki z tekstem i numery w kółkach\nKlik: umieść, przeciągnij: ustaw rozmiar\nPaleta: kliknij przycisk lub ponownie S\nObrót: okrągły uchwyt nad naklejką",
+  "editor.tip_sticker": "Naklejka (S ▾)\nEmoji, plakietki z tekstem i numery w kółkach\nWybór: kliknij przycisk lub ponownie S, aby otworzyć paletę z wyszukiwaniem po nazwie\nKlik: umieść, przeciągnij: ustaw rozmiar\nObrót: okrągły uchwyt nad naklejką",
   "stiker.emoji": "Emoji",
   "stiker.found": "Znalezione",
   "stiker.none": "Nic nie znaleziono. Spróbuj innego słowa.",

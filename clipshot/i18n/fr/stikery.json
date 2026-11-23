@@ -13,7 +13,7 @@
   "deco.title": "Ombre, cadre et marges de l'image",
   "editor.acc_sticker": "autocollant",
   "editor.shape_sticker": "autocollant",
-  "editor.tip_sticker": "Autocollant (S)\nÉmojis, étiquettes de texte et numéros dans des cercles\nClic : poser, glisser : choisir la taille\nPalette : clic sur le bouton ou S à nouveau\nRotation : poignée ronde au-dessus de l'autocollant",
+  "editor.tip_sticker": "Autocollant (S ▾)\nÉmojis, étiquettes de texte et numéros dans des cercles\nChoix : clic sur le bouton ou S à nouveau ouvre la palette, avec recherche par nom\nClic : poser, glisser : choisir la taille\nRotation : poignée ronde au-dessus de l'autocollant",
   "stiker.emoji": "Émojis",
   "stiker.found": "Trouvés",
   "stiker.none": "Aucun résultat. Essayez un autre mot.",

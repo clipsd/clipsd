@@ -51,7 +51,7 @@ class PrivacySession:
         self.canvas = canvas
         self.words = list(words)
         self.findings = list(findings)
-        self.modes = ["full"] * len(self.findings)
+        self.modes = ["open" if getattr(f, "maybe", False) else "full" for f in self.findings]   # «Похоже на IBAN»: не закрыто само
         self.custom = [False] * len(self.findings)   # размытие этого значения правили мышью («Открыть кусок»)
         self.shapes = {}    # номер находки -> её размытия на холсте
         self.extra = []     # размытия, добавленные «Скрыть кусок»
@@ -261,6 +261,9 @@ class PrivacyRow(QFrame):
         self._full_text = text
         self.label.setText(self.label.fontMetrics().elidedText(text, Qt.TextElideMode.ElideRight, 150))
         self.label.setToolTip(text)
+        if getattr(self.finding, "maybe", False):   # сумма IBAN не сошлась: подсказка вместо тишины, закрыть можно в меню
+            self.label.setText(self.label.fontMetrics().elidedText(tr("privacy.maybe_short") + " " + text, Qt.TextElideMode.ElideRight, 150))
+            self.label.setToolTip(tr("privacy.maybe_iban") + "\n" + text)
         name = "custom" if custom else mode
         short = tr(SHORT_KEYS[name])
         self.button.setText(self.button.fontMetrics().elidedText(short + "  ▾", Qt.TextElideMode.ElideRight,
@@ -296,6 +299,15 @@ class PrivacyPanel(QFrame):
     manual_requested = pyqtSignal()
     hovered = pyqtSignal(int, bool)      # наведение на строку: подсветить место на снимке
     tool_changed = pyqtSignal(str)       # "", "open" или "hide": «Открыть кусок» / «Скрыть кусок»
+    visibility_changed = pyqtSignal(bool)   # 1.36.1: панель показана или убрана: окно редактора растёт вбок, снимок не сжимается
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.visibility_changed.emit(True)
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        self.visibility_changed.emit(False)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -417,6 +429,11 @@ class PrivacyPanel(QFrame):
             tools.addWidget(b, 1)
             self.tool_buttons[key] = b
         self.buttons.addLayout(tools)
+        self.band_hint = QLabel()   # 1.36.1: что делать, пока выбран «Открыть/Скрыть кусок»
+        self.band_hint.setObjectName("privacyHint")
+        self.band_hint.setWordWrap(True)
+        self.band_hint.hide()
+        self.buttons.addWidget(self.band_hint)
         row = QHBoxLayout()
         row.setSpacing(6)
         open_all = QPushButton(tr("privacy.open_all"))
@@ -441,6 +458,10 @@ class PrivacyPanel(QFrame):
         self.tool = tool
         for k, b in self.tool_buttons.items():
             b.setChecked(k == tool)
+        hint = getattr(self, "band_hint", None)
+        if hint is not None:
+            hint.setText({"open": tr("privacy.band_hint_open"), "hide": tr("privacy.band_hint_hide")}.get(tool, ""))
+            hint.setVisible(tool in TOOL_KEYS)
         if emit:
             self.tool_changed.emit(tool)
 

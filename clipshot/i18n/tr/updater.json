@@ -59,6 +59,7 @@
   "updater.wait.dialog": "{version} sürümü, açık ClipSD penceresini (örneğin ayarlar penceresini) kapattığınızda kurulacak.",
   "updater.wait.phone": "{version} sürümü, «Telefondan» penceresini kapattığınızda kurulacak.",
   "updater.wait.selector": "{version} sürümü, alan seçimi penceresi kapandığında kurulacak.",
+  "updater.wait.still": "«{window}» penceresi kendiliğinden kapatılamadı: öne getirildi. Kapatın, {version} sürümü hemen kurulacak.",
   "updater.wait.text": "{version} sürümü, metin girişini bitirip düzenleyiciyi kapattığınızda kurulacak.",
   "updater.wait.title": "Güncelleme indirildi",
   "updater.wait.unsaved": "{version} sürümü, düzenleyiciyi kapattığınızda kurulacak. Kaydedilmemiş işaretleriniz kaybolmaz.",

@@ -277,7 +277,7 @@ check(not zakrepit.OPEN and all(gone(w) for w in ws), "close_all закрыва�
 check(zakrepit.native_wayland() is False, "в тесте (offscreen) это не родной Wayland")
 c4 = Ctx()
 p0 = zakrepit.pin(c4, pic())
-check(p0.hint_text == "" and c4.config.get("zakrepit_hint_shown") is None, "не Wayland: подсказки про «поверх всех» нет")
+check(p0.hint_text == tr("zakrepit.howto") and c4.config.get("zakrepit_hint_shown") is None, "не Wayland: подсказка только про размер и снятие, про «поверх всех» нет")
 p0.close()
 real = zakrepit.native_wayland
 zakrepit.native_wayland = lambda: True
@@ -287,7 +287,7 @@ try:
         p = zakrepit.pin(c4, pic())
         hints.append(p.hint_text)
         p.close()
-    check(hints[0] == tr("zakrepit.wayland_hint") and all(hints[:zakrepit.HINT_TIMES]) and not any(hints[zakrepit.HINT_TIMES:]),
+    check(tr("zakrepit.wayland_hint") in hints[0] and all(hints[:zakrepit.HINT_TIMES]) and not any(tr("zakrepit.wayland_hint") in h for h in hints[zakrepit.HINT_TIMES:]),
           f"родной Wayland: честная подсказка первые {zakrepit.HINT_TIMES} раза, потом нет")
     check(c4.config.get("zakrepit_hint_shown") == zakrepit.HINT_TIMES and c4.saves >= zakrepit.HINT_TIMES, "число показов запомнено в настройках")
     p = zakrepit.pin(Ctx(), pic(120, 80))   # узкое окошко: подсказка рисуется внутри окошка без падения
@@ -450,6 +450,64 @@ for lang in i18n.LANGUAGES:
     sel3.close()
 i18n.set_language("ru")
 settle()
+
+
+# --- 1.36.1: размер за края и углы, крестик, HiDPI --------------------------------------------------------------------
+from PyQt6.QtCore import QPoint as _P  # noqa: E402
+img = QImage(400, 200, QImage.Format.Format_RGB32)
+img.fill(QColor("#3366cc"))
+rz = zakrepit.pin(Ctx(), img, QPoint(100, 100))
+rz.show()
+qapp.processEvents()
+w0, h0 = rz.width(), rz.height()
+ratio = w0 / h0
+
+
+def drag_from(win, local, delta):
+    start = win.mapToGlobal(local)
+    ev = lambda t, pos, btn, btns: QMouseEvent(t, QPointF(win.mapFromGlobal(pos)), QPointF(pos), btn, btns, Qt.KeyboardModifier.NoModifier)
+    QApplication.sendEvent(win, ev(QEvent.Type.MouseMove, start, Qt.MouseButton.NoButton, Qt.MouseButton.NoButton))
+    QApplication.sendEvent(win, ev(QEvent.Type.MouseButtonPress, start, Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton))
+    end = start + delta
+    QApplication.sendEvent(win, ev(QEvent.Type.MouseMove, end, Qt.MouseButton.NoButton, Qt.MouseButton.LeftButton))
+    QApplication.sendEvent(win, ev(QEvent.Type.MouseButtonRelease, end, Qt.MouseButton.LeftButton, Qt.MouseButton.NoButton))
+
+
+check(rz.edges_at(QPointF(rz.width() - 2, rz.height() / 2)) == zakrepit.RIGHT, "правый край: захват")
+check(rz.edges_at(QPointF(2, 2)) == zakrepit.LEFT | zakrepit.TOP and rz.edges_at(QPointF(rz.width() - 2, rz.height() - 2)) == zakrepit.RIGHT | zakrepit.BOTTOM, "углы: два края")
+check(rz.edges_at(QPointF(rz.width() / 2, rz.height() / 2)) == 0, "середина окна: краёв нет, окошко переносится")
+rz.setCursor(Qt.CursorShape.ArrowCursor)
+rz._update_cursor(QPointF(rz.width() - 2, rz.height() / 2))
+check(rz.cursor().shape() == Qt.CursorShape.SizeHorCursor, "у края курсор «стрелки размера»")
+rz._update_cursor(QPointF(rz.width() - 2, rz.height() - 2))
+check(rz.cursor().shape() == Qt.CursorShape.SizeFDiagCursor, "у угла курсор диагональный")
+pos0 = rz.pos()
+drag_from(rz, _P(rz.width() - 2, rz.height() // 2), QPoint(100, 0))
+check(rz.width() > w0 and abs(rz.width() / rz.height() - ratio) < 0.02 and rz.pos() == pos0, f"правый край вправо: больше, пропорции {rz.width()}x{rz.height()}, левый верх на месте")
+w1 = rz.width()
+drag_from(rz, _P(rz.width() - 2, rz.height() - 2), QPoint(-80, -40))
+check(rz.width() < w1 and abs(rz.width() / rz.height() - ratio) < 0.02, "правый нижний угол внутрь: меньше, пропорции сохранены")
+right_bottom = rz.geometry().bottomRight()
+drag_from(rz, _P(2, 2), QPoint(30, 15))
+check(rz.geometry().bottomRight() == right_bottom and abs(rz.width() / rz.height() - ratio) < 0.02, "левый верхний угол: противоположный угол стоит на месте")
+drag_from(rz, _P(rz.width() - 2, rz.height() - 2), QPoint(-5000, -5000))
+base = zakrepit.logical_size(img)
+low = max(zakrepit.SCALE_MIN, zakrepit.MIN_SIDE / min(base.width(), base.height()))
+check(min(rz.width(), rz.height()) >= zakrepit.MIN_SIDE - 1 and rz.scale >= min(low, 1.0) - 1e-6, "меньше предела не сжимается")
+p_before = rz.pos()
+drag_from(rz, _P(rz.width() // 2, rz.height() // 2), QPoint(60, 40))
+check(rz.size() == rz.size() and (rz.pos() != p_before or rz.windowHandle() is not None), "перенос за середину по-прежнему работает (системный или ручной)")
+rz.close()
+c5 = zakrepit.pin(Ctx(), img, QPoint(100, 100))
+c5.show()
+qapp.processEvents()
+c5._hover = True
+cr = c5.cross_rect()
+check(cr.width() >= 26 and c5.edges_at(cr.center()) == 0, "крестик крупнее и под ним нет захвата края")
+QTest.mousePress(c5, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, cr.center().toPoint())
+QTest.mouseRelease(c5, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, cr.center().toPoint())
+check(c5 not in zakrepit.OPEN, "щелчок по крестику открепляет")
+check(tr("zakrepit.menu_close") == "Открепить", "пункт меню называется «Открепить»")
 
 print("\nИТОГ: " + ("всё хорошо" if not failures else f"{len(failures)} ошибок: {failures}"))
 sys.exit(1 if failures else 0)

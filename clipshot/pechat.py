@@ -6,18 +6,20 @@
 
 PDF: одна страница, картинка в исходном разрешении (Qt кладёт в файл пиксели снимка без пережатия; страница в размере
 снимка при его плотности или A4 с полями, снимок вписан с сохранением пропорций). Настройка pdf_page: "image" (по
-снимку) или "a4". Печать: стандартное окно системы (QPrintDialog; в Linux печать идёт через CUPS, в Windows через
-драйвер), снимок вписан в страницу с полями, ориентация по форме снимка; предпросмотр отдельным окном. Принтеров нет:
-сообщение и предложение сохранить PDF. Печатающие классы взяты в модуль по имени (QPrinter, QPrintDialog,
-QPrintPreviewDialog), чтобы тесты подставляли свои и ничего не уходило на настоящий принтер."""
+снимку) или "a4". Печать (1.36.1): своё окно «Печать» (PrintWindow): страница с картинкой, выбор принтера, копий, ориентации, размера и
+цвета, зелёная «Печать» отправляет на принтер сама, без системного окна (в Windows 11 оно пишет «предпросмотр не
+поддерживается»). Снимок вписан в страницу с полями, ориентация по форме снимка. Принтеров нет: сообщение и предложение
+сохранить PDF. Печатающие классы взяты в модуль по имени (QPrinter, QPrinterInfo, QPrintDialog), чтобы тесты подставляли
+свои и ничего не уходило на настоящий принтер."""
 
 import os
 import struct
 import zlib
 
-from PyQt6.QtCore import QBuffer, QIODevice, QMarginsF, QRectF
-from PyQt6.QtGui import QImage, QPageLayout, QPainter
-from PyQt6.QtPrintSupport import QPrintDialog, QPrinter, QPrinterInfo, QPrintPreviewDialog
+from PyQt6.QtCore import QBuffer, QIODevice, QMarginsF, QRectF, QSize, Qt
+from PyQt6.QtGui import QColor, QImage, QPageLayout, QPainter, QPixmap
+from PyQt6.QtPrintSupport import QPrintDialog, QPrinter, QPrinterInfo
+from PyQt6.QtWidgets import QComboBox, QDialog, QHBoxLayout, QLabel, QPushButton, QSpinBox, QVBoxLayout
 
 from . import hidpi
 from .i18n import tr
@@ -185,8 +187,9 @@ def setup_printer(printer, image: QImage):
     printer.setDocName("ClipSD")
 
 
-def paint_to_printer(printer, image: QImage) -> bool:
-    """Снимок на страницу: вписан в область внутри полей с сохранением пропорций, по центру. Пиксели не пережимаются."""
+def paint_to_printer(printer, image: QImage, actual_size: bool = False) -> bool:
+    """Снимок на страницу: вписан в область внутри полей с сохранением пропорций, по центру. Пиксели не пережимаются.
+    actual_size: «как есть» (размер по плотности снимка), но не больше страницы."""
     img = source_image(image)
     painter = QPainter()
     if not painter.begin(printer):
@@ -194,6 +197,11 @@ def paint_to_printer(printer, image: QImage) -> bool:
     try:
         page = printer.pageRect(QPrinter.Unit.DevicePixel)
         target = fit_rect(page.width(), page.height(), img.width(), img.height())
+        if actual_size:
+            dpi = pdf_dpi(img)
+            w, h = img.width() / dpi * printer.resolution(), img.height() / dpi * printer.resolution()
+            if w <= page.width() and h <= page.height():
+                target = QRectF((page.width() - w) / 2, (page.height() - h) / 2, w, h)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
         painter.drawImage(target, img)   # начало координат печати уже в углу области внутри полей: сдвигать не надо
     finally:
@@ -210,35 +218,164 @@ def _no_printers(parent) -> bool:
     return getattr(card, "choice", None) == "primary"
 
 
-def print_image(parent, image: QImage, cfg=None, save_pdf=None) -> str:
-    """«Печать…» (Ctrl+P): системное окно печати, потом печать. save_pdf: что вызвать, если принтеров нет и человек
-    согласился сохранить PDF. Итог: "printed", "cancelled", "no_printers" (и PDF предложен), "failed"."""
+PRINTER_KEY = "print_printer"   # в настройках: имя принтера, выбранного в прошлый раз
+
+
+class PrintWindow(QDialog):
+    """Окно «Печать» ClipSD (1.36.1): страница с картинкой и выбор принтера, копий, ориентации, размера и цвета, зелёная
+    «Печать» отправляет прямо на выбранный принтер. Системное окно печати не открывается (в Windows 11 оно пишет «приложение
+    не поддерживает предварительный просмотр»); «Настройки принтера…» открывает его по желанию, для параметров драйвера."""
+
+    def __init__(self, parent, image: QImage, cfg=None, save_pdf=None):
+        super().__init__(parent)
+        from . import themes
+        from .dialogs import style
+        self.image, self.cfg, self.save_pdf = image, cfg if cfg is not None else {}, save_pdf
+        self.printed = False
+        self.setWindowTitle("ClipSD: " + tr("pechat.win_title"))
+        self.setStyleSheet(style(themes.is_dark()))
+        row = QHBoxLayout(self)
+        row.setContentsMargins(18, 16, 18, 16)
+        row.setSpacing(18)
+        self.preview = QLabel()
+        self.preview.setMinimumSize(300, 380)
+        self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        row.addWidget(self.preview, 1)
+        side = QVBoxLayout()
+        side.setSpacing(8)
+        row.addLayout(side)
+        title = QLabel(tr("pechat.win_title"))
+        title.setObjectName("clipTitle")
+        side.addWidget(title)
+
+        def field(key, widget):
+            label = QLabel(tr(key))
+            label.setObjectName("clipFieldLabel")
+            side.addWidget(label)
+            side.addWidget(widget)
+            return widget
+        self.printers = list(QPrinterInfo.availablePrinters())
+        self.printer_box = field("pechat.printer", QComboBox())
+        default = QPrinterInfo.defaultPrinterName()
+        last = self.cfg.get(PRINTER_KEY)
+        for info in self.printers:
+            self.printer_box.addItem(info.printerName(), info.printerName())
+        for want in (last, default):
+            at = self.printer_box.findData(want) if want else -1
+            if at >= 0:
+                self.printer_box.setCurrentIndex(at)
+                break
+        self.copies = field("pechat.copies", QSpinBox())
+        self.copies.setRange(1, 99)
+        self.orient = field("pechat.orient", QComboBox())
+        for key, data in (("pechat.orient_auto", "auto"), ("pechat.orient_portrait", "portrait"), ("pechat.orient_landscape", "landscape")):
+            self.orient.addItem(tr(key), data)
+        self.fit = field("pechat.fit", QComboBox())
+        self.fit.addItem(tr("pechat.fit_page"), "page")
+        self.fit.addItem(tr("pechat.fit_actual"), "actual")
+        self.color = field("pechat.color", QComboBox())
+        self.color.addItem(tr("pechat.color_color"), "color")
+        self.color.addItem(tr("pechat.color_gray"), "gray")
+        side.addStretch(1)
+        self.system_button = QPushButton(tr("pechat.system_settings"))
+        self.system_button.setObjectName("clipLink")
+        self.system_button.clicked.connect(self.system_settings)
+        side.addWidget(self.system_button)
+        buttons = QHBoxLayout()
+        self.print_button = QPushButton(tr("pechat.print_button"))
+        self.print_button.setObjectName("clipPrimary")
+        self.print_button.setDefault(True)
+        self.print_button.clicked.connect(self.print_now)
+        self.cancel_button = QPushButton(tr("pechat.cancel"))
+        self.cancel_button.setObjectName("clipSecondary")
+        self.cancel_button.clicked.connect(self.reject)
+        buttons.addWidget(self.cancel_button)
+        buttons.addWidget(self.print_button, 1)
+        side.addLayout(buttons)
+        for w in (self.orient, self.fit):
+            w.currentIndexChanged.connect(self.refresh)
+        self.refresh()
+
+    def _orientation(self):
+        mode = self.orient.currentData()
+        if mode == "portrait":
+            return QPageLayout.Orientation.Portrait
+        if mode == "landscape":
+            return QPageLayout.Orientation.Landscape
+        return orientation_for(self.image)
+
+    def make_printer(self):
+        """QPrinter выбранного принтера со всеми выбранными параметрами (в тестах класс подменяется)."""
+        name = self.printer_box.currentData()
+        info = next((i for i in self.printers if i.printerName() == name), None)
+        printer = QPrinter(info, QPrinter.PrinterMode.HighResolution) if info is not None else QPrinter(QPrinter.PrinterMode.HighResolution)
+        setup_printer(printer, self.image)
+        printer.setPageOrientation(self._orientation())
+        printer.setCopyCount(self.copies.value())
+        try:
+            printer.setColorMode(QPrinter.ColorMode.GrayScale if self.color.currentData() == "gray" else QPrinter.ColorMode.Color)
+        except Exception:   # noqa: BLE001
+            pass
+        return printer
+
+    def refresh(self, *_):
+        """Страница в окне: белый лист в пропорциях выбранной страницы, внутри полей картинка так, как она ляжет на бумагу."""
+        landscape = self._orientation() == QPageLayout.Orientation.Landscape
+        pw, ph = (A4_MM[1], A4_MM[0]) if landscape else A4_MM
+        scale = 3.2
+        sheet = QImage(round(pw * scale), round(ph * scale), QImage.Format.Format_RGB32)
+        sheet.fill(0xFFFFFF)
+        img = source_image(self.image)
+        m = MARGIN_MM * scale
+        inner_w, inner_h = sheet.width() - 2 * m, sheet.height() - 2 * m
+        target = fit_rect(inner_w, inner_h, img.width(), img.height())
+        if self.fit.currentData() == "actual":
+            dpi = pdf_dpi(img)
+            w, h = img.width() / dpi * MM_INCH * scale, img.height() / dpi * MM_INCH * scale
+            if w <= inner_w and h <= inner_h:
+                target = QRectF((inner_w - w) / 2, (inner_h - h) / 2, w, h)
+        p = QPainter(sheet)
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        p.drawImage(target.translated(m, m), img)
+        p.setPen(QColor("#b0b6bf"))
+        p.drawRect(sheet.rect().adjusted(0, 0, -1, -1))
+        p.end()
+        self.preview.setPixmap(QPixmap.fromImage(sheet).scaled(
+            self.preview.size().expandedTo(QSize(300, 380)), Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation))
+
+    def print_now(self) -> bool:
+        """Печать прямо на выбранный принтер, без системного окна. True: страница отправлена."""
+        printer = self.make_printer()
+        ok = paint_to_printer(printer, self.image, self.fit.currentData() == "actual")
+        if ok:
+            self.printed = True
+            if self.printer_box.currentData():
+                self.cfg[PRINTER_KEY] = self.printer_box.currentData()
+            self.accept()
+        return ok
+
+    def system_settings(self):
+        """Параметры драйвера (лоток, качество): системное окно, только по желанию человека."""
+        printer = self.make_printer()
+        dialog = QPrintDialog(printer, self)
+        dialog.exec()
+
+
+def preview_image(parent, image: QImage, cfg=None, save_pdf=None) -> str:
+    """«Печать» (кнопка, Ctrl+P, 1.36.1): окно ClipSD «Печать» с предпросмотром страницы и выбором принтера; печатает его
+    зелёная кнопка прямо на принтер, системное окно печати по умолчанию не открывается (слова владельца 23.11.2026, а в
+    Windows 11 оно ещё и пишет «предпросмотр не поддерживается»). save_pdf: что вызвать, если принтеров нет и человек
+    согласился сохранить PDF. Итог: "printed", "shown" (окно закрыто без печати), "no_printers", "failed"."""
     if image is None or image.isNull():
         return "failed"
     if not printers_available():
         if _no_printers(parent) and callable(save_pdf):
             save_pdf()
         return "no_printers"
-    printer = QPrinter(QPrinter.PrinterMode.HighResolution)
-    setup_printer(printer, image)
-    dialog = QPrintDialog(printer, parent)
-    dialog.setWindowTitle(tr("pechat.dialog_title"))
-    if not dialog.exec():
-        return "cancelled"
-    return "printed" if paint_to_printer(printer, image) else "failed"
+    window = PrintWindow(parent, image, cfg, save_pdf)
+    window.exec()
+    return "printed" if window.printed else "shown"
 
 
-def preview_image(parent, image: QImage, cfg=None) -> str:
-    """«Предпросмотр…»: окно предпросмотра с кнопкой печати; «printed»-подобного итога у него нет, только "shown"."""
-    if image is None or image.isNull():
-        return "failed"
-    if not printers_available():
-        _no_printers(parent)
-        return "no_printers"
-    printer = QPrinter(QPrinter.PrinterMode.HighResolution)
-    setup_printer(printer, image)
-    dialog = QPrintPreviewDialog(printer, parent)
-    dialog.setWindowTitle(tr("pechat.preview_title"))
-    dialog.paintRequested.connect(lambda p: paint_to_printer(p, image))
-    dialog.exec()
-    return "shown"
+print_image = preview_image   # прежнее имя: все пути печати (редактор, окно выделения, «Ознакомление») ведут в это окно

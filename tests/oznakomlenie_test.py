@@ -149,7 +149,7 @@ win = a.open_oznakomlenie()
 settle(100)
 check(set(win.rows) == {c[0] for c in oznakomlenie.CATALOG} and len(win.rows) >= 25, f"в списке все функции: {len(win.rows)}")
 new = oznakomlenie.new_ids(a.config)
-check(new == ["phone_tile", "forma", "windows", "other_area", "phone_editor", "translate_head", "numbers"], f"новинки 1.34: {new}")
+check(new == ["phone_tile", "windows", "other_area", "phone_editor", "translate_head", "numbers"], f"новинки 1.34: {new}")
 check(win.group_labels[0].text() == "Новое в версии 1.34", f"первая группа: «{win.group_labels[0].text()}»")
 check(all(win.rows[i].is_new for i in new) and not any(r.is_new for k, r in win.rows.items() if k not in new),
       "метка «Новое» только у новинок")
@@ -163,9 +163,11 @@ close_all()
 cfg_old = dict(appmod.DEFAULTS, novoe_from="1.30.0", novoe_version=V)
 check(oznakomlenie.new_ids(cfg_old) == new, "после обновления: новинки с прежней версии")
 new135 = [it[1] for it in novoe.ITEMS if it[0] == "1.35.0"]
-check(oznakomlenie.new_ids(dict(appmod.DEFAULTS), "1.35.5") == new135 and len(new135) == 7, "новая версия без своих новинок: новинки самой свежей версии таблицы (1.35)")
-new136 = [it[1] for it in novoe.ITEMS if it[0] == "1.36.0"]
-check(oznakomlenie.new_ids(dict(appmod.DEFAULTS), "1.36.0") == new136 and set(new136) == {"pechat", "pdf", "stikery", "ten_ramka", "zakrepit", "qr_chtenie", "pipetka"}, "версия 1.36: свои новинки (печать, PDF, стикеры, тень и рамка, закрепить, QR, пипетка)")
+check(oznakomlenie.new_ids(dict(appmod.DEFAULTS), "1.35.5") == [i for i in new135 if i in oznakomlenie.BY_ID] and len(new135) == 7,
+      "новая версия без своих новинок: новинки самой свежей версии таблицы (1.35), без внутренних доработок")
+new136_all = [it[1] for it in novoe.ITEMS if it[0] == "1.36.0"]
+new136 = [i for i in new136_all if i in oznakomlenie.BY_ID]
+check(oznakomlenie.new_ids(dict(appmod.DEFAULTS), "1.36.0") == new136 and set(new136) == {"pechat", "pdf", "stikery", "ten_ramka", "zakrepit", "qr_chtenie", "pipetka"} and set(new136_all) == set(new136), "версия 1.36: свои новинки (печать, PDF, стикеры, тень и рамка, закрепить, QR, пипетка)")
 check(oznakomlenie.new_ids(dict(appmod.DEFAULTS), "1.37.0") == new136, "версия без своих новинок: показываются новинки самой свежей из таблицы")
 
 # --- 3. обучение: затемнение, показ, «Теперь вы», «Получилось» ---------------------------------------------------------
@@ -283,11 +285,6 @@ def you_text(w):
     w.editor.canvas.commit_text()
 
 
-def you_forma(w):
-    from clipshot import forma
-    w.editor.set_form(forma.ROUND)
-
-
 def you_undo(w):
     w.editor.select_tool("rect")
     settle(300)
@@ -297,7 +294,7 @@ def you_undo(w):
     w.editor.undo_button.click()
 
 
-you = {"blur": you_blur, "numbers": you_numbers, "text": you_text, "forma": you_forma, "undo": you_undo,
+you = {"blur": you_blur, "numbers": you_numbers, "text": you_text, "undo": you_undo,
        "save": lambda w: w.editor.save_button.click(), "copy": lambda w: w.editor.copy_button.click(),
        "crop": lambda w: w.editor.select_tool("crop"), "move": lambda w: w.editor.select_tool("move"),
        "eraser": lambda w: w.editor.select_tool("eraser"), "settings": lambda w: w.lesson.note("settings"),
@@ -321,7 +318,7 @@ for ident, kind in expect.items():
         check(snap.get("nums") == [1, 2, 1], f"показ «numbers»: по цветам {snap.get('nums')}")
     if ident == "text":
         check(snap.get("texts") == [tr("ozn.demo_best")], f"показ «text»: набрана надпись {snap.get('texts')}")
-for ident, key in (("undo", "redo"), ("forma", "form")):
+for ident, key in (("undo", "redo"),):
     win.select(ident)
     settle(300)
     snap = run_demo(win)
@@ -698,25 +695,24 @@ for key in ("standard", "pro"):
     gray = novoe.BADGE_GRAY[1 if key == "pro" else 0][0]
     win = a.open_oznakomlenie()
     settle(200)
-    check(badge_color(win, "numbers") == novoe.BADGE_BG and badge_color(win, "forma") == novoe.BADGE_BG, f"«{key}»: до изучения метка синяя")
+    check(badge_color(win, "numbers") == novoe.BADGE_BG and badge_color(win, "phone_editor") == novoe.BADGE_BG, f"«{key}»: до изучения метка синяя")
     win.select("numbers")
     settle(300)
     check(badge_color(win, "numbers") == novoe.BADGE_BG, f"«{key}»: пока только выбрали, метка синяя")
     run_demo(win)    # показ досмотрен до конца: изучено
-    check(win.rows["numbers"].studied and badge_color(win, "numbers") == gray and badge_color(win, "forma") == novoe.BADGE_BG,
+    check(win.rows["numbers"].studied and badge_color(win, "numbers") == gray and badge_color(win, "phone_editor") == novoe.BADGE_BG,
           f"«{key}»: после показа метка серая ({badge_color(win, 'numbers')}), у других синяя")
     win.select("blur")
     settle(300)
-    win.select("forma")
+    win.select("phone_editor")
     settle(300)
-    from clipshot import forma as _f
-    win.editor.set_form(_f.ROUND)
+    win.editor.insert_from_phone()
     settle(500)
-    check(win.lesson.phase == "done" and badge_color(win, "forma") == gray, f"«{key}»: после «Получилось» метка серая")
+    check(win.lesson.phase == "done" and badge_color(win, "phone_editor") == gray, f"«{key}»: после «Получилось» метка серая")
     close_all()
     win = a.open_oznakomlenie()
     settle(200)
-    check(badge_color(win, "numbers") == gray and badge_color(win, "forma") == gray and badge_color(win, "windows") == novoe.BADGE_BG,
+    check(badge_color(win, "numbers") == gray and badge_color(win, "phone_editor") == gray and badge_color(win, "windows") == novoe.BADGE_BG,
           f"«{key}»: после перезапуска серая у изученных, синяя у остальных")
     close_all()
 
@@ -760,7 +756,7 @@ lang_case("глобус учебного редактора", lambda w: w.select
 lang_case("меню значка", lambda w: w.select("shapes"), lambda w: langmod.change(a, "uk"))
 lang_case("во время показа", lambda w: (w.select("numbers"), settle(200), w.play(), settle(150)), lambda w: a.set_language("it"))
 lang_case("во время «Теперь вы»", lambda w: (w.select("arrows"), settle(300), w.editor.select_tool("arrow"), settle(300)), lambda w: a.set_language("pt"))
-lang_case("пункт без редактора", lambda w: w.select("qr_big"), lambda w: a.set_language("zh"))
+lang_case("пункт без редактора", lambda w: w.select("record"), lambda w: a.set_language("zh"))
 lang_case("два раза подряд", lambda w: w.select("blur"), lambda w: (a.set_language("pl"), a.set_language("tr")))
 
 # --- 13. В1: буфер обмена не трогается ------------------------------------------------------------------------------
@@ -796,7 +792,7 @@ for fn in ("copy_to_clipboard", "copy_and_close", "save_and_close", "copy_select
     getattr(ed, fn)()
 settle(200)
 check(cb.text() == "МОЙ ВАЖНЫЙ ТЕКСТ" and not QApplication.clipboard().mimeData().hasImage(), "все пути копирования учебного редактора буфер не трогают")
-for ident in ("arrows", "numbers", "save", "copy", "forma", "text", "blur"):
+for ident in ("arrows", "numbers", "save", "copy", "text", "blur"):
     win.select(ident)
     settle(300)
     run_demo(win)
@@ -859,7 +855,7 @@ i18n.set_language("ru")
 
 # --- 16. В4: новинки 1.35 -------------------------------------------------------------------------------------------------
 check(len(new135) == 7, "в novoe.ITEMS семь строк 1.35.0")
-check(all(i in oznakomlenie.BY_ID for i in new135), "каждая новинка 1.35 есть в списке «Ознакомления»")
+check(not any(i in oznakomlenie.BY_ID for i in new135), "внутренних доработок 1.35 в списке «Ознакомления» нет (правило владельца 23.11.2026)")
 clipshot.__version__ = "1.35.0"
 novoe.__version__ = "1.35.0"
 cfg35 = dict(appmod.DEFAULTS, tour_done=True, theme_chosen=True, novoe_version="1.34.2")
@@ -872,14 +868,10 @@ novoe.on_start(a.config, "1.35.0")
 a.config.update(tour_done=True, theme_chosen=True)
 win = a.open_oznakomlenie()
 settle(200)
-check(win.group_labels[0].text() == "Новое в версии 1.35" and win.new_list == new135, f"верхняя группа «Ознакомления»: «{win.group_labels[0].text()}», семь пунктов 1.35")
-for ident in new135:
-    win.select(ident)
-    settle(100)
-    check(win.stack.currentIndex() == 3 and win.hint_title.text() == novoe.title(ident) and win.rows[ident].studied,
-          f"новинка 1.35 «{ident}»: пояснение, метка стала серой")
+check(win.new_list == [] and not any(l.text().startswith("Новое в версии") for l in win.group_labels), f"в «Ознакомлении» у версии 1.35 нет группы новинок: {[l.text() for l in win.group_labels]}")
 check(novoe.badges(a.config, "editor", "1.35.0") == {"phone_target": "phone_target"} and novoe.badges(a.config, "selector", "1.35.0") == {},
       "цели app: меток не ставят; у цели, которой в сборке нет (editor:phone_target), метка просто не рисуется")
+novoe.window_done(a.config)   # окно новинок само не нужно: оно модальное и держало бы цикл теста
 ed = a.open_editor(QImage(600, 400, QImage.Format.Format_RGB32), None)
 settle(300)
 check(ed is not None and "phone_target" not in getattr(getattr(ed, "_novoe", None), "badges", {}), "редактор открывается при новинках без цели в сборке, метка не рисуется")

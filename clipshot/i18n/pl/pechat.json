@@ -1,10 +1,24 @@
 {
-  "pechat.dialog_title": "Drukowanie zrzutu",
+  "pechat.cancel": "Anuluj",
+  "pechat.color": "Kolor",
+  "pechat.color_color": "Kolorowa",
+  "pechat.color_gray": "Czarno-biała",
+  "pechat.copies": "Kopie",
   "pechat.failed": "Nie udało się wydrukować zrzutu",
+  "pechat.fit": "Rozmiar na stronie",
+  "pechat.fit_actual": "Rozmiar rzeczywisty",
+  "pechat.fit_page": "Dopasuj do strony",
   "pechat.none_close": "Zamknij",
   "pechat.none_pdf": "Zapisz jako PDF",
   "pechat.none_text": "Na tym komputerze nie skonfigurowano żadnej drukarki. Zrzut można zapisać jako PDF i wydrukować później lub na innym komputerze.",
   "pechat.none_title": "Nie znaleziono drukarki",
-  "pechat.preview_title": "Podgląd wydruku",
-  "pechat.sent": "Wysłano do drukarki"
+  "pechat.orient": "Orientacja",
+  "pechat.orient_auto": "Jak zrzut",
+  "pechat.orient_landscape": "Pozioma",
+  "pechat.orient_portrait": "Pionowa",
+  "pechat.print_button": "Drukuj",
+  "pechat.printer": "Drukarka",
+  "pechat.sent": "Wysłano do drukarki",
+  "pechat.system_settings": "Ustawienia drukarki…",
+  "pechat.win_title": "Drukuj"
 }

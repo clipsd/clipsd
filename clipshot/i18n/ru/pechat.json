@@ -1,10 +1,24 @@
 {
-  "pechat.dialog_title": "Печать снимка",
+  "pechat.cancel": "Отмена",
+  "pechat.color": "Цвет",
+  "pechat.color_color": "Цветная",
+  "pechat.color_gray": "Чёрно-белая",
+  "pechat.copies": "Копии",
   "pechat.failed": "Не удалось напечатать снимок",
+  "pechat.fit": "Размер на странице",
+  "pechat.fit_actual": "Как есть",
+  "pechat.fit_page": "Вписать в страницу",
   "pechat.none_close": "Закрыть",
   "pechat.none_pdf": "Сохранить в PDF",
   "pechat.none_text": "В системе нет ни одного принтера. Снимок можно сохранить в PDF и распечатать позже или на другом компьютере.",
   "pechat.none_title": "Принтер не найден",
-  "pechat.preview_title": "Предпросмотр печати",
-  "pechat.sent": "Отправлено на печать"
+  "pechat.orient": "Ориентация",
+  "pechat.orient_auto": "По снимку",
+  "pechat.orient_landscape": "Альбомная",
+  "pechat.orient_portrait": "Книжная",
+  "pechat.print_button": "Печать",
+  "pechat.printer": "Принтер",
+  "pechat.sent": "Отправлено на печать",
+  "pechat.system_settings": "Настройки принтера…",
+  "pechat.win_title": "Печать"
 }

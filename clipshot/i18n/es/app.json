@@ -64,5 +64,6 @@
   "app.menu_sec_capture": "Captura",
   "app.menu_sec_tools": "Herramientas",
   "app.menu_learn": "Aprender",
-  "app.menu_help": "Ayuda"
+  "app.menu_help": "Ayuda",
+  "app.restored": "Reabiertas tras la actualización: {n} captura(s)."
 }

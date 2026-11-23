@@ -64,5 +64,6 @@
   "app.menu_sec_capture": "Capture",
   "app.menu_sec_tools": "Tools",
   "app.menu_learn": "Learn",
-  "app.menu_help": "Help"
+  "app.menu_help": "Help",
+  "app.restored": "Reopened after the update: {n} screenshot(s)."
 }

@@ -64,5 +64,6 @@
   "app.menu_sec_capture": "Zrzut",
   "app.menu_sec_tools": "Narzędzia",
   "app.menu_learn": "Nauka",
-  "app.menu_help": "Pomoc"
+  "app.menu_help": "Pomoc",
+  "app.restored": "Otwarto ponownie po aktualizacji: zrzutów {n}."
 }

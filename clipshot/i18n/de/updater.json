@@ -59,6 +59,7 @@
   "updater.wait.dialog": "Version {version} wird installiert, sobald Sie das geöffnete ClipSD-Fenster schließen (zum Beispiel die Einstellungen).",
   "updater.wait.phone": "Version {version} wird installiert, sobald Sie das Fenster „Vom Handy“ schließen.",
   "updater.wait.selector": "Version {version} wird installiert, sobald das Fenster zur Bereichsauswahl geschlossen ist.",
+  "updater.wait.still": "Das Fenster „{window}“ ließ sich nicht automatisch schließen: Es liegt jetzt vorn. Schließen Sie es, dann wird Version {version} sofort installiert.",
   "updater.wait.text": "Version {version} wird installiert, sobald Sie die Texteingabe beenden und den Editor schließen.",
   "updater.wait.title": "Das Update ist heruntergeladen",
   "updater.wait.unsaved": "Version {version} wird installiert, sobald Sie den Editor schließen. Nicht gespeicherte Markierungen bleiben erhalten.",

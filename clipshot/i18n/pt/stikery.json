@@ -13,7 +13,7 @@
   "deco.title": "Sombra, moldura e margens da captura",
   "editor.acc_sticker": "adesivo",
   "editor.shape_sticker": "adesivo",
-  "editor.tip_sticker": "Adesivo (S)\nEmojis, etiquetas com texto e números em círculos\nClique: colocar, arrastar: definir o tamanho\nPaleta: clique no botão ou S novamente\nGirar: alça redonda acima do adesivo",
+  "editor.tip_sticker": "Adesivo (S ▾)\nEmojis, etiquetas com texto e números em círculos\nEscolher: clique no botão ou S novamente abre a paleta, com pesquisa por nome\nClique: colocar, arrastar: definir o tamanho\nGirar: alça redonda acima do adesivo",
   "stiker.emoji": "Emojis",
   "stiker.found": "Encontrados",
   "stiker.none": "Nada encontrado. Tente outra palavra.",

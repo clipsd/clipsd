@@ -1,10 +1,24 @@
 {
-  "pechat.dialog_title": "Stampa screenshot",
+  "pechat.cancel": "Annulla",
+  "pechat.color": "Colore",
+  "pechat.color_color": "A colori",
+  "pechat.color_gray": "Bianco e nero",
+  "pechat.copies": "Copie",
   "pechat.failed": "Impossibile stampare lo screenshot",
+  "pechat.fit": "Dimensione sulla pagina",
+  "pechat.fit_actual": "Dimensione reale",
+  "pechat.fit_page": "Adatta alla pagina",
   "pechat.none_close": "Chiudi",
   "pechat.none_pdf": "Salva come PDF",
   "pechat.none_text": "Su questo computer non è configurata nessuna stampante. Lo screenshot si può salvare come PDF e stampare più tardi o su un altro computer.",
   "pechat.none_title": "Nessuna stampante trovata",
-  "pechat.preview_title": "Anteprima di stampa",
-  "pechat.sent": "Inviato alla stampante"
+  "pechat.orient": "Orientamento",
+  "pechat.orient_auto": "Come lo screenshot",
+  "pechat.orient_landscape": "Orizzontale",
+  "pechat.orient_portrait": "Verticale",
+  "pechat.print_button": "Stampa",
+  "pechat.printer": "Stampante",
+  "pechat.sent": "Inviato alla stampante",
+  "pechat.system_settings": "Impostazioni stampante…",
+  "pechat.win_title": "Stampa"
 }
