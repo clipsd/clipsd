@@ -1131,7 +1131,8 @@ class SettingsDialog(QDialog):
             self.show_section(next(k for k, _l, _i in self.SECTIONS if k in hits))
         shown = hits[self.current_section()]
         if shown:
-            QTimer.singleShot(0, lambda: self._reveal(shown[0]))
+            from .later import later
+            later(self, 0, lambda: self._reveal(shown[0]))
 
     def _reveal(self, widget):
         try:
@@ -1194,7 +1195,8 @@ class SettingsDialog(QDialog):
         cfg = dict(self.config)
         cfg.update(pending)
         cfg["language"] = code
-        QTimer.singleShot(0, lambda: self._rebuild(cfg, pending))   # список, из которого пришёл сигнал, удаляется позже
+        from .later import later
+        later(self, 0, lambda: self._rebuild(cfg, pending))   # список, из которого пришёл сигнал, удаляется позже
 
     def _rebuild(self, cfg: dict, pending: dict):
         size, section, query = self.size(), self.current_section(), self.search.text()

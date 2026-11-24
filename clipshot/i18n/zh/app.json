@@ -64,5 +64,6 @@
   "app.menu_sec_capture": "截图",
   "app.menu_sec_tools": "工具",
   "app.menu_learn": "学习",
-  "app.menu_help": "帮助"
+  "app.menu_help": "帮助",
+  "app.restored": "更新后已重新打开：{n} 张截图。"
 }

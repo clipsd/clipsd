@@ -64,5 +64,6 @@
   "app.menu_sec_capture": "Знімок",
   "app.menu_sec_tools": "Інструменти",
   "app.menu_learn": "Навчання",
-  "app.menu_help": "Довідка"
+  "app.menu_help": "Довідка",
+  "app.restored": "Знову відкрито після оновлення: знімків {n}."
 }

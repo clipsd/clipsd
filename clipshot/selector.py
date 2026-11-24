@@ -209,6 +209,7 @@ class RegionSelector(TranslateMixin, QWidget):
         self.lang_rect = QRect()   # чип языка в строке подсказки; пустой: чипа нет
         self.gear_rect = QRect()   # шестерёнка «Настройки» правее чипа языка
         self.bar_hint_reserve = 0  # сколько справа в строке подсказки занято чипом языка и размером
+        self.guide = None          # 1.36.1: id пункта «Ознакомления», для которого показаны шаги (None: нет)
         self.tour = None           # 1.32: идущее знакомство с окном выделения (SelectorTour)
         self.tour_force = False    # знакомство по запросу (пункт меню): показывать, даже если уже видели
         self.snoozable_tour = False   # знакомство пришло само (не по запросу): в карточке «Отложить ▾»
@@ -430,7 +431,78 @@ class RegionSelector(TranslateMixin, QWidget):
 
     # --- отрисовка ---------------------------------------------------------
 
-    def paintEvent(self, _event):
+    # 1.36.1: пошаговая подсказка из «Ознакомления» («Попробовать по-настоящему»): какую кнопку нажимать. Рисуется только
+    # на самом окне выделения; снимок вырезается из self.desktop (замороженный кадр), поэтому подсказка в снимок не попадает.
+    GUIDE_TARGETS = {"zakrepit": "pin", "region": "edit", "full": "edit", "other_area": "manual", "windows": None}
+
+    def paintEvent(self, event):
+        self._paint_base(event)
+        if getattr(self, "guide", None) and not self._done:
+            p = QPainter(self)
+            try:
+                self._paint_guide(p)
+            finally:
+                p.end()
+
+    def guide_step(self) -> int:
+        """1: ещё не выделено; 2: область выбрана, нажмите кнопку."""
+        return 2 if (self.kept is not None and self.start is None and self.pending is None) else 1
+
+    def guide_target_rect(self):
+        key = self.GUIDE_TARGETS.get(self.guide)
+        if not key:
+            return None
+        try:
+            for k, _label, _keys, rect in self._bar_layout()[0]:
+                if k == key:
+                    return QRect(rect)
+        except Exception:   # noqa: BLE001 - подсказка не должна ронять окно выделения
+            return None
+        return None
+
+    def guide_lines(self) -> list:
+        """Строки подсказки: [(текст, текущий шаг?)]."""
+        from .oznakomlenie import item_title
+        step = self.guide_step()
+        lines = [(tr("ozn.guide_select"), step == 1)]
+        key = self.GUIDE_TARGETS.get(self.guide)
+        name, hotkey = item_title(self.guide), ""
+        for b in self.BAR_BUTTONS:   # плитки может не быть на узкой панели: название и клавиша берутся из таблицы
+            if b[0] == key:
+                name = tr(b[1])
+                hotkey = tr(b[2]) if b[2].startswith(("selector.", "phone.")) else i18n_keys(b[2])
+        lines.append((tr("ozn.guide_press", button=name, hotkey=hotkey) if hotkey else tr("ozn.guide_press_nokey", button=name), step == 2))
+        lines.append((tr("ozn.guide_esc"), False))
+        return lines
+
+    def _paint_guide(self, p: QPainter):
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        target = self.guide_target_rect() if self.guide_step() == 2 else None
+        if target is not None:   # подсвеченная кнопка: жёлтая рамка, как у обучения на учебном снимке
+            p.setPen(QPen(QColor("#ffd23f"), 4))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRoundedRect(QRectF(target).adjusted(-3, -3, 3, 3), 10, 10)
+        font = QFont()
+        font.setPixelSize(15)
+        lines = self.guide_lines()
+        fm = QFontMetrics(font)
+        width = min(520, max(fm.horizontalAdvance(t) for t, _c in lines) + 36)
+        height = len(lines) * (fm.height() + 6) + 22
+        area = self.rect()
+        box = QRect(area.center().x() - width // 2, area.top() + 24, width, height)
+        p.setPen(QPen(ACCENT, 2))
+        p.setBrush(QColor(255, 255, 255, 245))
+        p.drawRoundedRect(QRectF(box), 10, 10)
+        y = box.top() + 12
+        for text, current in lines:
+            f = QFont(font)
+            f.setBold(current)
+            p.setFont(f)
+            p.setPen(QColor("#16181c") if current else QColor("#5a6270"))
+            p.drawText(QRect(box.left() + 18, y, width - 36, fm.height() + 4), Qt.AlignmentFlag.AlignVCenter, text)
+            y += fm.height() + 6
+
+    def _paint_base(self, _event):
         p = QPainter(self)
         p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
         if self.desktop is not None:

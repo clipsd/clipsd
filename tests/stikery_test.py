@@ -216,7 +216,7 @@ cv = ed.canvas
 check(STICKER in ed.tool_buttons, "кнопка «Стикер» есть в ряду инструментов")
 check(any(t == STICKER and k == "S" for t, _g, _tip, k in TOOLS), "клавиша S")
 check(not ed.tool_buttons[STICKER].icon().isNull(), "у кнопки есть значок")
-check(i18n.tr("editor.tip_sticker").startswith("Стикер (S)"), "подсказка кнопки по-русски")
+check(i18n.tr("editor.tip_sticker").startswith("Стикер (S"), "подсказка кнопки по-русски")
 keys = [k for _t, _g, _tip, k in TOOLS]
 check(len(keys) == len(set(keys)), "клавиши инструментов не повторяются")
 ed.select_tool(STICKER, open_palette=False)

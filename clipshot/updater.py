@@ -1506,6 +1506,10 @@ class Updater(QObject):
         if choice != "update":
             self.busy = False
             return
+        if not auto:
+            asked = getattr(self.ctx, "restart_requested", None)
+            if asked is not None:
+                asked()   # 1.36.1: «Обновить» нажал человек: окна без работы не держат смену версии (app.release_for_restart)
         self.start_download(manifest)
 
     # downloading -----------------------------------------------------------
@@ -1630,6 +1634,8 @@ class Updater(QObject):
             self._install_failed(record, error)
             return
         blocker = self._quit_blocker()
+        if blocker and self._release_blockers("install"):
+            blocker = self._quit_blocker()
         if blocker:
             # quitting now would lose work: keep versions/<new>, switch when the editor is closed
             self._defer(record, blocker)
@@ -1659,6 +1665,13 @@ class Updater(QObject):
         _unlink(attempt_path())
         self.busy = False
         self._pending = None
+        # 1.36.1: the windows may already be released for the restart (_on_extracted on Linux): same cleanup as _fail_attempt
+        drop = getattr(self.ctx, "drop_restart_restore", None)
+        if drop is not None:
+            try:
+                drop()
+            except Exception as e:   # noqa: BLE001 - the failure window must still be shown
+                log.warning("restore records of this run not dropped: %s", e)
         self._show_failure(record, code if REASON_RE.fullmatch(code) else "unknown", "install", "updater.error.install")
 
     def _show_failure(self, record: dict, reason: str, stage: str, fallback_key: str = "updater.error.failed") -> None:
@@ -1849,11 +1862,50 @@ class Updater(QObject):
         if asked is not None:
             asked()
         reason = self._quit_blocker()
+        if reason and self._release_blockers("restart_now"):
+            reason = self._quit_blocker()
         if reason:
-            self._show_wait(wait_text(reason, str(record.get("to", ""))))
+            # 1.36.1: the card never comes back unchanged: it names the window that could not be closed, and the window is
+            # brought to the front
+            log.warning("restart now: still blocked by %s", reason)
+            self._show_wait(self._still_text(reason, str(record.get("to", ""))))
             return False
         self._stop_watch()
         return self.retry_switch(record)
+
+    def _release_blockers(self, where: str) -> bool:
+        """The person decided to update: close what holds no work, save what has (app.release_for_restart). True when
+        the program can do it (the steps go to the log, so a report shows what happened)."""
+        release = getattr(self.ctx, "release_for_restart", None)
+        if release is None:
+            return False
+        try:
+            steps = release()
+        except Exception as exc:   # noqa: BLE001 - the update must not die on a window that cannot be closed
+            log.warning("release before restart (%s) failed: %s", where, exc)
+            return False
+        log.warning("release before restart (%s): %s", where, steps)
+        return True
+
+    def _still_text(self, reason: str, version: str) -> str:
+        """Which window still holds the update, by its title; the window is raised."""
+        widget = None
+        finder = getattr(self.ctx, "blocker_widget", None)
+        if finder is not None:
+            try:
+                widget = finder(reason)
+            except Exception:   # noqa: BLE001
+                widget = None
+        if widget is None:
+            return wait_text(reason, version)
+        try:
+            name = widget.windowTitle() or type(widget).__name__
+            widget.show()
+            widget.raise_()
+            widget.activateWindow()
+        except Exception:   # noqa: BLE001 - окно уже удалено или не окно (подмена в тестах): обычная фраза причины
+            return wait_text(reason, version)
+        return tr("updater.wait.still", window=name, version=version)
 
     def _watch_deferred(self) -> None:
         if self._deferred_timer is None:
@@ -1948,6 +2000,14 @@ class Updater(QObject):
         remove_staging(record, self.kind, self.installed, keep_download=True)
         _unlink(attempt_path())
         self.busy = False
+        # 1.36.1 (С3): the program keeps running, so the snapshots saved for the restart (app.release_for_restart) are
+        # still open here; their restore records go, or the next start would reopen copies of long-saved snapshots
+        drop = getattr(self.ctx, "drop_restart_restore", None)
+        if drop is not None:
+            try:
+                drop()
+            except Exception as exc:   # noqa: BLE001 - the failure window must still be shown
+                log.warning("restore records of this run not dropped: %s", exc)
         telemetry_event("update_failed", reason=reason, stage="switch", **attempt_fields(record))
         self._show_failure(record, reason, "switch")
 

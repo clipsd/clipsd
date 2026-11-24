@@ -59,6 +59,7 @@
   "updater.wait.dialog": "A versão {version} será instalada quando você fechar a janela aberta do ClipSD (por exemplo, as configurações).",
   "updater.wait.phone": "A versão {version} será instalada quando você fechar a janela «Do telefone».",
   "updater.wait.selector": "A versão {version} será instalada quando a janela de seleção de área for fechada.",
+  "updater.wait.still": "Não foi possível fechar sozinha a janela «{window}»: ela está à frente. Feche-a e a versão {version} será instalada na hora.",
   "updater.wait.text": "A versão {version} será instalada quando você terminar de digitar o texto e fechar o editor.",
   "updater.wait.title": "A atualização foi baixada",
   "updater.wait.unsaved": "A versão {version} será instalada quando você fechar o editor. Suas anotações não salvas não serão perdidas.",

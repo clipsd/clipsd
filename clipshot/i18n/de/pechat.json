@@ -1,10 +1,24 @@
 {
-  "pechat.dialog_title": "Screenshot drucken",
+  "pechat.cancel": "Abbrechen",
+  "pechat.color": "Farbe",
+  "pechat.color_color": "Farbe",
+  "pechat.color_gray": "Schwarzweiß",
+  "pechat.copies": "Kopien",
   "pechat.failed": "Der Screenshot konnte nicht gedruckt werden",
+  "pechat.fit": "Größe auf der Seite",
+  "pechat.fit_actual": "Originalgröße",
+  "pechat.fit_page": "An die Seite anpassen",
   "pechat.none_close": "Schließen",
   "pechat.none_pdf": "Als PDF speichern",
   "pechat.none_text": "Auf diesem Computer ist kein Drucker eingerichtet. Der Screenshot lässt sich als PDF speichern und später oder an einem anderen Computer drucken.",
   "pechat.none_title": "Kein Drucker gefunden",
-  "pechat.preview_title": "Seitenvorschau",
-  "pechat.sent": "An den Drucker gesendet"
+  "pechat.orient": "Ausrichtung",
+  "pechat.orient_auto": "Wie der Screenshot",
+  "pechat.orient_landscape": "Querformat",
+  "pechat.orient_portrait": "Hochformat",
+  "pechat.print_button": "Drucken",
+  "pechat.printer": "Drucker",
+  "pechat.sent": "An den Drucker gesendet",
+  "pechat.system_settings": "Druckereinstellungen…",
+  "pechat.win_title": "Drucken"
 }

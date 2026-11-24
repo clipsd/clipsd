@@ -13,7 +13,7 @@
   "deco.title": "Shadow, frame and margin of the shot",
   "editor.acc_sticker": "sticker",
   "editor.shape_sticker": "sticker",
-  "editor.tip_sticker": "Sticker (S)\nEmoji, text plates and numbered circles\nClick to place, drag to set the size\nPalette: click the button or press S again\nRotate: round handle above the sticker",
+  "editor.tip_sticker": "Sticker (S ▾)\nEmoji, text plates and numbered circles\nChoose: click the button or press S again to open the palette, with search by name\nClick to place, drag to set the size\nRotate: round handle above the sticker",
   "stiker.emoji": "Emoji",
   "stiker.found": "Found",
   "stiker.none": "Nothing found. Try another word.",

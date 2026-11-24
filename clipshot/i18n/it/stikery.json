@@ -13,7 +13,7 @@
   "deco.title": "Ombra, cornice e margini dell'immagine",
   "editor.acc_sticker": "adesivo",
   "editor.shape_sticker": "adesivo",
-  "editor.tip_sticker": "Adesivo (S)\nEmoji, etichette di testo e numeri nei cerchi\nClic: inserisci, trascina: scegli la dimensione\nTavolozza: clic sul pulsante o ancora S\nRuota: maniglia tonda sopra l'adesivo",
+  "editor.tip_sticker": "Adesivo (S ▾)\nEmoji, etichette di testo e numeri nei cerchi\nScelta: clic sul pulsante o ancora S apre la tavolozza, con ricerca per nome\nClic: inserisci, trascina: scegli la dimensione\nRuota: maniglia tonda sopra l'adesivo",
   "stiker.emoji": "Emoji",
   "stiker.found": "Trovati",
   "stiker.none": "Nessun risultato. Prova un'altra parola.",

@@ -1,10 +1,24 @@
 {
-  "pechat.dialog_title": "Print screenshot",
+  "pechat.cancel": "Cancel",
+  "pechat.color": "Colour",
+  "pechat.color_color": "Colour",
+  "pechat.color_gray": "Black and white",
+  "pechat.copies": "Copies",
   "pechat.failed": "Could not print the screenshot",
+  "pechat.fit": "Size on the page",
+  "pechat.fit_actual": "Actual size",
+  "pechat.fit_page": "Fit to the page",
   "pechat.none_close": "Close",
   "pechat.none_pdf": "Save as PDF",
   "pechat.none_text": "This computer has no printer set up. The screenshot can be saved as a PDF and printed later or on another computer.",
   "pechat.none_title": "No printer found",
-  "pechat.preview_title": "Print preview",
-  "pechat.sent": "Sent to the printer"
+  "pechat.orient": "Orientation",
+  "pechat.orient_auto": "Match the screenshot",
+  "pechat.orient_landscape": "Landscape",
+  "pechat.orient_portrait": "Portrait",
+  "pechat.print_button": "Print",
+  "pechat.printer": "Printer",
+  "pechat.sent": "Sent to the printer",
+  "pechat.system_settings": "Printer settings…",
+  "pechat.win_title": "Print"
 }

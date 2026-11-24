@@ -23,6 +23,7 @@ from . import forma, hidpi, icons, otdelno, pipetka, qr_read, stickers, ten_ramk
 from .dialogs import PALETTES as CARD_PALETTES, ClipDialog
 from .frame_extents import track_frame_extents
 from .i18n import dynamic, tr
+from .later import later
 from .menus import style_menu
 from .selector import force_foreground, span_rect
 from .privacy_ui import PrivacyPanel, PrivacySession, already_hidden
@@ -1003,7 +1004,9 @@ class Canvas(QWidget):
                     "tr": Qt.CursorShape.SizeBDiagCursor, "bl": Qt.CursorShape.SizeBDiagCursor}
 
     def update_cursor(self, pos=None):
-        if self.tool == PIPETTE:
+        if self.band_mode:
+            self.setCursor(Qt.CursorShape.CrossCursor)   # 1.36.1: «Открыть/Скрыть кусок»: обводка мышью
+        elif self.tool == PIPETTE:
             self.setCursor(Qt.CursorShape.CrossCursor)
         elif self._radius_drag is not None or (pos is not None and self._radius_drag is None and self._form_drag is None
                                              and self._handle_at(pos) is None and self._over_radius_handle(pos)):
@@ -1044,6 +1047,12 @@ class Canvas(QWidget):
         if event.button() != Qt.MouseButton.LeftButton:
             return
         pos = self._ep(event)
+        if self.band_mode:   # 1.36.1: обводка «Открыть/Скрыть кусок» главнее любого инструмента (пипетка, набираемый текст)
+            if self.text_edit is not None:
+                self.commit_text()
+            self.band = [pos, pos]
+            self.update()
+            return
         if self.tool == PIPETTE:
             self.pipette_pos = pos
             color = self.pipette_color(pos)
@@ -1254,6 +1263,10 @@ class Canvas(QWidget):
 
     def mouseMoveEvent(self, event):
         pos = self._ep(event)
+        if self.band is not None:
+            self.band[1] = pos
+            self.update()
+            return
         if self.tool == PIPETTE:
             inside = 0 <= pos.x() < self.lw() and 0 <= pos.y() < self.lh()
             self.pipette_pos = pos if inside else None
@@ -1360,14 +1373,14 @@ class Canvas(QWidget):
             return
         if event.button() != Qt.MouseButton.LeftButton:
             return
-        if self.tool == PIPETTE:
-            return
         if self.band is not None:
             a, b = self.band
             self.band = None
             self.update()
             if self.band_done is not None:
                 self.band_done(QRectF(a, b).normalized())
+            return
+        if self.tool == PIPETTE:
             return
         if self._radius_drag is not None:
             self._drag_radius(self._ep(event))
@@ -2337,6 +2350,20 @@ class DraggableToolButton(QToolButton):
             _paint_selected_bar(self, center=self.width() / 2 - (4 if self.default_mark else 0))
         if self.default_mark:
             _paint_default_mark(self)
+        if self.tool == STICKER:
+            self._paint_choice_arrow()
+
+    def _paint_choice_arrow(self):
+        """1.36.1 (слова владельца 23.11.2026: «не вижу, где выбирать эмодзи»): у «Стикера» в углу маленькая стрелка ▾,
+        как у кнопок групп: на кнопке видно, что здесь есть выбор."""
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        color = QColor(icons.ICON_COLOR)
+        color.setAlpha(210)
+        p.setPen(QPen(color, 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        cx, cy = self.width() - 7.5, self.height() - 7.5
+        p.drawPolyline(QPolygonF([QPointF(cx - 2.6, cy - 1.2), QPointF(cx, cy + 1.4), QPointF(cx + 2.6, cy - 1.2)]))
+        p.end()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -3470,6 +3497,24 @@ class DecoFrame(QFrame):
         p.end()
 
 
+class SplitPrintButton(QPushButton):
+    """«Печать ▾» (1.36.1): нажатие на саму кнопку открывает предпросмотр печати, стрелка справа открывает меню
+    («Сохранить в PDF…»). Слова владельца 23.11.2026: окно печати сразу, без быстрой печати."""
+    ARROW_W = 22
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.main_action = None
+
+    def mousePressEvent(self, event):
+        in_main = event.position().x() < self.width() - self.ARROW_W
+        if event.button() == Qt.MouseButton.LeftButton and in_main and self.main_action is not None:
+            event.accept()
+            self.main_action()
+            return
+        super().mousePressEvent(event)
+
+
 class EditorWindow(QMainWindow):
     closed = pyqtSignal(object)
     qr_ready = pyqtSignal(object, object)   # 1.36: (ключ картинки, найденные коды) из потока чтения кода
@@ -3575,6 +3620,7 @@ class EditorWindow(QMainWindow):
         self.privacy_panel.manual_requested.connect(self._privacy_manual)
         self.privacy_panel.hovered.connect(self._privacy_hover)
         self.privacy_panel.tool_changed.connect(self._privacy_tool)
+        self.privacy_panel.visibility_changed.connect(self._panel_visibility)
         self.canvas.band_done = self._privacy_band
         self.canvas.press_notify = self._privacy_press
         self.privacy_session = None
@@ -4420,8 +4466,8 @@ class EditorWindow(QMainWindow):
         save.setToolTip(tr("editor.save_tip"))
         save.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         save.clicked.connect(self.save_and_close)
-        # 1.36: «Печать ▾» (Печать…, Предпросмотр…, Сохранить в PDF…), Ctrl+P
-        prn = QPushButton(icons.icon("print"), "  " + tr("editor.print"))
+        # 1.36.1: «Печать ▾»: кнопка открывает предпросмотр (из него печать), стрелка: меню (предпросмотр, PDF), Ctrl+P
+        prn = SplitPrintButton(icons.icon("print"), "  " + tr("editor.print"))
         prn.setObjectName("light")
         prn.setIconSize(QSize(18, 18))
         prn.setToolTip(tr("editor.print_tip"))
@@ -4429,10 +4475,10 @@ class EditorWindow(QMainWindow):
         prn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         prn_menu = QMenu(prn)
         style_menu(prn_menu, self.ctx.config)
-        for key, slot in (("editor.print_item", self.print_image), ("editor.print_preview", self.print_preview),
-                          ("editor.save_pdf", self.save_pdf)):
+        for key, slot in (("editor.print_item", self.print_image), ("editor.save_pdf", self.save_pdf)):
             prn_menu.addAction(tr(key)).triggered.connect(lambda _c=False, f=slot: f())
         prn.setMenu(prn_menu)
+        prn.main_action = self.print_image
         self.print_button, self.print_menu = prn, prn_menu
         copy = QPushButton(icons.icon("copy"), "  " + tr("editor.copy"))
         copy.setObjectName("light")
@@ -4690,7 +4736,7 @@ class EditorWindow(QMainWindow):
         if tool not in MODE_TOOLS and tool != PIPETTE:   # режимы (текст, перевод, обрезка) и пипетка не запоминаются: следующий снимок открывается обычным видом
             self.ctx.config["tool"] = tool
             self.ctx.save_config()   # выбор сразу запоминается для следующего снимка
-        if tool == STICKER and open_palette and self.isVisible() and type(self.ctx).__name__ != "TrainCtx":
+        if tool == STICKER and open_palette and self.isVisible():
             QTimer.singleShot(0, self.show_sticker_palette)   # 1.36: выбор стикера (щелчок по кнопке или клавиша S)
 
     def select_color(self, color):
@@ -6294,7 +6340,7 @@ class EditorWindow(QMainWindow):
             old_rects = [QRectF(self.canvas.words[i].rect) for i in sorted(self.canvas.text_sel)
                          if i < len(self.canvas.words)]
         if dialog is not None and not panel and not sip.isdeleted(dialog):
-            QTimer.singleShot(1200, dialog.close)
+            later(dialog, 1200, dialog.close)
         self.canvas.words, self.canvas.text_sel = [], set()   # старые слова (с каракулями) не годятся
         self._ocr_reselect = old_rects
         self._start_text_mode_now()
@@ -6427,6 +6473,7 @@ class EditorWindow(QMainWindow):
             self.privacy_panel.setFocus()
             return
         self.canvas.commit_text()
+        self._cancel_privacy_pass2()   # прежний второй проход (если ещё идёт) больше ничего не пишет
         if self.canvas.has_words():
             self._privacy_run(list(self.canvas.words))
             return
@@ -6462,9 +6509,13 @@ class EditorWindow(QMainWindow):
                         self.ctx.config.get("ocr_quality", "accurate"))
         self._ocr_job = job
 
-    def _privacy_run(self, words):
+    def _privacy_run(self, words, second: bool = False):
         from . import privacy
-        found = privacy.find(words)
+        from . import i18n as _i18n
+        found = privacy.find(words, privacy.countries_hint(_i18n.current()))
+        if not second and not any(f.kind in (privacy.CARD, privacy.IBAN) and not f.maybe for f in found) \
+                and self._privacy_second_pass(words):
+            return   # 1.36.1: карт и IBAN нет, а мелкий бледный текст мог не прочитаться: второй проход с усилением контраста
         fresh = []
         probe = PrivacySession(self.canvas, words, found)
         for i, f in enumerate(found):
@@ -6484,14 +6535,105 @@ class EditorWindow(QMainWindow):
             self.privacy_panel.show_session(session)
         self._after_panel()
 
+    def _privacy_second_pass(self, words) -> bool:
+        """Второе распознавание с растяжением контраста и увеличением (мелкий серый текст банковских страниц); слова
+        объединяются с первыми по положению. True: проход запущен, результат придёт в _privacy_run(second=True)."""
+        from . import ocr
+        if getattr(self, "_privacy_pass2", None) is not None or not self.ctx.config.get("privacy_second_pass", True):
+            return False
+        key = self.canvas.base.cacheKey()
+        ratio = self.canvas.base.devicePixelRatio() or 1.0
+        from .busy import BusySpinner
+        spinner = BusySpinner(self.scroll.viewport(), tr("editor.ocr_busy"))
+        spinner.start()
+
+        def done(text, error, help=None):
+            from PyQt6 import sip
+            try:
+                spinner.stop()
+            except RuntimeError:
+                pass   # кружок удалён вместе с окном
+            if sip.isdeleted(self) or getattr(self, "_privacy_pass2", None) is not job:
+                return   # окно закрыто или проход отменён новым нажатием «Скрыть личные данные» (В2 проверки 1.36.1)
+            self._privacy_pass2 = None
+            self._privacy_pass2_spinner = None
+            if self.canvas.base.cacheKey() != key:
+                return   # снимок успели обрезать или отменить: старые слова к нему не относятся (как у первого прохода)
+            extra = []
+            if not error:
+                from .ocr import Word
+                extra = [Word(w.text, QRectF(w.rect.x() / ratio, w.rect.y() / ratio, w.rect.width() / ratio,
+                                            w.rect.height() / ratio), w.line) for w in getattr(job, "words", [])]
+            merged = ocr.merge_words(list(words), extra) if extra else list(words)
+            self._privacy_run(merged, second=True)
+        try:
+            job = ocr.start(self.canvas.base.copy(), done, ocr.resolve_langs(self.ctx.config.get("ocr_langs")),
+                            self.ctx.config.get("ocr_quality", "accurate"), enhance=True)
+        except Exception:   # noqa: BLE001 - второй проход не должен ломать основной
+            spinner.stop()
+            return False
+        self._privacy_pass2 = job
+        self._privacy_pass2_spinner = spinner
+        return True
+
+    def _cancel_privacy_pass2(self) -> None:
+        """Второй проход распознавания больше не нужен (окно закрывается, новое нажатие «Скрыть личные данные»): его
+        итог игнорируется, кружок убирается."""
+        self._privacy_pass2 = None
+        spinner = getattr(self, "_privacy_pass2_spinner", None)
+        self._privacy_pass2_spinner = None
+        if spinner is not None:
+            try:
+                spinner.stop()
+            except RuntimeError:
+                pass
+
     def _after_panel(self):
         self._update_info()
         self._refit_after_panel()
 
+    def _panel_visibility(self, shown: bool):
+        """1.36.1 (слова владельца 23.11.2026: «панель должна появляться сбоку, а не уменьшать скриншот»): окно растёт вбок
+        на ширину панели и при необходимости сдвигается, чтобы остаться на экране; при закрытии панели прежняя геометрия
+        возвращается (если человек за это время окно не трогал, иначе снимается только ширина панели). Развёрнутое окно
+        и нехватка места на экране: прежнее поведение (снимок вписывается в оставшееся место)."""
+        if self.isMaximized() or self.isFullScreen() or not self.isVisible():
+            self._panel_grown = None
+            return
+        if shown:
+            if getattr(self, "_panel_grown", None) is not None:
+                return
+            old = QRect(self.geometry())
+            area = (QGuiApplication.screenAt(old.center()) or QGuiApplication.primaryScreen()).availableGeometry()
+            delta = self.privacy_panel.width()   # панель стоит вплотную к снимку (spacing 0)
+            width = min(old.width() + delta, area.width())
+            x = old.x()
+            if x + width > area.right() + 1:
+                x = max(area.left(), area.right() + 1 - width)
+            self.setGeometry(QRect(x, old.y(), width, old.height()))
+            self._panel_grown = (old, QRect(self.geometry()), self.width() - old.width())
+        else:
+            grown = getattr(self, "_panel_grown", None)
+            self._panel_grown = None
+            if grown is None:
+                return
+            old, after, used = grown
+            if self.geometry() == after:
+                self.setGeometry(old)   # окно не трогали: ровно как было
+            elif used > 0:
+                self.resize(max(self.minimumWidth(), self.width() - used), self.height())
+
     def _refit_after_panel(self):
         """Панель появилась или ушла: поле снимка стало уже или шире; окно не меняется, снимок остаётся вписанным."""
         if getattr(self, "_zoom_fit_mode", False):
-            QTimer.singleShot(0, self.zoom_fit)
+            QTimer.singleShot(0, self._zoom_fit_safe)
+
+    def _zoom_fit_safe(self):
+        """Окно могли закрыть за тот миг, что таймер ждал: тогда подгонять нечего (1.36.1)."""
+        try:
+            self.zoom_fit()
+        except RuntimeError:
+            pass
 
     def _privacy_autosave(self):
         """Скрытое сразу уходит и в автосохранение: оригинал с открытыми данными в папке снимков не остаётся."""
@@ -6506,6 +6648,8 @@ class EditorWindow(QMainWindow):
 
     def _privacy_tool(self, tool: str):
         """«Открыть кусок» / «Скрыть кусок»: обводка мышью вместо обычных инструментов, пока кнопка нажата."""
+        if tool and self.canvas.text_edit is not None:
+            self.canvas.commit_text()   # набираемый текст фиксируется: обводка главнее
         self.canvas.band_mode = tool or None
         self.canvas.band = None
         self.canvas.setCursor(Qt.CursorShape.CrossCursor if tool else Qt.CursorShape.ArrowCursor)
@@ -6516,8 +6660,12 @@ class EditorWindow(QMainWindow):
         s = getattr(self, "privacy_session", None)
         if s is None or not self.canvas.band_mode:
             return
-        if s.cut(rect, self.canvas.band_mode):
+        mode = self.canvas.band_mode
+        if s.cut(rect, mode):
             self.privacy_panel.refresh_rows()
+            self.show_toast(tr("privacy.band_opened") if mode == "open" else tr("privacy.band_closed"))   # короткая плашка
+        else:
+            self.show_toast(tr("privacy.band_nothing"))
 
     def _privacy_press(self, pos):
         """Щелчок по размытому месту на снимке: строка в списке выделена и показана."""
@@ -7075,7 +7223,7 @@ class EditorWindow(QMainWindow):
             top_left = canvas.mapTo(self.scroll.widget(), QPoint(0, 0))
             self.scroll.horizontalScrollBar().setValue(round(top_left.x() + logical.x() * canvas.zoom - view_pt.x()))
             self.scroll.verticalScrollBar().setValue(round(top_left.y() + logical.y() * canvas.zoom - view_pt.y()))
-        QTimer.singleShot(0, keep_point)   # после пересчёта полос прокрутки
+        later(self, 0, keep_point)   # после пересчёта полос прокрутки; окно закрыли раньше: не вызывается (CI 45288065564)
 
     def zoom_by(self, factor: float, anchor=None):
         self.set_zoom(self.canvas.zoom * factor, anchor)
@@ -7294,7 +7442,7 @@ class EditorWindow(QMainWindow):
 
     def _qr_schedule(self, *_):
         # ocr здесь не импортируем: обычное открытие снимка не должно подгружать распознавание (light_test)
-        if not qr_read.available() or getattr(self, "_qr_timer", None) is None or getattr(self, "training", False) is True:
+        if not qr_read.available() or getattr(self, "_qr_timer", None) is None or (getattr(self, "training", False) is True and not getattr(self, "qr_demo", False)):
             return
         self._qr_timer.start(self.QR_DELAY_MS)
 
@@ -7377,20 +7525,16 @@ class EditorWindow(QMainWindow):
         self.save_and_close("pdf")
 
     def print_image(self):
-        """«Печать…» (Ctrl+P, 1.36): системное окно печати; снимок с пометками вписан в страницу. Окно остаётся."""
+        """«Печать» (кнопка, Ctrl+P, 1.36.1): окно предпросмотра печати; печатает человек его кнопкой «Печать», тогда Qt
+        открывает системное окно принтера. Снимок с пометками вписан в страницу. Окно редактора остаётся."""
         from . import pechat
         image = self.render_image()
         self._update_autosave(image)
-        result = pechat.print_image(self, image, self.ctx.config, save_pdf=self.save_pdf)
+        result = pechat.preview_image(self, image, self.ctx.config, save_pdf=self.save_pdf)
         if result == "printed":
             self.show_toast(tr("pechat.sent"))
         elif result == "failed":
             self.show_toast(tr("pechat.failed"))
-
-    def print_preview(self):
-        """«Предпросмотр…» (1.36): окно предпросмотра печати с кнопкой печати."""
-        from . import pechat
-        pechat.preview_image(self, self.render_image(), self.ctx.config)
 
     def closeEvent(self, event):
         if self.canvas.text_edit is not None:
@@ -7428,6 +7572,7 @@ class EditorWindow(QMainWindow):
         self._remove_key_filter()
         self._ocr_job = None        # распознавание, которое ещё идёт, больше ничего не пишет в это окно (Г1)
         self._ocr_spinner = None    # кружок удаляется вместе с окном
+        self._cancel_privacy_pass2()   # второй проход «Скрыть личные данные» тоже (В2 проверки 1.36.1)
         layer = getattr(self, "tr_layer", None)
         if layer is not None:
             layer.shutdown()   # перевод и вопрос про лимит отменяются, окошки закрываются вместе с редактором

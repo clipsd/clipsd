@@ -289,16 +289,57 @@ def _mean_brightness(img: QImage) -> float:
     return total / max(1, count)
 
 
-def prepare(image: QImage, quality: str = "accurate") -> QImage:
+def contrast_table(img: QImage, low_share: float = 0.004, high_share: float = 0.98) -> bytes:
+    """Таблица 256 значений для растяжения контраста серой картинки (1.36.1): мелкий светло-серый текст на белом (банковский
+    сайт: #8a8a8a-#a0a0a0 шрифтом 11-13 px) после растяжения становится тёмным и читается. Края гистограммы берутся
+    по долям (текст занимает меньше процента), середина слегка затемняется (гамма 1,5): бледные края букв темнеют."""
+    from collections import Counter
+    step = max(1, img.height() // 400)
+    hist = Counter()
+    for y in range(0, img.height(), step):
+        hist.update(bytes(img.constScanLine(y).asarray(img.width())))
+    total = sum(hist.values()) or 1
+    acc, lo, hi = 0, 0, 255
+    got_lo = False
+    for v in range(256):
+        acc += hist.get(v, 0)
+        if not got_lo and acc / total >= low_share:
+            lo, got_lo = v, True
+        if acc / total >= high_share:
+            hi = v
+            break
+    if hi - lo < 24:   # картинка и так почти однотонная или уже контрастная: не растягивать
+        return bytes(range(256))
+    return bytes(0 if v <= lo else 255 if v >= hi else round(255 * ((v - lo) / (hi - lo)) ** 1.5) for v in range(256))
+
+
+def enhance_gray(img: QImage) -> QImage:
+    """Серая картинка с растянутым контрастом (по таблице contrast_table)."""
+    table = contrast_table(img)
+    out = QImage(img.width(), img.height(), QImage.Format.Format_Grayscale8)
+    for y in range(img.height()):
+        row = bytes(img.constScanLine(y).asarray(img.width())).translate(table)
+        dst = out.scanLine(y)
+        dst.setsize(img.width())
+        dst[:img.width()] = row
+    return out
+
+
+def prepare(image: QImage, quality: str = "accurate", enhance: bool = False) -> QImage:
     """Экранный текст мелкий и бывает светлым на тёмном: серый цвет, тёмная тема переворачивается
-    в светлую, картинка увеличивается в 2-3 раза. Так Tesseract ошибается заметно реже."""
+    в светлую, картинка увеличивается в 2-3 раза. Так Tesseract ошибается заметно реже.
+    enhance (1.36.1, «Скрыть личные данные»): ещё и растяжение контраста, чтобы читался бледно-серый мелкий текст."""
     img = image.convertToFormat(QImage.Format.Format_Grayscale8)
     img.setDevicePixelRatio(1.0)
     if _mean_brightness(img) < 128:
         img.invertPixels()
+    if enhance:
+        img = enhance_gray(img)
     pixels = max(1, img.width() * img.height())
     factor = 3 if pixels * 9 <= MAX_PIXELS else 2 if pixels * 4 <= MAX_PIXELS else 1
-    if quality == "fast":
+    if enhance and pixels * 16 <= MAX_PIXELS:
+        factor = 4   # мелкий бледный текст: ещё крупнее
+    if quality == "fast" and not enhance:
         factor = 1   # «Быстрее»: без увеличения, в 2-4 раза быстрее, мелкий текст читается хуже
     if factor > 1:
         img = img.scaled(img.width() * factor, img.height() * factor, Qt.AspectRatioMode.IgnoreAspectRatio,
@@ -469,14 +510,14 @@ def _parse_tsv(tsv: str, scale_x: float, scale_y: float):
 
 # --- движки ----------------------------------------------------------------------
 
-def _run_tesseract(exe, path, langs) -> str:
+def _run_tesseract(exe, path, langs, psm: str = "3") -> str:
     have = tesseract_langs(exe)
     wanted = [lang for lang in langs.split("+") if lang]
     use = [lang for lang in wanted if lang in have] or ([l for l in ("eng",) if l in have])
     if not use:
         raise OcrError("ocr.err_no_langs", install_help("missing"))
     try:
-        out = subprocess.run([exe, path, "stdout", "-l", "+".join(use), "--psm", "3", "tsv"],
+        out = subprocess.run([exe, path, "stdout", "-l", "+".join(use), "--psm", psm, "tsv"],
                              capture_output=True, timeout=TIMEOUT, env=child_env(), **_no_window())
     except subprocess.TimeoutExpired:
         raise OcrError("ocr.err_timeout")
@@ -935,12 +976,29 @@ def _wanted_main(langs: str) -> str:
     return next((c for c in codes if c != "eng"), "")
 
 
-def recognize_words(image: QImage, langs: str = DEFAULT_LANGS, quality: str = "accurate"):
-    """Слова с рамками в пикселях исходной картинки, по порядку чтения. Бросает OcrError."""
+def merge_words(base, extra) -> list:
+    """Слова второго прохода (с усилением контраста), которых нет в первом: слово из extra берётся, если его рамка меньше
+    чем на 40 % своей площади перекрывается уже найденными. Порядок чтения восстанавливает layout()."""
+    out = list(base)
+    for w in extra:
+        area = max(1.0, w.rect.width() * w.rect.height())
+        covered = 0.0
+        for b in base:
+            inter = w.rect.intersected(b.rect)
+            if not inter.isEmpty():
+                covered += inter.width() * inter.height()
+        if covered / area < 0.4:
+            out.append(w)
+    return layout(out)
+
+
+def recognize_words(image: QImage, langs: str = DEFAULT_LANGS, quality: str = "accurate", enhance: bool = False):
+    """Слова с рамками в пикселях исходной картинки, по порядку чтения. Бросает OcrError. enhance: усиление контраста
+    для мелкого серого текста (privacy: второй проход)."""
     _found.note = ""
     _found.used = None
     try:
-        words = _recognize_words(image, langs, quality)
+        words = _recognize_words(image, langs, quality, enhance)
     except OcrError as exc:
         ocr_log(f"ошибка {exc.key}: {_found.note}".strip())
         raise
@@ -948,11 +1006,11 @@ def recognize_words(image: QImage, langs: str = DEFAULT_LANGS, quality: str = "a
     return words
 
 
-def _windows_words(image: QImage, quality: str, langs: str):
+def _windows_words(image: QImage, quality: str, langs: str, enhance: bool = False):
     folder = tempfile.mkdtemp(prefix="clipsd-ocr-")
     try:
         path = os.path.join(folder, "image.png")
-        img = _prepare_windows(image, quality)
+        img = _prepare_windows(image, quality, enhance)
         if not img.save(path, "PNG"):
             raise OcrError("ocr.err_prepare")
         sx, sy = img.width() / max(1, image.width()), img.height() / max(1, image.height())
@@ -964,7 +1022,7 @@ def _windows_words(image: QImage, quality: str, langs: str):
         shutil.rmtree(folder, ignore_errors=True)
 
 
-def _recognize_words(image: QImage, langs: str, quality: str):
+def _recognize_words(image: QImage, langs: str, quality: str, enhance: bool = False):
     langs = resolve_langs(langs)
     _found.help = None
     if image is None or image.isNull():
@@ -973,7 +1031,7 @@ def _recognize_words(image: QImage, langs: str, quality: str):
     if not exe and sys.platform != "win32":
         raise OcrError("ocr.err_not_installed", install_help("missing"))
     if not exe:
-        return _windows_words(image, quality, langs)
+        return _windows_words(image, quality, langs, enhance)
     have = tesseract_langs(exe)
     wanted = [c for c in langs.split("+") if c]
     missing = [c for c in wanted if c != "eng" and c not in have]
@@ -984,7 +1042,7 @@ def _recognize_words(image: QImage, langs: str, quality: str):
         # нужный язык, берём его; нет (языка нет и там, сбой): остаёмся на Tesseract, подсказка прежняя
         note = _found.note
         try:
-            words = _windows_words(image, quality, langs)
+            words = _windows_words(image, quality, langs, enhance)
         except OcrError:
             words = None
         if words is not None and _found.help is None:
@@ -998,11 +1056,11 @@ def _recognize_words(image: QImage, langs: str, quality: str):
     folder = tempfile.mkdtemp(prefix="clipsd-ocr-")
     try:
         path = os.path.join(folder, "image.png")
-        img = prepare(image, quality)
+        img = prepare(image, quality, enhance)
         if not img.save(path, "PNG"):
             raise OcrError("ocr.err_prepare")
         sx, sy = img.width() / max(1, image.width()), img.height() / max(1, image.height())
-        words = layout(_parse_tsv(_run_tesseract(exe, path, langs), sx, sy))
+        words = layout(_parse_tsv(_run_tesseract(exe, path, langs, "11" if enhance else "3"), sx, sy))
         use = [c for c in wanted if c in have] or ["eng"]
         _found.used = ("tesseract", "+".join(use))
         _found.help = win_help
@@ -1011,14 +1069,16 @@ def _recognize_words(image: QImage, langs: str, quality: str):
         shutil.rmtree(folder, ignore_errors=True)
 
 
-def _prepare_windows(image: QImage, quality: str = "accurate") -> QImage:
+def _prepare_windows(image: QImage, quality: str = "accurate", enhance: bool = False) -> QImage:
     img = image.convertToFormat(QImage.Format.Format_RGB32)
     img.setDevicePixelRatio(1.0)
+    if enhance:   # 1.36.1: серый с растянутым контрастом (мелкий бледный текст), обратно в RGB32 для Windows.Media.Ocr
+        img = enhance_gray(img.convertToFormat(QImage.Format.Format_Grayscale8)).convertToFormat(QImage.Format.Format_RGB32)
     limit = 9000   # у Windows.Media.Ocr предел 10 000 px по стороне
     factor = 2 if max(img.width(), img.height()) * 2 <= limit and img.width() * img.height() * 4 <= MAX_PIXELS else 1
     if max(img.width(), img.height()) > limit:
         return img.scaled(limit, limit, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-    if factor > 1 and quality != "fast":
+    if factor > 1 and (quality != "fast" or enhance):
         img = img.scaled(img.width() * factor, img.height() * factor, Qt.AspectRatioMode.IgnoreAspectRatio,
                          Qt.TransformationMode.SmoothTransformation)
     return img
@@ -1306,8 +1366,9 @@ class OcrJob(QThread):
     """Распознавание в фоне. done(text, error): одно из двух пустое. self.help: подсказка по установке или None."""
     done = pyqtSignal(str, str)
 
-    def __init__(self, image: QImage, langs: str = DEFAULT_LANGS, parent=None, quality: str = "accurate"):
+    def __init__(self, image: QImage, langs: str = DEFAULT_LANGS, parent=None, quality: str = "accurate", enhance: bool = False):
         super().__init__(parent)
+        self.enhance = enhance
         self.image = image.copy()
         self.langs = langs
         self.quality = quality
@@ -1338,7 +1399,8 @@ class OcrJob(QThread):
     def run(self):
         try:
             _found.help = None
-            self.words = recognize_words(self.image, self.langs, self.quality)
+            self.words = (recognize_words(self.image, self.langs, self.quality, True) if self.enhance
+                          else recognize_words(self.image, self.langs, self.quality))
             text = tidy(words_text(self.words))
             # текст есть, но нужного языка нет: подсказать. Tesseract без русского; Windows без русского
             # распознал английским (1.34.1, «каракули» вместо русского текста)
@@ -1368,8 +1430,8 @@ def _forget(job):
     job.deleteLater()
 
 
-def start(image: QImage, on_done, langs: str = DEFAULT_LANGS, quality: str = "accurate"):
-    job = OcrJob(image, langs, quality=quality)
+def start(image: QImage, on_done, langs: str = DEFAULT_LANGS, quality: str = "accurate", enhance: bool = False):
+    job = OcrJob(image, langs, quality=quality, enhance=enhance)
     _jobs.append(job)
 
     def finished(text, error):
@@ -1934,7 +1996,8 @@ def show_result(text: str, error: str, parent=None, help: InstallHelp = None, ag
         copy_text(text, parent)
     dlg = TextResultDialog(text, error, parent, help, again=again)
     if text and not error:
-        QTimer.singleShot(150, lambda: toast(dlg))
+        from .later import later
+        later(dlg, 150, lambda: toast(dlg))
     # у окна нет рамки системы: ставим по центру родителя (или экрана), иначе оно прижмётся к углу
     area = (parent.frameGeometry() if parent is not None and parent.isVisible()
             else _screen_for(parent).availableGeometry())

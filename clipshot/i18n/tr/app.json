@@ -64,5 +64,6 @@
   "app.menu_sec_capture": "Yakalama",
   "app.menu_sec_tools": "Araçlar",
   "app.menu_learn": "Öğren",
-  "app.menu_help": "Yardım"
+  "app.menu_help": "Yardım",
+  "app.restored": "Güncellemeden sonra yeniden açıldı: {n} ekran görüntüsü."
 }

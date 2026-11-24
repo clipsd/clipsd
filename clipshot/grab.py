@@ -5,6 +5,7 @@
 """Захват всего рабочего стола.
 
 X11: напрямую через Qt (мгновенно).
+Windows: через Qt (GDI); мониторы с HDR или расширенным цветом через DXGI с переводом цвета в sRGB (win_hdr.py).
 Wayland: асинхронно — GNOME Shell (как gnome-screenshot) → xdg-desktop-portal → внешние утилиты.
 Под Wayland снимок кодируется в PNG на стороне GNOME и занимает 0,5–3 с, поэтому захват
 асинхронный: оверлей выделения показывается сразу, а замороженный кадр подставляется, когда готов.
@@ -17,6 +18,7 @@ import secrets
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 from urllib.parse import unquote, urlparse
 
@@ -122,6 +124,13 @@ _native_shots = []   # [(логическая геометрия монитор�
 
 
 def grab_qt() -> QPixmap:
+    if os.name == "nt":
+        try:
+            from . import win_hdr
+            import logging
+            logging.getLogger("clipsd.hdr").warning("full-desktop grab: %s", win_hdr.states_line())   # только журнал
+        except Exception:   # noqa: BLE001
+            pass
     screens = QGuiApplication.screens()
     union = virtual_geometry()
     ratios = [screen.devicePixelRatio() for screen in screens]
@@ -132,14 +141,47 @@ def grab_qt() -> QPixmap:
     result.setDevicePixelRatio(ratio)
     result.fill(Qt.GlobalColor.black)
     painter = QPainter(result)
-    for screen in screens:
+    hdr = _hdr_shots(screens)
+    for i, screen in enumerate(screens):
         geo = screen.geometry()
-        shot = screen.grabWindow(0)
+        shot = hdr.get(i)
+        if shot is None:
+            shot = screen.grabWindow(0)
         if mixed and shot.devicePixelRatio() < ratio - 0.01:
             _native_shots.append((QRect(geo), shot))
         painter.drawPixmap(QRect(geo.topLeft() - union.topLeft(), geo.size()), shot)
     painter.end()
     return result
+
+
+def _hdr_shots(screens) -> dict:
+    """Windows: мониторы с HDR или расширенным цветом снимаются через DXGI с переводом цвета в sRGB
+    (clipshot/win_hdr.py), иначе снимок через GDI выходит блёклым. {номер экрана: снимок в родных пикселях};
+    остальные экраны, и при любом сбое, через GDI (screen.grabWindow) как раньше."""
+    if sys.platform != "win32":
+        return {}
+    try:
+        from . import win_hdr
+        return win_hdr.capture_screens(screens)
+    except Exception as exc:   # noqa: BLE001 — снимок всегда есть: через GDI
+        print(f"HDR: снимок через GDI ({type(exc).__name__})", flush=True)
+        return {}
+
+
+def prewarm_hdr():
+    """Windows: заранее, в фоне, подготовить видеокарту и шейдер для мониторов с HDR (первый снимок не ждёт)."""
+    if sys.platform != "win32":
+        return
+    import threading
+
+    def run():
+        try:
+            from . import win_hdr
+            win_hdr.prewarm()
+        except Exception:   # noqa: BLE001
+            pass
+
+    threading.Thread(target=run, name="clipsd-hdr-prewarm", daemon=True).start()
 
 
 def native_region(pixmap: QPixmap, rect: QRect) -> QPixmap:

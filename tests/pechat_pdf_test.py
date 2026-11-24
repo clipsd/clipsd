@@ -34,9 +34,9 @@ os.environ["QT_QPA_PLATFORM"] = "offscreen:configfile=" + _screen
 
 from PyQt6.QtCore import QObject, QRect, QRectF, Qt, QTimer, pyqtSignal  # noqa: E402
 from PyQt6.QtGui import QColor, QImage, QPageLayout  # noqa: E402
-from PyQt6.QtPrintSupport import QPrinter  # noqa: E402
+from PyQt6.QtPrintSupport import QPrinter, QPrinterInfo  # noqa: E402
 from PyQt6.QtTest import QTest  # noqa: E402
-from PyQt6.QtWidgets import QApplication, QFileDialog  # noqa: E402
+from PyQt6.QtWidgets import QApplication, QDialog, QFileDialog  # noqa: E402
 
 qapp = QApplication(sys.argv)
 qapp.setQuitOnLastWindowClosed(False)
@@ -234,24 +234,26 @@ ed.resize(1500, 800)
 QTest.qWait(100)
 check(ed.print_button.isVisible() and ed.print_button.text().strip() == "Печать", "кнопка «Печать» внизу редактора (широкое окно, с подписью)")
 acts = ed.print_menu.actions()
-check([x.text().split("\t")[0] for x in acts] == ["Печать…", "Предпросмотр…", "Сохранить в PDF…"], "меню кнопки: Печать…, Предпросмотр…, Сохранить в PDF…")
-check("Ctrl+P" in acts[0].text(), "в пункте «Печать…» подсказана клавиша Ctrl+P")
+check([x.text().split("\t")[0] for x in acts] == ["Предпросмотр и печать…", "Сохранить в PDF…"], "меню стрелки: Предпросмотр и печать…, Сохранить в PDF…")
+check("Ctrl+P" in acts[0].text(), "в первом пункте подсказана клавиша Ctrl+P")
 
 rec = []
-real_print, real_prev = pechat.print_image, pechat.preview_image
-pechat.print_image = lambda parent, image, cfg=None, save_pdf=None: (rec.append(("print", image.size(), save_pdf)), "cancelled")[1]
-pechat.preview_image = lambda parent, image, cfg=None: (rec.append(("preview", image.size())), "shown")[1]
+real_prev = pechat.preview_image
+pechat.preview_image = lambda parent, image, cfg=None, save_pdf=None: (rec.append(("print", image.size(), save_pdf)), "shown")[1]
 ed.activateWindow()
 ed.show()
 QTest.qWait(60)
 QTest.keyClick(ed, Qt.Key.Key_P, Qt.KeyboardModifier.ControlModifier)
 QTest.qWait(30)
-check(rec and rec[-1][0] == "print" and rec[-1][1] == ed.canvas.render().size(), "Ctrl+P: окно печати для снимка редактора")
+check(rec and rec[-1][0] == "print" and rec[-1][1] == ed.canvas.render().size(), "Ctrl+P: окно «Печать» для снимка редактора")
 check(callable(rec[-1][2]), "печать получает «Сохранить PDF» на случай, когда принтеров нет")
 n = len(rec)
-acts[1].trigger()
-check(rec[-1][0] == "preview", "пункт «Предпросмотр…» открывает предпросмотр")
-pechat.print_image, pechat.preview_image = real_print, real_prev
+acts[0].trigger()
+check(len(rec) == n + 1 and rec[-1][0] == "print", "первый пункт меню стрелки открывает окно «Печать»")
+from PyQt6.QtCore import QPoint as _QP  # noqa: E402
+QTest.mouseClick(ed.print_button, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _QP(10, ed.print_button.height() // 2))
+check(len(rec) == n + 2 and not ed.print_menu.isVisible(), "щелчок по самой кнопке «Печать» сразу открывает окно «Печать», меню не выпадает")
+pechat.preview_image = real_prev
 close_all()
 pdf_calls = []
 real_save_pdf = editor_mod.EditorWindow.save_pdf
@@ -263,7 +265,7 @@ QTest.keyClick(ed, Qt.Key.Key_P, Qt.KeyboardModifier.ControlModifier | Qt.Keyboa
 QTest.qWait(30)
 check(pdf_calls == [1], "Ctrl+Shift+P: «Сохранить в PDF»")
 acts = ed.print_menu.actions()
-acts[2].trigger()
+acts[1].trigger()
 check(pdf_calls == [1, 1], "пункт «Сохранить в PDF…» в меню кнопки")
 editor_mod.EditorWindow.save_pdf = real_save_pdf
 close_all()
@@ -275,8 +277,10 @@ made = []
 class FakePrinter(QPrinter):
     """Настоящий QPrinter, но вывод в PDF-файл: на принтер ничего не уходит."""
 
-    def __init__(self, mode=QPrinter.PrinterMode.ScreenResolution):
+    def __init__(self, *args):
+        mode = args[-1] if args and isinstance(args[-1], QPrinter.PrinterMode) else QPrinter.PrinterMode.ScreenResolution
         super().__init__(mode)
+        self.chosen = args[0] if args and not isinstance(args[0], QPrinter.PrinterMode) else None
         self.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
         self.out = os.path.join(tmp, f"print{len(made)}.pdf")
         self.setOutputFileName(self.out)
@@ -301,31 +305,60 @@ class FakeDialog(QObject):
         return FakeDialog.answer
 
 
-class FakePreview(QObject):
-    paintRequested = pyqtSignal(QPrinter)
+class FakeInfo:
+    def __init__(self, name):
+        self._n = name
 
-    def __init__(self, printer, parent=None):
-        super().__init__()
-        self.printer, self.title = printer, ""
-        dialogs_made.append(self)
+    def printerName(self):
+        return self._n
 
-    def setWindowTitle(self, t):
-        self.title = t
+    @staticmethod
+    def availablePrinters():
+        return [FakeInfo("Офисный"), FakeInfo("Домашний")]
 
-    def exec(self):
-        self.paintRequested.emit(self.printer)
-        return 0
+    @staticmethod
+    def defaultPrinterName():
+        return "Домашний"
+
+    @staticmethod
+    def defaultPrinter():
+        return FakeInfo("Домашний")
+
+    def isNull(self):
+        return False
 
 
-pechat.QPrinter, pechat.QPrintDialog, pechat.QPrintPreviewDialog = FakePrinter, FakeDialog, FakePreview
+def print_with(image, **opts):
+    """Окно «Печать» на подменённых классах: выставить параметры и нажать «Печать»."""
+    w = pechat.PrintWindow(None, image, a.config)
+    if "printer" in opts:
+        w.printer_box.setCurrentIndex(w.printer_box.findData(opts["printer"]))
+    if "copies" in opts:
+        w.copies.setValue(opts["copies"])
+    if "orient" in opts:
+        w.orient.setCurrentIndex(w.orient.findData(opts["orient"]))
+    if "fit" in opts:
+        w.fit.setCurrentIndex(w.fit.findData(opts["fit"]))
+    return w, w.print_now()
+
+
+pechat.QPrinter, pechat.QPrintDialog, pechat.QPrinterInfo = FakePrinter, FakeDialog, FakeInfo
 real_avail = pechat.printers_available
 pechat.printers_available = lambda: True
 
 wide = pic(900, 500)
-res = pechat.print_image(None, wide, a.config)
-pr, dlg = made[-1], dialogs_made[-1]
-check(res == "printed" and dlg.printer is pr, "печать: окно печати получило QPrinter, снимок напечатан")
-check(isinstance(dlg.printer, QPrinter), "в окно печати передан настоящий QPrinter")
+win, ok = print_with(wide)
+pr = made[-1]
+check(ok and win.printed and not dialogs_made, "печать: кнопка «Печать» окна ClipSD печатает прямо, системное окно печати не создаётся")
+check(pr.chosen is not None and pr.chosen.printerName() == "Домашний", "выбран принтер по умолчанию")
+check(isinstance(pr, QPrinter), "в печать передан настоящий QPrinter")
+check(a.config.get("print_printer") == "Домашний", "выбор принтера запомнен в настройках")
+check(win.preview.pixmap() is not None and not win.preview.pixmap().isNull(), "окно показывает страницу с картинкой")
+w2, ok2 = print_with(wide, printer="Офисный", copies=3, orient="portrait")
+check(ok2 and made[-1].chosen.printerName() == "Офисный" and made[-1].copyCount() == 3, "выбранный принтер и число копий уходят в печать")
+check(made[-1].pageLayout().orientation() == QPageLayout.Orientation.Portrait, "ориентация «Книжная» применена")
+w3, ok3 = print_with(wide, fit="actual")
+check(ok3 and os.path.exists(made[-1].out), "размер «Как есть» печатается")
 check(pr.pageLayout().orientation() == QPageLayout.Orientation.Landscape, "широкий снимок: альбомная ориентация")
 m = pr.pageLayout().margins(QPageLayout.Unit.Millimeter)
 check(all(abs(v - 10.0) < 0.01 for v in (m.left(), m.top(), m.right(), m.bottom())), "поля 10 мм")
@@ -346,15 +379,47 @@ if shutil.which("pdftoppm"):
     check(abs(left - right) <= 3 and abs(top - bottom) <= 3 or abs(left - right) <= 3 and min(top, bottom) >= 0,
           f"на листе снимок по центру по ширине ({left} и {right})")
     check(min(left, right) <= mpx + 3 or min(top, bottom) <= mpx + 3, "снимок вписан во всю область между полями (касается одной пары полей)")
-pechat.print_image(None, pic(500, 900), a.config)
+print_with(pic(500, 900))
 check(made[-1].pageLayout().orientation() == QPageLayout.Orientation.Portrait, "высокий снимок: книжная ориентация")
-pechat.print_image(None, pic(600, 600), a.config)
+print_with(pic(600, 600))
 check(made[-1].pageLayout().orientation() == QPageLayout.Orientation.Portrait, "квадратный снимок: книжная ориентация")
 count = len(made)
+cw = pechat.PrintWindow(None, wide, a.config)
+before = len(made)
+cw.reject()
+check(not cw.printed and len(made) == before, "«Отмена»: ничего не напечатано")
+
+# «Настройки принтера…» (В1 проверки 1.36.1): итог системного окна не выбрасывается
 FakeDialog.answer = 0
-check(pechat.print_image(None, wide, a.config) == "cancelled" and not os.path.exists(made[-1].out),
-      "«Отмена» в окне печати: ничего не напечатано")
+sw = pechat.PrintWindow(None, wide, a.config)
+before = len(made)
+check(sw.system_settings() is False and not sw.printed and sw.result() == 0
+      and not os.path.exists(made[-1].out) and len(made) == before + 1,
+      "системное окно отменено: ничего не напечатано, окно ClipSD открыто")
 FakeDialog.answer = 1
+sw = pechat.PrintWindow(None, wide, a.config)
+sw.copies.setValue(2)
+sw.fit.setCurrentIndex(sw.fit.findData("actual"))
+ok_sys = sw.system_settings()
+sp = dialogs_made[-1].printer
+check(ok_sys and sw.printed and sw.result() == QDialog.DialogCode.Accepted.value, "системное окно принято: напечатано, окно ClipSD закрыто как напечатанное")
+check(sp is made[-1] and os.path.exists(sp.out) and pdf_info(sp.out)["pages"] == 1, "печать идёт тем же QPrinter, что настроен в системном окне")
+check(sp.copyCount() == 2 and sp.pageLayout().orientation() == QPageLayout.Orientation.Landscape,
+      "копии и ориентация ClipSD сохранены, если драйвер их не менял")
+
+
+class DriverDialog(FakeDialog):
+    def exec(self):
+        self.printer.setPageOrientation(QPageLayout.Orientation.Portrait)   # человек выбрал «Книжная» в окне драйвера
+        return 1
+
+
+pechat.QPrintDialog = DriverDialog
+sw = pechat.PrintWindow(None, wide, a.config)
+check(sw.system_settings() and made[-1].pageLayout().orientation() == QPageLayout.Orientation.Portrait,
+      "ориентация, выбранная в окне драйвера, не перебивается")
+pechat.QPrintDialog = FakeDialog
+dialogs_made.clear()
 
 # вписывание: пропорции, поля, по центру
 for pw, ph, iw, ih in ((600, 800, 900, 500), (800, 600, 400, 900), (800, 600, 100, 50), (500, 500, 500, 500)):
@@ -368,12 +433,8 @@ page_pr = made[count - 1 if count > 1 else 0]
 pg = page_pr.pageRect(QPrinter.Unit.DevicePixel)
 check(pg.width() < page_pr.paperRect(QPrinter.Unit.DevicePixel).width(), "область печати уже листа: поля учтены")
 
-# предпросмотр
-res = pechat.preview_image(None, wide, a.config)
-pv = dialogs_made[-1]
-check(res == "shown" and isinstance(pv, FakePreview) and os.path.exists(pv.printer.out), "предпросмотр: страница нарисована для окна предпросмотра")
-check(pv.title == i18n.tr("pechat.preview_title") and dialogs_made[-2].title == i18n.tr("pechat.dialog_title"),
-      "заголовки окон печати и предпросмотра на языке программы")
+# окно «Печать»: заголовок на языке программы
+check(win.windowTitle() == 'ClipSD: ' + i18n.tr('pechat.win_title'), 'заголовок окна печати')
 check(pechat.print_image(None, QImage(), a.config) == "failed", "пустой снимок: печать не начинается")
 
 # принтеров нет
@@ -403,14 +464,28 @@ dialogs.MessageCard.exec = real_exec
 check(all(i18n.tr(k) != k for k in ("pechat.none_title", "pechat.none_text", "pechat.none_pdf")), "тексты сообщения «принтер не найден» есть")
 pechat.printers_available = real_avail
 from PyQt6.QtPrintSupport import QPrintDialog, QPrintPreviewDialog  # noqa: E402
-pechat.QPrinter, pechat.QPrintDialog, pechat.QPrintPreviewDialog = QPrinter, QPrintDialog, QPrintPreviewDialog
+pechat.QPrinter, pechat.QPrintDialog, pechat.QPrinterInfo = QPrinter, QPrintDialog, QPrinterInfo
 
 # печать из редактора: итог плашкой; «Печать» в редакторе вызывает окно печати с картинкой редактора
-pechat.QPrinter, pechat.QPrintDialog, pechat.QPrintPreviewDialog = FakePrinter, FakeDialog, FakePreview
+pechat.QPrinter, pechat.QPrintDialog, pechat.QPrinterInfo = FakePrinter, FakeDialog, FakeInfo
 pechat.printers_available = lambda: True
+
+
+def press_print_soon():
+    def go():
+        for w in QApplication.topLevelWidgets():
+            if isinstance(w, pechat.PrintWindow) and w.isVisible():
+                w.print_button.click()
+                return
+        QTimer.singleShot(30, go)
+    QTimer.singleShot(30, go)
+
+
 ed = mk()
+nm = len(made)
+press_print_soon()
 ed.print_image()
-check(os.path.exists(made[-1].out) and isinstance(dialogs_made[-1], FakeDialog), "редактор: «Печать…» открыла окно печати и напечатала")
+check(len(made) == nm + 1 and os.path.exists(made[-1].out) and not dialogs_made, "редактор: «Печать» открыла окно ClipSD, кнопка в нём напечатала, системного окна не было")
 close_all()
 
 # окно выделения: Ctrl+Shift+P печатает рамку через приложение
@@ -426,10 +501,11 @@ class FakeSel:
 
 
 from PyQt6.QtGui import QPixmap  # noqa: E402
+press_print_soon()
 a.print_from_selector(FakeSel(), QPixmap.fromImage(pic(300, 200)))
 check(sel_calls == ["hide", "show"] and os.path.exists(made[-1].out), "окно выделения: печать рамки, окно прячется на время печати")
 pechat.printers_available = real_avail
-pechat.QPrinter, pechat.QPrintDialog, pechat.QPrintPreviewDialog = QPrinter, QPrintDialog, QPrintPreviewDialog
+pechat.QPrinter, pechat.QPrintDialog, pechat.QPrinterInfo = QPrinter, QPrintDialog, QPrinterInfo
 
 # сохранение из окна выделения в PDF
 editor_mod.QFileDialog.getSaveFileName = staticmethod(fake_dialog(lambda s: (os.path.join(folder, "из-выделения.pdf"), "PDF (*.pdf)")))
@@ -455,8 +531,8 @@ check(dict(appmod.DEFAULTS).get("pdf_page") == "image", "значение по �
 dlg.close()
 
 # --- 6. 12 языков: строки, кнопка и меню не обрезаны, обе темы, узкое окно -----------------------------------------------
-KEYS = ["editor.print", "editor.print_tip", "editor.print_item", "editor.print_preview", "editor.save_pdf", "pechat.none_title",
-        "pechat.none_text", "pechat.none_pdf", "pechat.none_close", "pechat.dialog_title", "pechat.preview_title", "pechat.sent",
+KEYS = ["editor.print", "editor.print_tip", "editor.print_item", "editor.save_pdf", "pechat.none_title",
+        "pechat.none_text", "pechat.none_pdf", "pechat.none_close", "pechat.win_title", "pechat.printer", "pechat.copies", "pechat.orient", "pechat.fit", "pechat.color", "pechat.system_settings", "pechat.print_button", "pechat.cancel", "pechat.sent",
         "pechat.failed", "settings.pdf_page", "settings.pdf_page_image", "settings.pdf_page_a4", "settings.pdf_page_tip",
         "novoe.pechat_title", "novoe.pechat_text", "novoe.pdf_title", "novoe.pdf_text", "ozn.pechat_text", "ozn.pdf_text"]
 langs = ["ru", "en", "bg", "de", "es", "fr", "it", "pl", "pt", "tr", "uk", "zh"]

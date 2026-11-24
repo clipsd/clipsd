@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QLabel, QPushBut
 
 from . import icons, novoe, otlozhit
 from .i18n import tr
+from .later import later
 from .ozn_lesson import Cursor, Dimmer, Lesson
 
 # --- каталог функций ----------------------------------------------------------------------------------------
@@ -29,17 +30,20 @@ from .ozn_lesson import Cursor, Dimmer, Lesson
 #   novoe.ITEMS), "panel": плитка или кнопка панели окна выделения (цель: ключ из RegionSelector.BAR_BUTTONS,
 #   "window": чип «Открытые окна», "frame": вся рамка).
 #   настоящее действие: "region" (окно выделения), "full" (весь экран), "phone" (окно с QR-кодом), "record".
+# ПРАВИЛО ВЛАДЕЛЬЦА (23.11.2026): в «Ознакомлении» и в его списке «Новое в версии» только то, что человек может
+# использовать, включить или настроить. Внутренние доработки и мелкая шлифовка интерфейса (вид "info": «нельзя показать
+# на учебном снимке») и форма снимка (скругление углов, «forma») сюда не попадают; «Тень, рамка и поля» (ten_ramka) оставлена по решению владельца, её путь через меню показывается явно: tests/ozn_guide_test.py падает, если в CATALOG есть вид "info" или пункт forma (решение владельца 23.11.2026:
+# в списке только то, что что-то делает: снимок, пометки, текст, телефон, сохранение/печать, закрепление, QR, пипетка, настройки).
 GROUPS = ("snimok", "pometki", "text", "phone", "forma", "save", "settings")
 CATALOG = (
     ("phone_tile", "phone", "phone", "panel", "phone", None, "phone"),
-    ("forma", "forma", "form_round2", "widget", "form_button|more_button", "forma", None),
     ("windows", "snimok", "window", "panel", "window", None, "region"),
     ("other_area", "snimok", "region", "panel", "manual", None, "region"),
     ("phone_editor", "phone", "phone", "widget", "phone_button", None, "phone"),
     ("translate_head", "text", "translate", "widget", "tr_block|tool:translate", None, None),
     ("numbers", "pometki", "number", "tool", "number", "numbers", None),
     ("stikery", "pometki", "sticker", "tool", "sticker", "stikery", None),
-    ("ten_ramka", "forma", "deco", "widget", "form_button|more_button", "ten_ramka", None),
+    ("ten_ramka", "forma", "deco", "widget", "form_button|more_button", "ten_ramka", None),   # путь: «Форма снимка» ▾ → «Тень, рамка и поля…»
     ("region", "snimok", "region", "panel", "frame", None, "region"),
     ("full", "snimok", "fullscreen", "panel", "full", None, "full"),
     ("record", "snimok", "record", "panel", "record", None, "record"),
@@ -59,18 +63,10 @@ CATALOG = (
     ("pechat", "save", "print", "widget", "print_button", None, None),   # 1.36
     ("settings", "settings", "settings", "widget", "settings_button", None, None),
     ("help", "settings", "help", "widget", "help_button", None, None),
-    # новинки 1.35 (novoe.ITEMS): живут не в редакторе, показать их на учебном снимке нельзя: пояснение и отметка
-    ("oznakomlenie", "settings", "info", "info", None, None, None),
-    ("color_swatch", "pometki", "marker", "info", None, None, None),
-    ("qr_big", "phone", "phone", "info", None, None, None),
-    ("ocr_install", "text", "ocr", "info", None, None, None),
-    ("otlozhit", "settings", "update", "info", None, None, None),
-    ("settings_apply", "settings", "settings", "info", None, None, None),
-    ("phone_target", "phone", "phone", "info", None, None, None),
-    ("pdf", "save", "print", "info", None, None, None),   # 1.36: PDF живёт в окне «Сохранить» и в меню «Печать ▾»
+    ("pdf", "save", "print", "widget", "print_button", None, None),   # 1.36: PDF: стрелка «Печать ▾» и окно «Сохранить»
     # новинки 1.36
     ("zakrepit", "snimok", "pin", "panel", "pin", None, "region"),
-    ("qr_chtenie", "text", "qr", "info", None, None, None),
+    ("qr_chtenie", "text", "qr", "widget", "qr_button", None, None),   # на учебном снимке нарисован QR-код
     ("pipetka", "pometki", "pipette", "tool", "pipette", None, None),
 )
 BY_ID = {c[0]: c for c in CATALOG}
@@ -129,7 +125,7 @@ def icon_color(ident: str, icon: str, dark: bool) -> str:
 DEMO_W, DEMO_H = 760, 420
 
 
-def demo_image() -> QImage:
+def demo_image(with_qr: bool = False) -> QImage:
     """Таблица продаж за неделю, как в роликах: день, заказы, выручка. Нарисована программой, личных данных нет."""
     image = QImage(DEMO_W, DEMO_H, QImage.Format.Format_RGB32)
     image.fill(QColor("#ffffff"))
@@ -165,6 +161,16 @@ def demo_image() -> QImage:
         p.drawText(QRect(xs[2], y, 200, 40), Qt.AlignmentFlag.AlignVCenter, f"€ {orders[i] * 62:,}".replace(",", " "))
     p.setPen(QPen(QColor("#d9dee6"), 1))
     p.drawLine(0, 104, DEMO_W, 104)
+    if with_qr:   # пункт «Чтение QR-кода»: настоящий код в углу учебного снимка (адрес сайта программы)
+        from . import qr
+        matrix = qr.encode("https://clipsd.github.io/")
+        n, px = len(matrix) + 8, 5
+        x0, y0 = DEMO_W - n * px - 16, DEMO_H - n * px - 16
+        p.fillRect(QRect(x0, y0, n * px, n * px), QColor("#ffffff"))
+        for yy, row in enumerate(matrix):
+            for xx, dark in enumerate(row):
+                if dark:
+                    p.fillRect(x0 + (xx + 4) * px, y0 + (yy + 4) * px, px, px, QColor("#10161f"))
     p.end()
     return image
 
@@ -195,17 +201,30 @@ class TrainCtx:
     def autosave(self, *_a, **_k):
         return ""
 
-    def copy_image(self, *_a, **_k):
-        return None
+    def _toast(self, text):
+        """1.36.1: ничего молча не пропадает: то, что редактор сообщил или не смог сделать на учебном снимке, видно
+        человеку короткой плашкой на учебном редакторе."""
+        ed = getattr(self._host, "editor", None)
+        try:
+            if ed is not None and text:
+                ed.show_toast(text)
+        except RuntimeError:
+            pass
 
-    def notify(self, *_a, **_k):
-        return None
+    def copy_image(self, *_a, **_k):
+        self._toast(tr("ozn.no_save"))   # буфер обмена человека не трогаем
+
+    def notify(self, text=None, *_a, **_k):
+        self.last_notice = text
+        self._toast(text)
+
+    last_notice = None
 
     def open_editor(self, *_a, **_k):
         return None
 
     def capture_into(self, *_a, **_k):
-        return None
+        self._toast(tr("ozn.hint_capture"))   # новый снимок экрана поверх учебного: в настоящем редакторе
 
     def open_phone(self, *_a, **_k):
         self._host.explain("phone_editor")
@@ -238,21 +257,24 @@ def make_editor_class():
             self._toast_training()
             self._host.lesson.note("copy")
 
-        def print_image(self):   # 1.36: учебный снимок не печатается и окна печати не открывает
-            self._toast_training()
+        def print_image(self):
+            """1.36.1: как в настоящем редакторе: предпросмотр учебного снимка, печать из него по выбору человека
+            (на принтер уходит только по его кнопке в окне предпросмотра)."""
             self._host.lesson.note("pechat")
-
-        def print_preview(self):
-            self.print_image()
+            super().print_image()
 
         def save_pdf(self):
-            self._toast_training()
+            """PDF учебного снимка: человек сам выбирает файл; остальные настройки и список снимков не затрагиваются."""
+            self.ctx.last_notice = None
+            EditorWindow.save_and_close(self, "pdf")   # настоящее сохранение (учебное «Сохранить» только объясняет)
+            if self.ctx.last_notice:
+                self._host.lesson.note("pdf")
 
         def insert_from_phone(self):
             self._host.explain("phone_editor")
 
         def start_tour(self, *_a, **_k):
-            return None
+            self.show_toast(tr("ozn.hint_tour"))   # F1 и «Знакомство» в «?»: окно «Ознакомление» и есть знакомство
 
         def fit_size(self):                       # размер задаёт окно «Ознакомление»
             self._measure_rows()
@@ -439,7 +461,10 @@ class Row(QAbstractButton):
             p.setBrush(QColor(c["soft"]))
             p.drawRoundedRect(r, 9, 9)
         elif self.underMouse() or self.hasFocus():
-            p.setPen(QPen(QColor(c["accent"]) if self.hasFocus() else Qt.PenStyle.NoPen, 1))
+            if self.hasFocus():
+                p.setPen(QPen(QColor(c["accent"]), 1))
+            else:
+                p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(QColor(c["close_hover"]))
             p.drawRoundedRect(r, 9, 9)
         d = ROW_H - 18
@@ -499,7 +524,7 @@ class OznakomlenieWindow(QWidget):
         QApplication.instance().installEventFilter(self)   # Esc во время обучения (lesson.escape)
         self.new_list = new_ids(app.config)
         if focus_new and self.new_list:
-            QTimer.singleShot(0, lambda: self.select(self.new_list[0]))
+            later(self, 0, lambda: self.select(self.new_list[0]))
 
     # --- построение ---------------------------------------------------------------------------------------
 
@@ -710,15 +735,15 @@ QPushButton#oznBtn:disabled {{ color: {c['muted']}; }}
         self.back_button.clicked.connect(self._to_list)
         self.back_button.hide()
         self.show_button = QPushButton(tr("ozn.show"))
-        self.show_button.setObjectName("clipPrimary")
+        self.show_button.setObjectName("oznBtn")
         self.try_button = QPushButton(tr("ozn.skip"))
         self.try_button.setObjectName("oznBtn")
         self.real_button = QPushButton(tr("ozn.real"))
-        self.real_button.setObjectName("clipPrimary")
+        self.real_button.setObjectName("oznBtn")
         self.reset_button = QPushButton(tr("ozn.reset"))
         self.reset_button.setObjectName("oznBtn")
         self.next_button = QPushButton(tr("ozn.next") + " ›")
-        self.next_button.setObjectName("clipPrimary")
+        self.next_button.setObjectName("oznBtn")
         self.next_button.clicked.connect(self.next_function)
         self.result_label = QLabel()
         self.result_label.setObjectName("oznOk")
@@ -820,7 +845,11 @@ QPushButton#oznBtn:disabled {{ color: {c['muted']}; }}
             self._drop_editor()
         cls = make_editor_class()
         ctx = TrainCtx(self.app, self)
-        ed = cls(demo_image(), ctx, self)
+        qr = self.current == "qr_chtenie"
+        ed = cls(demo_image(with_qr=qr), ctx, self)
+        ed.qr_demo = qr   # чтение QR на учебном снимке включено только в пункте про QR
+        if qr:
+            ed._qr_schedule()
         notifications.register(self.app)   # EditorWindow запоминает свой ctx как «приложение»: вернуть настоящее
         ed.setParent(self.editor_host, Qt.WindowType.Widget)
         ed.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
@@ -950,14 +979,34 @@ QPushButton#oznBtn:disabled {{ color: {c['muted']}; }}
         i = self.order.index(self.current) if self.current in self.order else -1
         b = self.next_button
         b.setVisible(0 <= i < len(self.order) - 1)
-        if self.show_button.isHidden() and self.real_button.isHidden():
-            primary = True
+        self._lesson_finished = bool(primary)
         self._place_next()
-        name = "clipPrimary" if primary else "oznBtn"
-        if b.objectName() != name:
-            b.setObjectName(name)
-            b.style().unpolish(b)
-            b.style().polish(b)
+        self.refresh_primary()
+
+    def refresh_primary(self):
+        """1.36.1 (слова владельца 23.11.2026: «все кнопки зелёные»): зелёная (clipPrimary) ровно одна, следующее ожидаемое
+        действие: до показа «Показать»; после показа и пока человек пробует «Попробовать по-настоящему» (если оно есть);
+        после «Получилось» (и когда других действий нет) «Следующая функция ›». Остальные: контурные (oznBtn)."""
+        phase = getattr(self.lesson, "phase", "off")
+        finished = getattr(self, "_lesson_finished", False) or phase == "done"
+        visible = [b for b in (self.show_button, self.real_button, self.next_button) if not b.isHidden()]
+        main = None
+        if finished and not self.next_button.isHidden():
+            main = self.next_button
+        elif not self.real_button.isHidden() and phase in ("you", "free"):
+            main = self.real_button
+        elif not self.show_button.isHidden():
+            main = self.show_button
+        elif not self.real_button.isHidden():
+            main = self.real_button
+        elif not self.next_button.isHidden():
+            main = self.next_button
+        for b in (self.show_button, self.real_button, self.next_button):
+            name = "clipPrimary" if b is main else "oznBtn"
+            if b.objectName() != name:
+                b.setObjectName(name)
+                b.style().unpolish(b)
+                b.style().polish(b)
 
     def _place_next(self):
         """Все кнопки в одном ряду, «Следующая функция ›» справа. Не помещаются (узкое окно, длинные подписи): она
@@ -1040,6 +1089,8 @@ QPushButton#oznBtn:disabled {{ color: {c['muted']}; }}
             QApplication.processEvents()
             self.lesson.start(ident)
             return
+        if self.editor is not None and (ident == "qr_chtenie") != bool(getattr(self.editor, "qr_demo", False)):
+            self._drop_editor()   # учебный снимок с QR-кодом только у пункта про QR
         if self.editor is None:
             self._make_editor()
         self.stack.setCurrentIndex(1)
@@ -1105,7 +1156,9 @@ QPushButton#oznBtn:disabled {{ color: {c['muted']}; }}
             self._real_wait.timeout.connect(self._real_poll)
             self._real_wait.start()
             self._real_since = 0
-            action(delay=400)
+            # окно выделения покажет шаги и подсветит нужную кнопку; пометка ставится в capture_* только при настоящем
+            # старте выделения (отказ «занято» не оставляет её следующему Alt+W, С4 проверки 1.36.1)
+            action(delay=400, guide=ident)
         else:
             action()
             self.lesson.note("real")
@@ -1121,6 +1174,15 @@ QPushButton#oznBtn:disabled {{ color: {c['muted']}; }}
         if self._real_since < 3 and not busy:
             return   # выделение ещё не успело открыться
         self._real_wait.stop()
+        if self.current == "zakrepit":
+            from . import zakrepit
+            if zakrepit.OPEN:   # снимок закреплён: «Получилось» и как менять размер и снимать закрепление
+                self.showNormal()
+                self.raise_()
+                self.activateWindow()
+                self.lesson_done("zakrepit")
+                self.hint_line.setText(tr("zakrepit.howto"))
+                return
         if getattr(app, "editors", None):
             return   # после снимка открылся настоящий редактор: окно «Ознакомление» поверх него не поднимается
         if not self.isVisible() or self.isMinimized():

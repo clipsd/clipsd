@@ -309,8 +309,8 @@ expected = quick + [x for x in expected if x not in quick]
 expected += [["GroupButton", "group", "", t] for t in ("Стрелки и линии: Стрелка (A)", "Фигуры: Прямоугольник (R)",
              "Надписи: Текст (T)", "Рисование: Маркер (M)", "Скрыть и стереть: Размытие (B)", "Текст с картинки: Копировать текст (I)")]
 expected += [["DraggableToolButton", "tool", "", "Скрыть личные данные (H)"]]   # 1.36: «Скрыть личные данные»
-expected += [["DraggableToolButton", "tool", "", "Стикер (S)"]]   # 1.36: «Стикер» (кнопка есть и при свёрнутой группе «Надписи»)
-expected += [["QPushButton", "light", "Печать", "Печать, предпросмотр, сохранение в PDF (Ctrl+P)"]]   # 1.36: «Печать ▾»
+expected += [["DraggableToolButton", "tool", "", "Стикер (S ▾)"]]   # 1.36: «Стикер» (кнопка есть и при свёрнутой группе «Надписи»)
+expected += [["SplitPrintButton", "light", "Печать", "Предпросмотр и печать, сохранение в PDF (Ctrl+P)"]]   # 1.36: «Печать ▾»
 expected += [["DraggableToolButton", "tool", "", "Пипетка (J)"]]   # 1.36: пипетка цвета
 expected += [["QPushButton", "light", "", "Закрепить снимок поверх окон (F3)"]]   # 1.36: «Закрепить» внизу
 expected += [["QToolButton", "qrFound", "QR", "На снимке найден QR-код или штрихкод. Нажмите: открыть ссылку или скопировать текст кода"]]   # 1.36: кнопка «QR» (скрыта, пока кода нет)
@@ -318,6 +318,7 @@ expected += [["QToolButton", "more", "Все инструменты", "Все и
 expected += [["BellButton", "bell", "", "Уведомления: новая версия, что нового, сообщения программы"]]   # 1.32: колокольчик
 expected += [["PhoneButton", "phone", "С телефона", "С телефона · Снять камерой или отправить картинку с телефона"]]   # 1.34; 22.11.2026: стрелка ▾
 expected += [["FormButton", "group", "", "Форма снимка: скруглённые углы, овал, круг"]]   # 1.34: форма снимка
+print("лишние:", [x for x in now if x not in expected], "нет:", [x for x in expected if x not in now])
 check(sorted(now) == sorted(expected) and now[:2] == quick, f"кнопки панелей: {len(now)} шт., состав как в main, отмена и повтор первыми")
 if sorted(now) != sorted(expected):
     print("   лишние:", [x for x in now if x not in expected], "нет:", [x for x in expected if x not in now])

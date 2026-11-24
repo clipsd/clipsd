@@ -59,6 +59,7 @@
   "updater.wait.dialog": "版本 {version} 将在您关闭已打开的 ClipSD 窗口（例如设置）后安装。",
   "updater.wait.phone": "版本 {version} 将在您关闭“来自手机”窗口后安装。",
   "updater.wait.selector": "版本 {version} 将在区域选择窗口关闭后安装。",
+  "updater.wait.still": "无法自动关闭窗口“{window}”：它已被置于最前。关闭它后，版本 {version} 将立即安装。",
   "updater.wait.text": "版本 {version} 将在您完成文字输入并关闭编辑器后安装。",
   "updater.wait.title": "更新已下载",
   "updater.wait.unsaved": "关闭编辑器后将安装版本 {version}。未保存的标注不会丢失。",

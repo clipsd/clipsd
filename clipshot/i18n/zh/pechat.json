@@ -1,10 +1,24 @@
 {
-  "pechat.dialog_title": "打印截图",
+  "pechat.cancel": "取消",
+  "pechat.color": "颜色",
+  "pechat.color_color": "彩色",
+  "pechat.color_gray": "黑白",
+  "pechat.copies": "份数",
   "pechat.failed": "无法打印截图",
+  "pechat.fit": "页面上的大小",
+  "pechat.fit_actual": "实际大小",
+  "pechat.fit_page": "适合页面",
   "pechat.none_close": "关闭",
   "pechat.none_pdf": "保存为 PDF",
   "pechat.none_text": "这台电脑没有设置打印机。可以把截图保存为 PDF，稍后或在另一台电脑上打印。",
   "pechat.none_title": "未找到打印机",
-  "pechat.preview_title": "打印预览",
-  "pechat.sent": "已发送到打印机"
+  "pechat.orient": "方向",
+  "pechat.orient_auto": "按截图",
+  "pechat.orient_landscape": "横向",
+  "pechat.orient_portrait": "纵向",
+  "pechat.print_button": "打印",
+  "pechat.printer": "打印机",
+  "pechat.sent": "已发送到打印机",
+  "pechat.system_settings": "打印机设置…",
+  "pechat.win_title": "打印"
 }
