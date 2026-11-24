@@ -13,6 +13,7 @@
   "forma.round_l": "Zaokrąglone rogi: duże",
   "forma.round_m": "Zaokrąglone rogi: średnie",
   "forma.round_s": "Zaokrąglone rogi: małe",
+  "forma.size_tip": "Przeciągnij uchwyty, aby zmienić rozmiar kształtu, Shift: proporcjonalnie\nPrzesunięcie: przeciągnij obszar wokół kształtu, z „Zaznaczanie i przesuwanie” (V) także wewnątrz",
   "forma.tip_off": "Kształt zrzutu: zaokrąglone rogi, owal, koło\nKliknięcie włącza „{name}”, strzałka obok otwiera wszystkie kształty",
   "forma.tip_on": "Kształt zrzutu · {name}\nKliknięcie przywraca prostokąt, strzałka obok otwiera wszystkie kształty",
   "forma.title": "Kształt zrzutu"

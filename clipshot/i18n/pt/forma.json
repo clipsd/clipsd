@@ -13,6 +13,7 @@
   "forma.round_l": "Cantos arredondados: grandes",
   "forma.round_m": "Cantos arredondados: médios",
   "forma.round_s": "Cantos arredondados: pequenos",
+  "forma.size_tip": "Arraste as alças para mudar o tamanho da forma, Shift: proporcional\nMover: arraste a área em volta da forma, com “Selecionar e mover” (V) também dentro dela",
   "forma.tip_off": "Forma da captura: cantos arredondados, oval, círculo\nUm clique ativa “{name}”, a seta ao lado abre todas as formas",
   "forma.tip_on": "Forma da captura · {name}\nUm clique volta ao retângulo, a seta ao lado abre todas as formas",
   "forma.title": "Forma da captura"

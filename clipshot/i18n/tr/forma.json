@@ -13,6 +13,7 @@
   "forma.round_l": "Yuvarlak köşeler: büyük",
   "forma.round_m": "Yuvarlak köşeler: orta",
   "forma.round_s": "Yuvarlak köşeler: küçük",
+  "forma.size_tip": "Şeklin boyutunu değiştirmek için tutamaçları sürükleyin, Shift: orantılı\nTaşımak için: şeklin çevresindeki alanı sürükleyin, “Seç ve taşı” (V) ile şeklin içinden de",
   "forma.tip_off": "Ekran görüntüsünün şekli: yuvarlak köşeler, oval, daire\nTıklama “{name}” şeklini açar, yanındaki ok tüm şekilleri gösterir",
   "forma.tip_on": "Ekran görüntüsünün şekli · {name}\nTıklama dikdörtgene döndürür, yanındaki ok tüm şekilleri gösterir",
   "forma.title": "Ekran görüntüsünün şekli"

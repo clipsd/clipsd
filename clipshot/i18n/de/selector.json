@@ -69,5 +69,7 @@
   "selector.sub_edit_tools": "Pfeile, Text, Unschärfe",
   "selector.saved": "Gespeichert: {name}",
   "selector.saved_already": "Bereits gespeichert: {name}",
-  "selector.save_failed": "Der Screenshot konnte nicht gespeichert werden"
+  "selector.save_failed": "Der Screenshot konnte nicht gespeichert werden",
+  "selector.form_tip_off": "Form des Screenshots ({hotkey}): Klick schaltet „{name}“ ein, Pfeil: alle Formen",
+  "selector.form_tip_on": "Form des Screenshots: {name} ({hotkey}) · Klick: Rechteck, Pfeil: alle Formen"
 }

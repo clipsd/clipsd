@@ -2425,7 +2425,38 @@ def test_no_take_another_note_when_quitting():
     settle()
 
 
-for fn in (test_qr, test_token_and_page, test_size_type_origin, test_expiry_idle_lock_limit, test_connections_and_stop,
+def test_network_change():
+    """1.36.3 (владелец 24.11.2026: «пк не отображает новый qr с новой сетью при переподключении»): окно следит за сетью;
+    адрес из кода пропал: приём заново на новом адресе, новый код и строка «Сеть сменилась»; сети нет: «не подключён»,
+    сеть появилась: приём открывается сам."""
+    i18n.set_language("ru")
+    ctx = Ctx()
+    dlg = phone_ui.PhoneDialog(ctx, candidates=list(LOOP))
+    dlg.start()
+    dlg.open_centered()
+    settle()
+    check(dlg.net_timer.isActive() and dlg.net_timer.interval() == phone_ui.NET_CHECK_MS, "окно проверяет сеть раз в 3 с")
+    first = dlg.receiver.url if dlg.receiver else ""
+    check(not dlg.check_network() and dlg.receiver is not None and dlg.receiver.url == first, "сеть та же: код не меняется")
+    dlg._candidates = [{"ip": "127.0.0.2", "prefix": 8, "name": "lo-test2", "kind": "wifi"}]
+    check(dlg.check_network() and dlg.receiver is not None and "127.0.0.2" in dlg.receiver.url,
+          f"сеть сменилась: приём на новом адресе ({dlg.receiver.url if dlg.receiver else None})")
+    check(dlg.step1.text.text().startswith("Сеть сменилась") and "127.0.0.2" in dlg.step1.text.text(),
+          f"строка «Сеть сменилась, код обновлён» с новым адресом ({dlg.step1.text.text()[:60]})")
+    check(dlg.qr_box.isVisible(), "новый код показан")
+    dlg._candidates = []
+    check(dlg.check_network() and dlg.receiver is None and not dlg.qr_box.isVisible() and dlg.net_timer.isActive(),
+          "сеть пропала: код убран, «Компьютер не подключён», проверка продолжается")
+    dlg._candidates = list(LOOP)
+    check(dlg.check_network() and dlg.receiver is not None and dlg.qr_box.isVisible(), "сеть появилась: приём открылся сам")
+    timer = dlg.net_timer
+    dlg.close()
+    settle()
+    from PyQt6 import sip
+    check(sip.isdeleted(timer) or not timer.isActive(), "окно закрыто: проверка сети остановлена")
+
+
+for fn in (test_network_change, test_qr, test_token_and_page, test_size_type_origin, test_expiry_idle_lock_limit, test_connections_and_stop,
            test_network_rules, test_page_render, test_window_flow, test_window_states, test_trouble_dialog,
            test_menus, test_languages, test_new_name, test_page_new_flow, test_phone_close, test_races, test_firewall_allow_argv,
            test_allow_step, test_allow_races, test_trouble_allow, test_allow_again_windows, test_receive_status_events, test_fresh_key,

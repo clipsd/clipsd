@@ -70,5 +70,7 @@
   "selector.sub_edit_tools": "setas, texto, desfoque",
   "selector.saved": "Salvo: {name}",
   "selector.saved_already": "Já salvo: {name}",
-  "selector.save_failed": "Não foi possível salvar a captura"
+  "selector.save_failed": "Não foi possível salvar a captura",
+  "selector.form_tip_off": "Forma da captura ({hotkey}): um clique ativa “{name}”, seta: todas as formas",
+  "selector.form_tip_on": "Forma da captura: {name} ({hotkey}) · clique: retângulo, seta: todas as formas"
 }

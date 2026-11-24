@@ -13,10 +13,10 @@ import os
 import sys
 
 from PyQt6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QBrush, QColor, QLinearGradient, QCursor, QFont, QFontMetrics, QGuiApplication, QImage, QPainter, QPen, QPixmap, QRegion
+from PyQt6.QtGui import QBrush, QColor, QLinearGradient, QCursor, QFont, QFontMetrics, QGuiApplication, QImage, QPainter, QPainterPath, QPen, QPixmap, QRegion
 from PyQt6.QtWidgets import QWidget
 
-from . import i18n, language, translate_ui
+from . import forma, i18n, language, translate_ui
 from .grab import native_region
 from .i18n import dynamic, tr
 from .i18n import keys as i18n_keys
@@ -233,6 +233,10 @@ class RegionSelector(TranslateMixin, QWidget):
         self._win_open_pending = False   # список попросили (W, чип), пока он ещё не пришёл
         self._novoe = None           # 1.34: {ключ кнопки: id} меток «Новое» (novoe.badges), считается при первой отрисовке
         self._novoe_counted = set()
+        # 1.36.3 (слова владельца 24.11.2026): форма снимка выбирается уже здесь. Каждое окно выделения начинается
+        # с прямоугольника, как каждый новый снимок в редакторе; последняя форма (form_last) включается одним щелчком
+        self.form = forma.Form()
+        self._no_form = False
 
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -534,6 +538,7 @@ class RegionSelector(TranslateMixin, QWidget):
                 shift = (14, 10) if sel is self.kept and self.start is None and self.pending is None else (0, 0)
                 self._draw_label(p, tr("selector.size_label", w=phys.width(), h=phys.height()), sel.topLeft(), above=True,
                                  dx=shift[0], dy=shift[1])
+            self._paint_form(p, sel)   # 1.36.3: контур выбранной формы в рамке
             if sel is self.kept and self.start is None and self.pending is None:
                 fw = self.FRAME_W
                 p.setPen(QPen(ACCENT, fw, Qt.PenStyle.DashLine))
@@ -625,6 +630,7 @@ class RegionSelector(TranslateMixin, QWidget):
             area = screen.geometry().translated(-self.origin).intersected(self.kept)
             if not area.isEmpty():
                 p.drawRect(area.adjusted(half, half, -half - 1, -half - 1))
+        self._paint_form(p, self.kept)   # 1.36.3: форма и для снимка всего экрана
         self._draw_action_bar(p)
         self._draw_corner_close(p)
 
@@ -749,6 +755,7 @@ class RegionSelector(TranslateMixin, QWidget):
                    ("ocr", "selector.btn_ocr", "Ctrl+T"),
                    ("phone", "phone.tile_title", "phone.tile_tip"),   # те же ключи у кнопки «С телефона» в редакторе
                    ("pin", "zakrepit.tile_title", "F3"),             # 1.36: закрепить область поверх окон
+                   ("form", "forma.title", "F"),                     # 1.36.3: форма снимка, как кнопка в редакторе
                    ("translate", "selector.btn_translate", "Ctrl+L"),
                    ("translate_pick", "selector.btn_translate_pick", "Ctrl+P"),
                    ("save", "selector.btn_save", "Ctrl+S"),
@@ -758,7 +765,7 @@ class RegionSelector(TranslateMixin, QWidget):
     # 1.29.1: сверху пять плиток, снизу четыре кнопки справа налево по частоте: «Скопировать и закрыть», «Выделить заново»,
     # «Редактировать», «Сохранить»; ширина по тексту, чем правее, тем шире; слева значок в цветном квадрате.
     # 1.34 (просьба владельца 21.11.2026): шестая плитка «С телефона», тот же приём фото, что пункт меню значка у часов
-    BAR_TOP = ("record", "full", "ocr", "phone", "pin", "translate", "translate_pick")
+    BAR_TOP = ("record", "full", "ocr", "phone", "pin", "form", "translate", "translate_pick")
     BAR_BOTTOM = ("save", "edit", "manual", "copy")
     BAR_WEIGHTS = {"save": 1.0, "edit": 1.2, "manual": 1.4, "copy": 1.65}
 
@@ -774,12 +781,16 @@ class RegionSelector(TranslateMixin, QWidget):
                 "phone": tr("phone.tile_sub"), "pin": tr("zakrepit.tile_sub")}
     BAR_ICONS = {"full": "fullscreen", "edit": "pencil", "copy": "copy", "save": "save", "record": "record",
                  "manual": "region", "ocr": "ocr", "translate": "translate", "translate_pick": "translate_pick",
-                 "phone": "phone", "pin": "pin"}
+                 "phone": "phone", "pin": "pin", "form": "form_rect"}
     # цвет у главных кнопок фоном, у плиток только значком
     BAR_ICON_COLORS = {"record": "#d92d20", "full": "#2a6df4", "save": "#5a6270", "ocr": "#7c3aed",
                        "translate": "#0d9488", "translate_pick": "#0d9488", "edit": "#0b6fd6", "manual": "#0b4fb3",
-                       "copy": "#f4fff8", "phone": "#b4236e", "pin": "#1660d0"}
+                       "copy": "#f4fff8", "phone": "#b4236e", "pin": "#1660d0", "form": "#1660d0"}
     BAR_PIN_W = 36   # ширина плитки «Закрепить» (только значок) на широком и среднем размерах панели
+    BAR_FORM_W = 48  # 1.36.3: плитка «Форма снимка»: значок и стрелка меню, как кнопка группы в редакторе (48)
+    BAR_FORM_ARROW = 15   # правая часть плитки формы со стрелкой: открывает меню форм
+    # плитки только со значком (подпись в строке подсказки) на широком и среднем размерах
+    ICON_TILES = {"pin": BAR_PIN_W, "form": BAR_FORM_W}
     BAR_SQUARE = {"save": ("#e3e6eb", "#5a6270"), "edit": ("#d6e7fc", "#0b6fd6"),   # цвет квадрата и значка нижних кнопок
                   "manual": ("#1e6fe0", "#ffffff"), "copy": ("#4fc487", "#ffffff")}
 
@@ -796,8 +807,100 @@ class RegionSelector(TranslateMixin, QWidget):
                 continue
             if key == "pin" and getattr(self, "_no_pin", False):
                 continue
+            if key == "form" and getattr(self, "_no_form", False):
+                continue
             out.append((key, tr(b[1]), tr(b[2]) if b[2].startswith(("selector.", "phone.")) else i18n_keys(b[2])))
         return out
+
+    # --- форма снимка (1.36.3) ----------------------------------------------------------------------------------
+
+    def _form_config(self) -> dict:
+        cfg = getattr(self.lang_ctx, "config", None)
+        if not isinstance(cfg, dict):
+            cfg = getattr(self, "_form_cfg", None)
+            if cfg is None:
+                cfg = self._form_cfg = {}
+        return cfg
+
+    def set_form(self, code):
+        """Форма из меню или щелчком: контур в рамке, копирование и сохранение отсюда с формой, редактор с ней.
+        Не прямоугольник запоминается для следующего щелчка (form_last), как в редакторе."""
+        code = forma.valid(code)
+        cfg = self._form_config()
+        if code == forma.ROUND:
+            form = forma.last_form(cfg) if forma.last_code(cfg) == forma.ROUND else forma.Form(forma.ROUND)
+        else:
+            form = forma.Form(code)
+        self.form = form
+        forma.remember(cfg, form)
+        self.update()
+
+    def toggle_form(self):
+        """Щелчок по плитке и клавиша F: прямоугольник → последняя форма, любая форма → снова прямоугольник."""
+        if self.form.is_rect:
+            self.form = forma.last_form(self._form_config())
+        else:
+            self.form = forma.Form()
+        self.update()
+
+    def form_menu(self):
+        """Стрелка плитки и правый щелчок по ней: те же пункты форм, что у кнопки редактора."""
+        from PyQt6.QtWidgets import QMenu
+        from .menus import style_menu
+        rect = next((r for k, _t, _s, r in self._bar_layout()[0] if k == "form"), QRect())
+        menu = QMenu(self)
+        style_menu(menu, self._form_config())
+        forma.fill_menu(menu, self.form.code, self.set_form)
+        note = forma.jpg_note(self._form_config())
+        if note:
+            menu.addSeparator()
+            info = menu.addAction(note)
+            info.setEnabled(False)
+        menu.ensurePolished()
+        below = self.mapToGlobal(rect.bottomLeft() + QPoint(0, 2))
+        screen = QGuiApplication.screenAt(below) or QGuiApplication.primaryScreen()
+        h = menu.sizeHint().height()
+        pos = below if below.y() + h <= screen.availableGeometry().bottom() else \
+            self.mapToGlobal(rect.topLeft()) - QPoint(0, h + 2)
+        self._form_menu_open = menu   # тесты: открытое меню
+        menu.exec(pos)
+        self._form_menu_open = None
+        menu.deleteLater()
+        self.hover_button = None
+        self.update()
+
+    def form_hint(self, key_name="F") -> str:
+        """Строка подсказки над плиткой формы: что сейчас и что сделает щелчок."""
+        if self.form.is_rect:
+            return tr("selector.form_tip_off", name=forma.title(forma.last_form(self._form_config()), self.ratio),
+                      hotkey=key_name)
+        return tr("selector.form_tip_on", name=forma.title(self.form, self.ratio), hotkey=key_name)
+
+    def _shaped(self, pixmap):
+        """Снимок рамки с выбранной формой (прозрачность за ней), масштаб экрана сохраняется."""
+        if self.form.is_rect or pixmap is None or pixmap.isNull():
+            return pixmap
+        out = QPixmap.fromImage(forma.apply(pixmap.toImage(), self.form))
+        out.setDevicePixelRatio(pixmap.devicePixelRatio())
+        return out
+
+    def _paint_form(self, p: QPainter, sel: QRect):
+        """Контур формы в рамке выделения: за формой то же затемнение, что вокруг рамки, по контуру линия рамки.
+        Круг вписан в рамку по центру."""
+        if self.form.is_rect or sel is None or sel.width() < 2 or sel.height() < 2:
+            return
+        contour = forma.path(self.form, sel.width(), sel.height()).translated(QPointF(sel.topLeft()))
+        whole = QPainterPath()
+        whole.addRect(QRectF(sel))
+        p.save()
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        p.fillPath(whole.subtracted(contour), DIM)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.setPen(QPen(QColor(255, 255, 255, 200), 3))
+        p.drawPath(contour)
+        p.setPen(QPen(ACCENT, 1.5))
+        p.drawPath(contour)
+        p.restore()
 
     def _mon_list(self):
         """Мониторы слева направо: [(экран, прямоугольник в координатах окна)]."""
@@ -959,7 +1062,7 @@ class RegionSelector(TranslateMixin, QWidget):
         if lv["text"]:
             # 1.36: «Закрепить» узкая плитка с одним значком (подпись в подсказке): седьмая плитка с подписью не
             # помещалась на экране 800 px, подписи остальных пришлось бы убрать
-            txt_top = [k for k in top if k != "pin"]
+            txt_top = [k for k in top if k not in self.ICON_TILES]   # 1.36.3: и «Форма снимка» одним значком
             words = max([fm_l.horizontalAdvance(w) for k in txt_top for w in texts[k].split()] or [0]) + 16
             sub = max([fm_s.horizontalAdvance(self.BAR_SUB[k]) + 14 for k in ("translate", "translate_pick", "phone")
                        if k in txt_top] or [0])
@@ -967,8 +1070,8 @@ class RegionSelector(TranslateMixin, QWidget):
             # 1.34: плиток шесть; если равные не помещаются, каждая не уже своего самого длинного слова и пояснения
             tile_mins = {}
             for k in top:
-                if k == "pin":
-                    tile_mins[k] = self.BAR_PIN_W
+                if k in self.ICON_TILES:
+                    tile_mins[k] = self.ICON_TILES[k]
                     continue
                 own = max([fm_l.horizontalAdvance(w) for w in texts[k].split()] or [0]) + 16
                 if k in ("translate", "translate_pick", "phone"):
@@ -988,8 +1091,9 @@ class RegionSelector(TranslateMixin, QWidget):
             for k in ("manual", "copy"):
                 mins[k] = 2 * pad + lv["icon"] + 8 + fm_l.horizontalAdvance(self._bar_label(k, texts[k], lv))
         self._tile_mins = tile_mins
-        n_pin = 1 if (lv["text"] and "pin" in top) else 0
-        top_w = (len(top) - n_pin) * tile_min + n_pin * self.BAR_PIN_W + gap * max(0, len(top) - 1)
+        icon_tiles = [k for k in top if k in self.ICON_TILES] if lv["text"] else []
+        top_w = (len(top) - len(icon_tiles)) * tile_min + sum(self.ICON_TILES[k] for k in icon_tiles) \
+            + gap * max(0, len(top) - 1)
         bottom_w = sum(mins.values()) + (len(mins) - 1) * gap
         if self._choice(lv):
             big, small = self._choice_mins(lv, texts)
@@ -1081,10 +1185,15 @@ class RegionSelector(TranslateMixin, QWidget):
         # 1.36: плитка «Закрепить» стоит, только если от неё панель не становится мельче (и остаётся запас 12 px под
         # крестик у угла): на узком экране (800 px) подписи и размер панели важнее седьмой плитки, а закрепить можно
         # клавишей F3 и кнопкой редактора
-        self._no_pin = True
+        # 1.36.3: так же плитка «Форма снимка», и она важнее «Закрепить» (у той есть F3, форму владелец просил именно
+        # здесь); не помещается: форма включается клавишей F
+        self._no_pin = self._no_form = True
         lv, _sizes0 = pick_level(room)
+        self._no_form = False
+        lv_form, _sizes1 = pick_level(room - 12)
+        self._no_form = self.BAR_LEVELS.index(lv_form) != self.BAR_LEVELS.index(lv)
         self._no_pin = False
-        lv_pin, _sizes1 = pick_level(room - 12)
+        lv_pin, _sizes2 = pick_level(room - 12)
         self._no_pin = self.BAR_LEVELS.index(lv_pin) != self.BAR_LEVELS.index(lv)
         inner, mins, top_keys = self._bar_sizes(lv, room)
         self.bar_level = lv
@@ -1214,18 +1323,18 @@ class RegionSelector(TranslateMixin, QWidget):
         n = len(top_keys)
         avail_t = inner - gap * (n - 1) if n else 0
         tmins = getattr(self, "_tile_mins", {})
-        pin_w = self.BAR_PIN_W if (lv["text"] and "pin" in top_keys) else 0   # 1.36: «Закрепить» узкая плитка со значком
-        share = [k for k in top_keys if not (pin_w and k == "pin")]
+        # 1.36: «Закрепить» узкая плитка со значком, 1.36.3: и «Форма снимка»
+        fixed = {k: self.ICON_TILES[k] for k in top_keys if k in self.ICON_TILES} if lv["text"] else {}
+        share = [k for k in top_keys if k not in fixed]
         m = len(share)
-        avail_s = avail_t - pin_w
+        avail_s = avail_t - sum(fixed.values())
         if m and any(avail_s / m < tmins.get(k, 0) for k in share):
             # равные плитки не помещаются: каждой свой минимум, остаток поровну
             extra = max(0.0, avail_s - sum(tmins.get(k, 0) for k in share)) / m
             widths = {k: tmins.get(k, 0) + extra for k in share}
         else:
             widths = {k: avail_s / m for k in share} if m else {}
-        if pin_w:
-            widths["pin"] = pin_w
+        widths.update(fixed)
         tws = [widths[k] for k in top_keys]
         ty = y + bp + title_h
         acc = 0.0
@@ -1296,7 +1405,8 @@ class RegionSelector(TranslateMixin, QWidget):
         self.bar_close_rect = QRect(bar.right() - size // 2 + 4, bar.top() - size // 2 + 3, size, size)
         return buttons, bar, hint
 
-    BAR_DISABLED_IN_TR = ("copy", "edit", "save", "ocr", "record", "full", "phone")   # в режиме перевода не работают
+    # в режиме перевода не работают (1.36.3: и форма снимка)
+    BAR_DISABLED_IN_TR = ("copy", "edit", "save", "ocr", "record", "full", "phone", "form", "form_menu")
 
     @dynamic
     def BAR_TR_BLOCKED(self):
@@ -1399,6 +1509,8 @@ class RegionSelector(TranslateMixin, QWidget):
             return "window"
         for key, _text, _short, rect in buttons:
             if rect.contains(pos):
+                if key == "form" and self._form_arrow_at(rect, pos):
+                    return "form_menu"
                 return key
         for key, _text, rect, _on in self.chip_rects:
             if rect.contains(pos):
@@ -1463,20 +1575,22 @@ class RegionSelector(TranslateMixin, QWidget):
         hovered_text = None
         choice = self._choice(lv)
         for key, text, short, rect in buttons:
-            hover = key == self.hover_button
+            hover = key == self.hover_button or (key == "form" and self.hover_button == "form_menu")
             blocked = self.translate_mode and key in self.BAR_DISABLED_IN_TR
             p.setOpacity(0.38 if blocked else 1.0)   # режим перевода: эти кнопки не работают, рисуются бледными
             if hover:
                 hovered_text = self.BAR_TR_BLOCKED if blocked else (
                     f"{text} · {short}" if key == "phone" else
-                    f"{text} {self.BAR_SUB[key]} ({short})" if key == "pin" else f"{text} ({short})")
+                    f"{text} {self.BAR_SUB[key]} ({short})" if key == "pin" else
+                    self.form_hint(short) if key == "form" else f"{text} ({short})")
                 if choice and not blocked and key in ("edit", "manual"):   # пояснение, убранное с кнопки, остаётся в подсказке
                     hovered_text += " · " + self.BAR_SUB[key]
             if choice and key in self.BAR_BOTTOM:
                 self._draw_choice_button(p, key, text, rect, hover, lv)
                 continue
             tile = key in self.BAR_TOP
-            active = key == "translate" and self.translate_mode   # режим перевода включён: плитка подсвечена
+            active = (key == "translate" and self.translate_mode) or (key == "form" and not self.form.is_rect)
+            # режим перевода включён или форма выбрана: плитка подсвечена
             narrow_icon = None   # узкий экран (одни значки): цвет значка нижней кнопки по варианту Б
             if key == "copy":
                 # вариант Б и в узком ряду: «Скопировать» светло-зелёная с зелёной рамкой 2 px, текст и значок зелёные
@@ -1503,7 +1617,9 @@ class RegionSelector(TranslateMixin, QWidget):
                 fill = QColor("#e4effb") if hover else QColor("#f5f6f8")
                 from .themes import TILE_SUB
                 border, fg, sub = QColor(ACCENT) if hover else QColor("#d9dde4"), QColor("#16181c"), QColor(TILE_SUB)   # 1.32: 5,2:1
-                if active:
+                if active and key == "form":
+                    fill, border = QColor("#d6e7fc"), QColor(ACCENT)   # форма включена: голубая, как кнопка в редакторе
+                elif active:
                     fill, border = QColor("#d6f1ec"), QColor("#0b8f84")
                 if key == "phone":   # 1.34: редкая у других программ возможность, плитка заметнее: свой мягкий малиновый тон
                     fill = QColor("#f9e1ee") if hover else QColor("#fdf0f6")
@@ -1515,6 +1631,9 @@ class RegionSelector(TranslateMixin, QWidget):
             isize = lv["icon"] + (4 if key == "phone" else 0)
             ic = icons.icon(self.BAR_ICONS[key], narrow_icon or (self.BAR_SQUARE[key][1] if (lv["text"] and not tile)
                                                                    else self.BAR_ICON_COLORS[key]))
+            if key == "form":
+                self._draw_form_tile(p, rect, isize)
+                continue
             if tile and (not lv["text"] or key == "pin"):
                 ic.paint(p, QRect(rect.center().x() - isize // 2, rect.center().y() - isize // 2, isize, isize))
                 continue
@@ -1629,6 +1748,24 @@ class RegionSelector(TranslateMixin, QWidget):
         self._draw_close(p)
         self._draw_novoe(p, buttons)
         p.restore()
+
+    def _draw_form_tile(self, p: QPainter, rect: QRect, isize: int):
+        """Плитка «Форма снимка»: значок текущей формы (или той, что включит щелчок) и стрелка меню справа."""
+        from . import icons
+        shown = self.form if not self.form.is_rect else forma.last_form(self._form_config())
+        color = self.BAR_ICON_COLORS["form"]
+        aw = self.BAR_FORM_ARROW if rect.width() >= self.BAR_FORM_W - 2 else 0
+        body = QRect(rect.left(), rect.top(), rect.width() - aw, rect.height())
+        icons.icon("form_" + forma.icon_code(shown), color).paint(
+            p, QRect(body.center().x() - isize // 2 + (2 if aw else 0), body.center().y() - isize // 2, isize, isize))
+        if aw:
+            p.setPen(QPen(QColor("#5a6270"), 1.6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+            cx, cy = rect.right() - aw / 2 - 1, rect.center().y() + 1
+            p.drawPolyline([QPointF(cx - 3.5, cy - 2), QPointF(cx, cy + 1.8), QPointF(cx + 3.5, cy - 2)])
+
+    def _form_arrow_at(self, rect: QRect, pos: QPoint) -> bool:
+        """Нажатие на стрелку плитки формы (правая часть): меню форм, а не включение."""
+        return rect.width() >= self.BAR_FORM_W - 2 and pos.x() >= rect.right() - self.BAR_FORM_ARROW
 
     # «Скопировать и закрыть» в варианте Б: светло-зелёная с зелёной рамкой 2 px, текст тёмно-зелёный.
     # Контраст: название #0f5c30 на #eaf6ee 7,3:1 (на #d9efe1 под курсором 6,7:1), пояснение #2f6b47 5,7:1 (5,2:1);
@@ -2385,6 +2522,14 @@ class RegionSelector(TranslateMixin, QWidget):
         if action == "pin":
             self.pin_here()
             return
+        if action in ("form", "form_menu"):
+            if self.translate_mode:
+                return
+            if action == "form":
+                self.toggle_form()
+            else:
+                self.form_menu()
+            return
         if action == "full":
             self.show_full_screen()
             return
@@ -2464,6 +2609,10 @@ class RegionSelector(TranslateMixin, QWidget):
         button = self._button_at(pos) if event.button() == Qt.MouseButton.LeftButton and not on_edge else None
         if button:
             self._do(button)
+            return
+        if event.button() == Qt.MouseButton.RightButton and not on_edge and self._button_at(pos) in ("form", "form_menu") \
+                and not self.translate_mode:
+            self.form_menu()   # 1.36.3: правый щелчок по плитке формы открывает меню форм, окно не закрывается
             return
         if event.button() == Qt.MouseButton.RightButton:
             self._finish(None)
@@ -2615,6 +2764,22 @@ class RegionSelector(TranslateMixin, QWidget):
         except (AttributeError, TypeError):
             return False
 
+    @staticmethod
+    def _is_f_key(event) -> bool:
+        """Клавиша F без модификаторов на любой раскладке: по символу (f или «а») и по физической клавише
+        (X11: код 41; Windows: виртуальный код 0x46)."""
+        if event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier
+                                | Qt.KeyboardModifier.MetaModifier | Qt.KeyboardModifier.ShiftModifier):
+            return False
+        if event.key() == Qt.Key.Key_F or event.text().lower() in ("f", "а"):
+            return True
+        try:
+            if sys.platform == "win32":
+                return event.nativeVirtualKey() == 0x46
+            return event.nativeScanCode() == 41
+        except (AttributeError, TypeError):
+            return False
+
     def keyPressEvent(self, event):
         if self.tour is not None:
             self.tour.key(event)   # пока идёт знакомство, горячие клавиши окна выделения ничего не снимают
@@ -2646,6 +2811,11 @@ class RegionSelector(TranslateMixin, QWidget):
         if self._is_w_key(event) and self.windows_state is not None and self.pending is None and self.start is None \
                 and not self.translate_mode:
             self.open_window_list(keyboard=True)   # W, как в окне снимков GNOME: список окон
+            return
+        if self._is_f_key(event) and self.kept is not None and self.start is None and self.pending is None \
+                and not self.translate_mode:
+            if not event.isAutoRepeat():
+                self.toggle_form()   # 1.36.3: F: форма снимка (последняя) или снова прямоугольник
             return
         if event.key() == Qt.Key.Key_Escape:
             self._finish(None)
@@ -2701,7 +2871,7 @@ class RegionSelector(TranslateMixin, QWidget):
             ocr.toast(self, tr("selector.preparing"), mark=False)
             return
         sel = QRect(self.kept)
-        pixmap = self._crop(sel)
+        pixmap = self._shaped(self._crop(sel))   # 1.36.3: с выбранной формой
         self.hover_button = None
         from . import ocr
         # 1.34.1 (В1 проверки 1.34.0): окно после «Сохранить» остаётся, и люди по привычке нажимают ещё раз
@@ -2732,7 +2902,7 @@ class RegionSelector(TranslateMixin, QWidget):
             from . import ocr
             ocr.toast(self, tr("selector.preparing"), mark=False)
             return
-        pixmap = self._crop(QRect(self.kept))
+        pixmap = self._shaped(self._crop(QRect(self.kept)))   # 1.36.3: с выбранной формой
         self.hover_button = None
         hook(self, pixmap)
         self.update()

@@ -70,5 +70,7 @@
   "selector.sub_edit_tools": "flèches, texte, flou",
   "selector.saved": "Enregistré : {name}",
   "selector.saved_already": "Déjà enregistré : {name}",
-  "selector.save_failed": "Impossible d'enregistrer la capture"
+  "selector.save_failed": "Impossible d'enregistrer la capture",
+  "selector.form_tip_off": "Forme de la capture ({hotkey}) : un clic active « {name} », flèche : toutes les formes",
+  "selector.form_tip_on": "Forme de la capture : {name} ({hotkey}) · clic : rectangle, flèche : toutes les formes"
 }

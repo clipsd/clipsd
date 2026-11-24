@@ -5,6 +5,8 @@
 #
 # Usage: clipsd-switch [--detach] --from A --to B [--timeout 60] [--exit-wait 60] [--socket PATH]
 #        clipsd-switch --ask-quit [--socket PATH]     (install.sh, uninstall.sh: prints ok | busy:<reason> | none)
+#        clipsd-switch --ask-quit --uninstall [--socket PATH]   (uninstall.sh, 1.36.3: the program quits without
+#                                              saving its open snapshots for a restart: "quit-for-uninstall")
 #        clipsd-switch [--detach] --resume              (the program at start: finish a switch cut by a power loss)
 #
 # 1. asks the running program to quit: command "quit-for-update" over its local socket (--socket,
@@ -96,10 +98,11 @@ default_socket() {  # same rule as clipshot/ipc.py socket_path()
   printf '%s\n' "$p"
 }
 
-FROM="" TO="" TIMEOUT=60 EXIT_WAIT=60 DETACH=0 SOCK="" ASK_ONLY=0 RESUME=0
+FROM="" TO="" TIMEOUT=60 EXIT_WAIT=60 DETACH=0 SOCK="" ASK_ONLY=0 RESUME=0 UNINSTALL=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --ask-quit) ASK_ONLY=1; shift ;;
+    --uninstall) UNINSTALL=1; shift ;;
     --resume) RESUME=1; shift ;;
     --from) FROM="${2:-}"; shift 2 ;;
     --to) TO="${2:-}"; shift 2 ;;
@@ -198,24 +201,36 @@ ask_quit() {
   local reply="" bin
   if [ ! -S "$SOCK" ]; then echo none; return; fi
   if command -v python3 >/dev/null 2>&1; then
-    reply="$(timeout 15 python3 -I -S -c '
+    # 1.36.3: uninstall asks "quit-for-uninstall" (the program saves no snapshots for a restart); a program older than
+    # 1.36.3 ignores that command and gives no reply in 5 s, then it is asked "quit-for-update" as before
+    reply="$(timeout 25 python3 -I -S -c '
 import socket, sys
-s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-s.settimeout(10)
-data = b""
-try:
-    s.connect(sys.argv[1])
-    s.sendall(b"quit-for-update")
-    while b"\n" not in data and len(data) < 64:
-        chunk = s.recv(64)
-        if not chunk:
-            break
-        data += chunk
-except OSError:
-    pass
-print(data.decode("ascii", "replace").strip() or "none")
-' "$SOCK" 2>/dev/null)"
+
+def ask(command, wait):
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(wait)
+    data = b""
+    try:
+        s.connect(sys.argv[1])
+        s.sendall(command.encode())
+        while b"\n" not in data and len(data) < 64:
+            chunk = s.recv(64)
+            if not chunk:
+                break
+            data += chunk
+    except OSError:
+        pass
+    finally:
+        s.close()
+    return data.decode("ascii", "replace").strip()
+
+reply = ""
+if sys.argv[2] == "1":
+    reply = ask("quit-for-uninstall", 5)
+print(reply or ask("quit-for-update", 10) or "none")
+' "$SOCK" "$UNINSTALL" 2>/dev/null)"
   else
+    # without python3 the entry point asks "quit-for-update" (an older entry point knows no other question)
     for bin in ${FROM:+"$APP/versions/$FROM/clipsd"} ${TO:+"$APP/versions/$TO/clipsd"} "$BIN"; do
       [ -x "$bin" ] || continue
       reply="$(timeout 15 "$bin" --quit-for-update 2>/dev/null | tail -n 1)"

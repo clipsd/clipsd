@@ -2,8 +2,8 @@
 # ClipSD: uninstall for the current user. Settings and screenshots go only with --purge.
 # Only what the package put there is removed: ~/.local/bin/clipsd if it links into the program folder, the GNOME
 # extensions if marked by install.sh. A developer's working copy (~/.config/clipshot, clipshot.service) is never touched.
-# The running ClipSD is asked first ("quit-for-update" over its socket): with unsaved work in the editor it answers
-# "busy", and nothing is removed or stopped.
+# The running ClipSD is asked first ("quit-for-uninstall" over its socket, 1.36.3; an older one "quit-for-update"): with
+# unsaved work in the editor it answers "busy", and nothing is removed or stopped.
 # ~/.local/state/clipsd and ~/.cache/clipsd are shared with ClipSD run from the sources (a developer's copy): when
 # it has been there (mark .source-run, written by such a run, or its command / service), only the package's own
 # files go (start marks, update results and log, the socket); otherwise the whole folders.
@@ -99,7 +99,12 @@ ask_running() {  # prints ok | busy:<reason> | none
   local helper="$(dirname "$0")/clipsd-switch"
   [ -x "$helper" ] || helper="$APP/current/clipsd-switch"
   [ -x "$helper" ] || { echo none; return; }
-  "$helper" --ask-quit 2>/dev/null | tail -n 1
+  # 1.36.3: --uninstall: the program quits without saving its open snapshots for a restart (nothing would open them
+  # again). A helper older than 1.36.3 rejects the option and prints nothing: then it is asked as before.
+  local reply
+  reply="$("$helper" --ask-quit --uninstall 2>/dev/null | tail -n 1)"
+  [ -n "$reply" ] || reply="$("$helper" --ask-quit 2>/dev/null | tail -n 1)"
+  echo "$reply"
 }
 
 main() {

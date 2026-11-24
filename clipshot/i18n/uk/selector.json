@@ -71,5 +71,7 @@
   "selector.sub_edit_tools": "стрілки, текст, розмиття",
   "selector.saved": "Збережено: {name}",
   "selector.saved_already": "Уже збережено: {name}",
-  "selector.save_failed": "Не вдалося зберегти знімок"
+  "selector.save_failed": "Не вдалося зберегти знімок",
+  "selector.form_tip_off": "Форма знімка ({hotkey}): клік вмикає «{name}», стрілка: усі форми",
+  "selector.form_tip_on": "Форма знімка: {name} ({hotkey}) · клік: прямокутник, стрілка: усі форми"
 }

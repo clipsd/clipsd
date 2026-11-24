@@ -5,7 +5,8 @@
 
 Проверяется: (1) без решения человека обновление по-прежнему осторожное: редактор с пометками, текст, окно настроек
 отвечают «busy»; (2) после restart_requested (нажато «Обновить» или «Перезапустить сейчас») ответ «ok»: вводимый
-текст зафиксирован, несохранённый редактор записан в recovery и после перезапуска открывается заново, настройки
+текст зафиксирован, несохранённый редактор отпущен на перезапуск, при выходе (1.36.3: после ответа «ok»,
+quit_for_update_now) записан в recovery и после перезапуска открывается заново, настройки
 применены и окно закрыто, «О программе» закрыто, окно выделения отменено; (3) окно, которое закрыть не удалось, остаётся
 причиной и называется (blocker_widget); (4) спасённый снимок не остаётся в папке после открытия.
 
@@ -93,10 +94,18 @@ check(a.explicit_restart(), "«Обновить»/«Перезапустить �
 ed.select_tool("text")
 steps = a.release_for_restart()
 check(a.quit_blocker() == "", f"после освобождения ничто не держит выход: {steps}")
-files = list(a.recovery_dir().glob("*.png")) if a.recovery_dir().exists() else []
-check(len(files) == 1 and a.config.get(a.RECOVERY_KEY) == [str(files[0])], "несохранённый снимок записан в recovery и перечислен в настройках")
 check(a.answer_quit_for_update() == "ok", "ответ помощнику смены версии: ok")
+real_qapp = a.qapp
+quits = []
+a.qapp = type("Q", (), {"quit": lambda self: quits.append(1)})()
+a.quit_for_update_now()
+a.qapp = real_qapp
+files = list(a.recovery_dir().glob("*.png")) if a.recovery_dir().exists() else []
+check(quits == [1] and len(files) == 1 and a.config.get(a.RECOVERY_KEY) == [str(files[0])],
+      "при выходе несохранённый снимок записан в recovery и перечислен в настройках")
 drop_editors()
+a._update_quitting = False   # новый запуск программы
+a._recovery_saved = []
 n = a.restore_after_restart()
 settle(120)
 check(n == 1 and len(a.editors) == 1 and a.editors[0].canvas.modified, "после перезапуска снимок открыт заново и считается несохранённым")

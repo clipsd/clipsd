@@ -71,5 +71,7 @@
   "selector.sub_edit_tools": "strzałki, tekst, rozmycie",
   "selector.saved": "Zapisano: {name}",
   "selector.saved_already": "Już zapisano: {name}",
-  "selector.save_failed": "Nie udało się zapisać zrzutu"
+  "selector.save_failed": "Nie udało się zapisać zrzutu",
+  "selector.form_tip_off": "Kształt zrzutu ({hotkey}): kliknięcie włącza „{name}”, strzałka: wszystkie kształty",
+  "selector.form_tip_on": "Kształt zrzutu: {name} ({hotkey}) · kliknięcie: prostokąt, strzałka: wszystkie kształty"
 }

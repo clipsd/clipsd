@@ -203,7 +203,9 @@ class Canvas(QWidget):
         self.sticker_text = ""         # текст выбранной плашки (на языке интерфейса в момент выбора)
         self.sticker_color = None      # цвет, выбранный в палитре после выбора плашки; None: цвет плашки по умолчанию
         self.sticker_placed = None     # вызывается с кодом поставленного стикера (недавние)
-        self._form_drag = None     # круг тянут за поле вокруг него: [точка нажатия, центр круга в начале, шаг отмены записан]
+        # форму тянут (1.36.3: любую с рамкой): [точка нажатия, рамка формы в начале, шаг отмены записан, маркер или None]
+        # маркер (tl, t, …) меняет размер, None переносит форму целиком
+        self._form_drag = None
         self._radius_drag = None   # маркер радиуса у левого верхнего угла тянут: [шаг отмены записан]
 
         self._apply_size()
@@ -556,9 +558,20 @@ class Canvas(QWidget):
 
     # --- форма снимка (1.34) ----------------------------------------------------
 
-    def set_form(self, code, center=None):
-        """Сменить форму снимка (один шаг отмены). Круг по умолчанию в середине снимка."""
-        new = forma.Form(code, center)
+    def _carry_box(self, code):
+        """1.36.3: рамка формы при смене вида: прежняя сохраняется, круг берёт из неё вписанный квадрат.
+        Из прямоугольника (форма была выключена) новая форма начинается со всего снимка."""
+        if self.form.is_rect or self.form.box is None or forma.valid(code) == forma.RECT:
+            return None
+        box = forma.frame(self.form, self.lw(), self.lh())
+        return forma.inscribed_square(box) if forma.valid(code) == forma.CIRCLE else box
+
+    def set_form(self, code, center=None, box=None):
+        """Сменить форму снимка (один шаг отмены). Круг по умолчанию в середине снимка. box: рамка формы (1.36.3);
+        по умолчанию прежняя рамка, если форма уже была включена."""
+        if box is None and center is None:
+            box = self._carry_box(code)
+        new = forma.Form(code, center, box=box)
         if new == self.form:
             return
         self.commit_text()
@@ -570,8 +583,10 @@ class Canvas(QWidget):
     def set_radius(self, radius: float, record: bool = True):
         """Свой радиус скругления углов (точки снимка, 0 … половина меньшей стороны). record: отдельный шаг отмены;
         ползунок пишет шаг один раз за всё перетаскивание."""
-        radius = min(max(0.0, float(radius)), forma.max_radius(self.lw(), self.lh()))
-        new = forma.rounded(radius)
+        box = self._carry_box(forma.ROUND)
+        top = forma.frame(forma.Form(forma.ROUND, box=box), self.lw(), self.lh())   # 1.36.3: предел по рамке формы
+        radius = min(max(0.0, float(radius)), forma.max_radius(top.width(), top.height()))
+        new = forma.rounded(radius, box)
         if new == self.form:
             return
         if record:
@@ -602,18 +617,22 @@ class Canvas(QWidget):
         ten_ramka.paint_backdrop(p, self.form, self.lw(), self.lh(), self.deco, scale, self.background, checker)
 
     def _over_radius_handle(self, pos) -> bool:
-        """Курсор на маркере радиуса (середина дуги левого верхнего угла)."""
+        """Курсор на маркере радиуса (середина дуги левого верхнего угла рамки формы). Если рядом и маркер угла рамки
+        (малый радиус), берётся ближайший из двух."""
         if not self.form.is_round or not self.form_active() or self.tool in (OCR, TRANSLATE, ERASER) \
                 or self.text_edit is not None:
             return False
         h = forma.radius_handle(self.form, self.lw(), self.lh())
         reach = max(HANDLE, 7) / max(self.zoom, 0.01)
-        return abs(pos.x() - h.x()) <= reach and abs(pos.y() - h.y()) <= reach
+        if not (abs(pos.x() - h.x()) <= reach and abs(pos.y() - h.y()) <= reach):
+            return False
+        corner = forma.frame(self.form, self.lw(), self.lh()).topLeft()
+        return (pos - h).manhattanLength() <= (pos - corner).manhattanLength()
 
     def _drag_radius(self, pos):
-        radius = forma.radius_from_point(pos, self.lw(), self.lh())
+        radius = forma.radius_from_point(pos, self.lw(), self.lh(), self.form)
         record = not self._radius_drag[0]
-        if forma.rounded(radius) != self.form:
+        if forma.rounded(radius, self.form.box) != self.form:
             self.set_radius(radius, record=record)
             self._radius_drag[0] = True
 
@@ -621,22 +640,59 @@ class Canvas(QWidget):
         """Шахматка за формой видна (в режиме обрезки снимок показан целиком, чтобы рамку ставить по всему снимку)."""
         return not self.form.is_rect and self.tool != CROP
 
+    def form_editable(self) -> bool:
+        """1.36.3: рамку формы можно менять (маркеры, перенос) тогда же, когда раньше можно было двигать круг:
+        форма включена, не обрезка, не распознавание, перевод и ластик, текст не набирается."""
+        return (not self.form.is_rect and self.form_active() and not self.band_mode
+                and self.tool not in (CROP, OCR, TRANSLATE, ERASER, PIPETTE) and self.text_edit is None)
+
+    def _form_handle_at(self, pos):
+        """Маркер рамки формы под курсором (tl, t, tr, r, br, b, bl, l) или None. Маркер одного размера на экране."""
+        if not self.form_editable():
+            return None
+        reach = HANDLE / max(self.zoom, 0.01)
+        best = None
+        for name, pt in forma.handle_points(forma.frame(self.form, self.lw(), self.lh())).items():
+            d = max(abs(pt.x() - pos.x()), abs(pt.y() - pos.y()))
+            if d <= reach and (best is None or d < best[0]):
+                best = (d, name)
+        return best[1] if best is not None else None
+
     def _over_form_margin(self, pos) -> bool:
-        """Курсор на поле вокруг круга: оттуда круг перетаскивается по снимку."""
-        if self.form.code != forma.CIRCLE or self.tool in (CROP, OCR, TRANSLATE, ERASER) or self.text_edit is not None:
+        """Курсор на поле вокруг формы (внутри снимка, за формой): оттуда форма переносится по снимку.
+        До 1.36.3 так двигался только круг."""
+        if not self.form_editable():
             return False
         inside = QRectF(0, 0, self.lw(), self.lh()).contains(pos)
         return inside and not forma.path(self.form, self.lw(), self.lh()).contains(pos)
 
-    def _drag_form(self, pos):
-        start, center, pushed = self._form_drag
+    def _over_form_inside(self, pos) -> bool:
+        """1.36.3: инструмент «Перемещение» на пустом месте внутри формы переносит форму (другие инструменты там рисуют)."""
+        return (self.tool == MOVE and self.form_editable() and self.shape_at(pos) is None
+                and forma.path(self.form, self.lw(), self.lh()).contains(pos))
+
+    def _start_form_drag(self, pos, handle=None):
+        self.select(None)
+        self._form_drag = [pos, forma.frame(self.form, self.lw(), self.lh()), False, handle]
+        self.update_cursor(pos)
+
+    def _drag_form(self, pos, keep=False):
+        """Тянут маркер рамки формы (размер) или саму форму (перенос). Один шаг отмены на всё перетаскивание."""
+        start, box, pushed, handle = self._form_drag
         if not pushed:
             if (pos - start).manhattanLength() < 1:
                 return
-            self.push_undo()          # один шаг отмены на весь перенос, и только если круг сдвинули
+            self.push_undo()          # один шаг отмены на весь перенос, и только если форму сдвинули
             self._form_drag[2] = True
-        moved = forma.Form(forma.CIRCLE, center + (pos - start))
-        self.form.center = forma.clamp_center(moved, self.lw(), self.lh())
+        w, h = self.lw(), self.lh()
+        if handle is None:
+            new = forma.move_box(box, pos - start, w, h)
+        else:
+            grip = forma.handle_points(box)[handle] - start   # маркер берут не точно в центр: край не прыгает к курсору
+            new = forma.resize_box(box, handle, pos + grip, w, h, keep or self.form.code == forma.CIRCLE)
+        self.form.box = new
+        if self.form.code == forma.CIRCLE:
+            self.form.center = None   # круг стоит в своей рамке
 
     # --- отрисовка ---------------------------------------------------------
 
@@ -698,9 +754,23 @@ class Canvas(QWidget):
         У скруглённых углов маркер радиуса на дуге левого верхнего угла: его можно тянуть мышью."""
         if not (self.deco.active and self.tool != CROP):   # с оформлением шахматка и поля уже нарисованы _paint_deco
             forma.paint_checker(p, forma.outside(self.form, self.lw(), self.lh()), self.zoom, self.checker_dark)
+        k = 1.0 / max(self.zoom, 0.01)
+        if self.form_editable():
+            # 1.36.3: рамка формы с маркерами, как у выделенного объекта (вид и размер ручек те же, на экране постоянны)
+            box = forma.frame(self.form, self.lw(), self.lh())
+            p.save()
+            p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.setPen(QPen(QColor(0, 174, 255), 1 * k, Qt.PenStyle.DashLine))
+            p.drawRect(box)
+            p.setPen(QPen(QColor(0, 120, 255), 1.5 * k))
+            p.setBrush(Qt.GlobalColor.white)
+            hs = HANDLE * k
+            for pt in forma.handle_points(box).values():
+                p.drawRect(QRectF(pt.x() - hs / 2, pt.y() - hs / 2, hs, hs))
+            p.restore()
         if self.form.is_round and self.tool not in (OCR, TRANSLATE, ERASER):
             c = forma.radius_handle(self.form, self.lw(), self.lh())
-            k = 1.0 / max(self.zoom, 0.01)
             p.setPen(QPen(QColor(SELECTED_BAR_COLOR[0]), 2 * k))
             p.setBrush(QColor("#ffffff"))
             p.drawEllipse(c, 5 * k, 5 * k)
@@ -1012,8 +1082,12 @@ class Canvas(QWidget):
                                              and self._handle_at(pos) is None and self._over_radius_handle(pos)):
             self.setCursor(Qt.CursorShape.SizeFDiagCursor)
         elif self._form_drag is not None:
-            self.setCursor(Qt.CursorShape.ClosedHandCursor)
-        elif pos is not None and self.selected is None and self._over_form_margin(pos) and self.shape_at(pos) is None:
+            handle = self._form_drag[3]
+            self.setCursor(self.EDGE_CURSORS[handle] if handle else Qt.CursorShape.ClosedHandCursor)
+        elif pos is not None and self._handle_at(pos) is None and self._form_handle_at(pos) is not None:
+            self.setCursor(self.EDGE_CURSORS[self._form_handle_at(pos)])   # 1.36.3: маркер рамки формы
+        elif pos is not None and self.selected is None and (self._over_form_margin(pos) or self._over_form_inside(pos)) \
+                and self.shape_at(pos) is None:
             self.setCursor(Qt.CursorShape.OpenHandCursor)
         elif self.tool == ERASER:
             self.setCursor(Qt.CursorShape.BlankCursor if self.eraser_mode == "part" else Qt.CursorShape.CrossCursor)
@@ -1098,6 +1172,10 @@ class Canvas(QWidget):
             self._radius_drag = [False]   # 1.34: радиус углов тянут мышью за маркер
             self.update_cursor(pos)
             return
+        name = self._form_handle_at(pos)
+        if name is not None:
+            self._start_form_drag(pos, name)   # 1.36.3: размер формы тянут за маркер её рамки
+            return
         if self.tool != MOVE and self.selected is not None and self.selected.hit(pos) and not (
                 self.selected is self.fresh and self.tool in STROKE_TOOLS):
             # Выделенный объект можно двигать любым инструментом. Только что проведённый маркер или карандаш нет:
@@ -1107,10 +1185,12 @@ class Canvas(QWidget):
             self._arm_click_edit(self.selected, event)
             return
         if self._over_form_margin(pos) and self.shape_at(pos) is None:
-            # 1.34: круг двигают по снимку за поле вокруг него (там всё равно ничего не видно в готовой картинке)
-            self.select(None)
-            self._form_drag = [pos, forma.clamp_center(self.form, self.lw(), self.lh()), False]
-            self.update_cursor(pos)
+            # 1.34: круг двигают по снимку за поле вокруг него (там всё равно ничего не видно в готовой картинке),
+            # 1.36.3: так же любую форму
+            self._start_form_drag(pos)
+            return
+        if self._over_form_inside(pos):
+            self._start_form_drag(pos)   # 1.36.3: «Перемещение» на пустом месте формы переносит форму
             return
         if self.tool == TEXT:
             # Щелчок по готовому тексту или сноске: правка (протянуть — перенести), а не новый текст поверх
@@ -1291,7 +1371,7 @@ class Canvas(QWidget):
                 return
             self._click_candidate = None   # сдвинули: это перенос, а не щелчок
         if self._form_drag is not None:
-            self._drag_form(pos)
+            self._drag_form(pos, bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier))
             self.update()
             return
         if self._radius_drag is not None:
@@ -1389,7 +1469,7 @@ class Canvas(QWidget):
             self.update()
             return
         if self._form_drag is not None:
-            self._drag_form(self._ep(event))
+            self._drag_form(self._ep(event), bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier))
             self._form_drag = None
             self.form_changed.emit()
             self.update_cursor(self._ep(event))
@@ -1453,6 +1533,9 @@ class Canvas(QWidget):
         offset = QPointF(-rect.x(), -rect.y())
         for shape in self.shapes:
             shape.translate(offset)
+        if self.form.code == forma.CIRCLE and self.form.box is not None:
+            self.form.center = self.form.box.center()   # круг остаётся над тем же местом снимка
+        self.form.box = None   # 1.36.3: рамка формы сбрасывается на весь новый снимок, чтобы не вылезти за него
         if self.form.center is not None:
             self.form.center = self.form.center + offset   # круг остаётся над тем же местом снимка
         self._apply_size()
@@ -3299,15 +3382,17 @@ class OpenApartButton(QPushButton):
         self.hide()
 
     def apply_theme(self, dark: bool):
+        # 1.36.3 (владелец 24.11.2026: «Открыть отдельно надо более явно, сейчас не заметно»): сплошная синяя кнопка с
+        # белой надписью, крупнее; поверх пёстрого фото светлая кнопка терялась
         self.dark = bool(dark)
-        h = HINT_BUTTON[self.dark]
+        h = OPEN_APART_BUTTON[self.dark]
         self.setStyleSheet(f"""
-QPushButton#openApart {{ color: {h[1]}; background: {h[0]}; border: 1px solid {h[2]}; border-radius: 6px;
-    padding: 4px 10px; font-size: 13px; font-weight: 600; min-height: 20px; }}
-QPushButton#openApart:hover {{ background: {h[3]}; }}
+QPushButton#openApart {{ color: #ffffff; background: {h[0]}; border: 1px solid {h[1]}; border-radius: 8px;
+    padding: 7px 14px; font-size: 14px; font-weight: 700; min-height: 22px; }}
+QPushButton#openApart:hover {{ background: {h[2]}; }}
 """)
-        self.setIcon(icons.icon("apart", h[1]))
-        self.setIconSize(QSize(18, 18))
+        self.setIcon(icons.icon("apart", "#ffffff"))
+        self.setIconSize(QSize(20, 20))
 
     def refresh_text(self):
         self.setText(tr("otdelno.hint_button"))
@@ -3331,6 +3416,9 @@ def color_square_icon(color, dark: bool = False) -> QIcon:
 
 # 1.34: кнопка подсказки у палитры мягкая синяя (фон, текст, рамка, наведение): заметнее белой, но не спорит с зелёной
 HINT_BUTTON = {False: ("#e8f1ff", "#1660d0", "#8fb8f5", "#d6e6fd"), True: ("#1d3450", "#8cc4ff", "#3d6da6", "#25416a")}
+# 1.36.3: «Открыть отдельно» сплошная синяя (фон, рамка, наведение): заметна и поверх фото. Тёмная тема #2563c8: белая
+# надпись с контрастом 5,68:1 (у прежнего #2f74e0 было 4,47:1, меньше 4,5; находка 13 проверки 1.36.3)
+OPEN_APART_BUTTON = {False: ("#1660d0", "#0f4fb0", "#0f4fb0"), True: ("#2563c8", "#5b95f0", "#1d52ad")}
 NUMBER_HINT_TIMES = 3   # «Этот цвет: нумерация с N» показывается первые 3 раза (настройка number_hint_count)
 
 
@@ -3537,6 +3625,12 @@ class EditorWindow(QMainWindow):
         self.ctx = ctx
         self.origin = origin
         self.exported = False
+        # 1.36.3 (находки 1-3 проверки 1.36.3): restart_keep: человек решил обновиться, окно с несохранённым отпущено на
+        # перезапуск и выход не держит (app.release_for_restart); restart_written: окно записано для возврата после
+        # перезапуска (app._save_editors_for_restart). Любая новая правка снимает оба (_canvas_changed); exported не
+        # трогается, поэтому закрытие несохранённого окна человеком по-прежнему спрашивает.
+        self.restart_keep = False
+        self.restart_written = False
         cfg = ctx.config
 
         self.setWindowTitle(tr("editor.window_title"))
@@ -5390,27 +5484,30 @@ class EditorWindow(QMainWindow):
 
     # --- 1.34: форма снимка ---------------------------------------------------------------------
 
+    # 1.36.3: выбор и запоминание формы общие с окном выделения (forma.last_code, last_form, remember, title)
+
     def last_form(self) -> str:
         """Последняя выбранная форма (не прямоугольник): её включает щелчок по кнопке."""
-        code = self.ctx.config.get("form_last")
-        return code if code in forma.ALL_CODES and code != forma.RECT else forma.DEFAULT_LAST
+        return forma.last_code(self.ctx.config)
 
     def _last_form_obj(self):
-        code = self.last_form()
-        if code == forma.ROUND:   # свой радиус запоминается вместе с формой
-            return forma.rounded(float(self.ctx.config.get("form_radius") or forma.RADII[forma.ROUND_M]))
-        return forma.Form(code)
+        return forma.last_form(self.ctx.config)   # свой радиус запоминается вместе с формой
 
     def _remember_form(self, form):
-        if not form.is_rect:
-            self.ctx.config["form_last"] = form.code
-            if form.code == forma.ROUND:
-                self.ctx.config["form_radius"] = round(form.radius, 2)
+        forma.remember(self.ctx.config, form)
 
     def form_title(self, form) -> str:
-        if form.code == forma.ROUND:
-            return tr("forma.round_custom", r=self._radius_px(form.radius))
-        return tr(forma.TITLE_KEYS[form.code])
+        return forma.title(form, self._ratio())
+
+    def start_with_form(self, form):
+        """1.36.3: снимок из окна выделения, где уже выбрана форма: редактор открывается с ней (рамка во весь снимок),
+        без шага отмены и без отметки «изменено»."""
+        if form is None or form.is_rect:
+            return
+        self.canvas.form = forma.Form(form.code, radius=form.r)
+        self.canvas.form_changed.emit()
+        self.canvas.update()
+        self._sync_form()
 
     def set_form(self, code):
         """Форма снимка из меню или щелчком по кнопке. Не прямоугольник запоминается для следующего щелчка."""
@@ -5438,7 +5535,10 @@ class EditorWindow(QMainWindow):
         return int(round(points * self._ratio()))
 
     def _radius_max_px(self) -> int:
-        return max(0, min(self.canvas.base.width(), self.canvas.base.height()) // 2)
+        """Предел радиуса: половина меньшей стороны рамки формы (1.36.3), пока её не уменьшали: снимка."""
+        c = self.canvas
+        box = forma.frame(forma.Form(forma.ROUND, box=c._carry_box(forma.ROUND)), c.lw(), c.lh())
+        return max(0, int(min(box.width(), box.height()) * self._ratio() + 1e-6) // 2)
 
     def set_radius(self, px, record: bool = True):
         """Свой радиус углов в пикселях снимка (ползунок, поле): форма становится «Скруглённые углы»."""
@@ -5496,12 +5596,7 @@ class EditorWindow(QMainWindow):
 
     def form_note(self) -> str:
         """Строка про JPG: прозрачности нет, за формой будет фон (белый по умолчанию). Пусто для PNG."""
-        if self.ctx.config.get("save_format", "png") != "jpg":
-            return ""
-        color = forma.background(self.ctx.config)
-        if color == QColor(forma.DEFAULT_BACKGROUND):
-            return tr("forma.jpg_note")
-        return tr("forma.jpg_note_color", color=color.name().upper())
+        return forma.jpg_note(self.ctx.config)
 
     def _form_tip(self) -> str:
         form = self.canvas.form
@@ -5511,6 +5606,7 @@ class EditorWindow(QMainWindow):
             lines = [tr("forma.tip_on", name=self.form_title(form))]
             if form.code == forma.CIRCLE:
                 lines.append(tr("forma.circle_move"))
+            lines.append(tr("forma.size_tip"))   # 1.36.3: размер формы маркерами
             if self.form_note():
                 lines.append(self.form_note())
         return "\n".join(lines)
@@ -5548,20 +5644,7 @@ class EditorWindow(QMainWindow):
     def build_form_menu(self) -> QMenu:
         menu = QMenu(self)
         style_menu(menu, self.ctx.config)
-        group = QActionGroup(menu)
-        group.setExclusive(True)
-        current = self.canvas.form.code
-        for code in forma.FORMS:
-            if code == forma.OVAL:
-                menu.addSeparator()
-            action = menu.addAction(icons.icon("form_" + code), tr(forma.TITLE_KEYS[code]))
-            action.setCheckable(True)
-            action.setChecked(code == current)
-            action.setData(code)
-            group.addAction(action)
-            action.triggered.connect(lambda _c=False, c=code: self.set_form(c))
-            if code == forma.RECT:
-                menu.addSeparator()
+        forma.fill_menu(menu, self.canvas.form.code, self.set_form)   # 1.36.3: те же пункты в окне выделения
         menu.addSeparator()
         menu.addAction(icons.icon("deco"), tr("deco.menu")).triggered.connect(self.show_deco_panel)   # 1.36
         note = self.form_note()
@@ -6490,7 +6573,8 @@ class EditorWindow(QMainWindow):
             return
         self.canvas.commit_text()
         self._cancel_privacy_pass2()   # прежний второй проход (если ещё идёт) больше ничего не пишет
-        if self.canvas.has_words():
+        inserted = bool(self._privacy_inserted_images())
+        if self.canvas.has_words() and not inserted:
             self._privacy_run(list(self.canvas.words))
             return
         if self._ocr_job is not None:
@@ -6500,7 +6584,8 @@ class EditorWindow(QMainWindow):
         spinner = BusySpinner(self.scroll.viewport(), tr("editor.ocr_busy"))
         spinner.start()
         self._ocr_spinner = spinner
-        key = self.canvas.base.cacheKey()
+        key = self._privacy_key()
+        ratio = self.canvas.base.devicePixelRatio() or 1.0
 
         def done(text, error, help=None):
             from PyQt6 import sip
@@ -6515,15 +6600,74 @@ class EditorWindow(QMainWindow):
             if error:
                 self._ocr_dialog = ocr.show_result("", error, self, help)   # нет Tesseract или языка: как в окне текста
                 return
-            if self.canvas.base.cacheKey() != key:
-                return   # снимок успели обрезать или отменить
-            self.canvas.set_words(getattr(job, "words", []), self.canvas.base.devicePixelRatio())
+            if self._privacy_key() != key:
+                return   # снимок успели обрезать или отменить, вставленную картинку сдвинуть или убрать (находка 7)
+            if inserted:
+                # 1.36.3 (находка 5 проверки 1.36.3): слова снимка вместе со вставленными картинками только для этого
+                # поиска, не в canvas.words: картинку потом сдвинут или уберут, а «Копировать текст» брал бы старые слова
+                words = self._privacy_words(getattr(job, "words", []), 1 / ratio, 1 / ratio)
+            else:
+                self.canvas.set_words(getattr(job, "words", []), ratio)
+                words = list(self.canvas.words)
             if help is not None:
                 self._ocr_dialog = ocr.show_result("", tr("editor.ocr_no_ru"), self, help)
-            self._privacy_run(list(self.canvas.words))
-        job = ocr.start(self.canvas.base.copy(), done, ocr.resolve_langs(self.ctx.config.get("ocr_langs")),
+            self._privacy_run(words)
+        job = ocr.start(self._privacy_source(), done, ocr.resolve_langs(self.ctx.config.get("ocr_langs")),
                         self.ctx.config.get("ocr_quality", "accurate"))
         self._ocr_job = job
+
+    def _privacy_inserted_images(self) -> list:
+        from .shapes import IMAGE
+        return [sh for sh in self.canvas.shapes if sh.kind == IMAGE and getattr(sh, "image", None) is not None]
+
+    def _privacy_source(self) -> QImage:
+        """Что читает «Скрыть личные данные»: снимок вместе со вставленными картинками (1.36.3, владелец 24.11.2026: фото
+        карты, вставленное «С телефона» поверх снимка, не находилось: распознавание читало только снимок под ним).
+        Масштаб и размер те же, что у снимка: найденное ложится на те же места холста. Картинка рисуется целиком, как на
+        холсте (sh.paint: со следами ластика, находка 8 проверки 1.36.3)."""
+        out = self.canvas.base.copy()
+        images = self._privacy_inserted_images()
+        if images:
+            p = QPainter(out)
+            for sh in images:
+                sh.paint(p, self.canvas.base)
+            p.end()
+        return out
+
+    def _privacy_key(self):
+        """Отпечаток того, что читает распознавание: снимок и вставленные картинки (картинка, место, следы ластика).
+        1.36.3 (находка 7 проверки 1.36.3): итог распознавания, пришедший после сдвига или удаления вставленной
+        картинки, не ложится на старое место."""
+        marks = tuple((sh.image.cacheKey(), tuple(round(v, 2) for v in sh.rect().getRect()), len(sh.erasures))
+                      for sh in self._privacy_inserted_images())
+        return self.canvas.base.cacheKey(), marks
+
+    @staticmethod
+    def _privacy_words(words, sx: float, sy: float, dx: float = 0.0, dy: float = 0.0, tag=None) -> list:
+        """Рамки слов распознавания (пиксели прочитанной картинки) в точки холста: x * sx + dx. tag: свой ключ строк
+        прохода по вставленной картинке (строки разных картинок не склеиваются)."""
+        from .ocr import Word
+        out = []
+        for w in words:
+            line = w.line
+            if tag is not None:
+                line = (tag,) + (line if isinstance(line, tuple) else (line,))
+            out.append(Word(w.text, QRectF(w.rect.x() * sx + dx, w.rect.y() * sy + dy, w.rect.width() * sx,
+                                           w.rect.height() * sy), line))
+        return out
+
+    def _privacy_image_source(self, shape) -> QImage:
+        """Вставленная картинка в её собственном разрешении (1.36.3, находка 6 проверки 1.36.3: фото, уменьшенное на
+        снимке до 60 % и 45 %, в разрешении снимка не читалось). Прозрачное ложится на белое: распознавание переводит
+        картинку в серый, и прозрачный фон стал бы чёрным."""
+        image = shape.image
+        out = QImage(image.size(), QImage.Format.Format_RGB32)
+        out.setDevicePixelRatio(image.devicePixelRatio())   # картинка ложится пиксель в пиксель при любом её масштабе
+        out.fill(QColor("#ffffff"))
+        p = QPainter(out)
+        p.drawImage(0, 0, image)
+        p.end()
+        return out
 
     def _privacy_extra_passes(self) -> list:
         """Дополнительные проходы распознавания, если карт и IBAN не нашлось (по порядку, до первой находки).
@@ -6531,25 +6675,34 @@ class EditorWindow(QMainWindow):
         1.36.2 (слова владельца 24.11.2026 «не скрывает нормально», фото карты с телефона): на сером фото распознавание
         не видит ни строки, поэтому у фото два чёрно-белых прохода (тёмные знаки на светлом и светлые на тёмном), без
         прохода с контрастом (на фото он идёт 15-90 с). Снимок экрана с фотографиями внутри: сначала контраст, затем
-        оба чёрно-белых (проверка 1.36.2, находка 6: «или-или» теряло одно из двух)."""
+        оба чёрно-белых (проверка 1.36.2, находка 6: «или-или» теряло одно из двух).
+        1.36.3 (находки 4 и 6 проверки 1.36.3): у каждой вставленной картинки оба чёрно-белых прохода по ней самой, в её
+        разрешении; проходы картинки идут и после найденного на снимке IBAN (фото карты поверх экрана с IBAN оставалось
+        открытым), второй только если первый на этой картинке карты не нашёл."""
         from . import ocr
         share = ocr.photo_share(self.canvas.base)
         if share < ocr.PHOTO_SHARE:
-            return [ocr.PHOTO, ocr.PHOTO_LIGHT]
-        if share < ocr.SCREEN_SHARE:
-            return [True, ocr.PHOTO, ocr.PHOTO_LIGHT]
-        return [True]
+            steps = [ocr.PHOTO, ocr.PHOTO_LIGHT]
+        elif share < ocr.SCREEN_SHARE:
+            steps = [True, ocr.PHOTO, ocr.PHOTO_LIGHT]
+        else:
+            steps = [True]
+        for sh in self._privacy_inserted_images():
+            steps += [(sh, ocr.PHOTO), (sh, ocr.PHOTO_LIGHT)]
+        return steps
 
     def _privacy_run(self, words, second: bool = False, left=None):
         from . import privacy
         from . import i18n as _i18n
         found = privacy.find(words, privacy.countries_hint(_i18n.current()))
-        if not any(f.kind in (privacy.CARD, privacy.IBAN) and not f.maybe for f in found):
-            todo = list(left or []) if second else self._privacy_extra_passes()
-            if todo and self._privacy_second_pass(words, todo[0], todo[1:]):
-                return
+        todo = list(left or []) if second else self._privacy_extra_passes()
+        if any(f.kind in (privacy.CARD, privacy.IBAN) and not f.maybe for f in found):
+            todo = [step for step in todo if isinstance(step, tuple)]   # проходы снимка до первой находки, картинок всегда
+        if todo and self._privacy_second_pass(words, todo[0], todo[1:]):
+            return
+        source = self._privacy_source() if self._privacy_inserted_images() else None   # границы символов и на картинках
         fresh = []
-        probe = PrivacySession(self.canvas, words, found)
+        probe = PrivacySession(self.canvas, words, found, source)
         for i, f in enumerate(found):
             if not already_hidden(self.canvas, probe.rects_for(i)):
                 fresh.append(f)
@@ -6560,7 +6713,7 @@ class EditorWindow(QMainWindow):
             self.privacy_panel.show_empty(tr("privacy.already"))
             self.privacy_session = None
         else:
-            session = PrivacySession(self.canvas, words, fresh)
+            session = PrivacySession(self.canvas, words, fresh, source)
             session.on_change = self._privacy_autosave
             session.apply()
             self.privacy_session = session
@@ -6570,13 +6723,28 @@ class EditorWindow(QMainWindow):
     def _privacy_second_pass(self, words, mode=True, rest=()) -> bool:
         """Дополнительное распознавание: mode=True с растяжением контраста и увеличением (мелкий серый текст банковских
         страниц), ocr.PHOTO / ocr.PHOTO_LIGHT чёрно-белое для фото (1.36.2); слова объединяются с прежними по положению.
-        rest: следующие проходы, если и этот не найдёт карт и IBAN. True: проход запущен, результат придёт в
+        mode=(картинка, проход) (1.36.3): чёрно-белый проход по вставленной картинке в её разрешении, рамки переносятся
+        на холст по её месту (shape.rect()); у одной картинки проходы до первой находки на ней. rest: следующие проходы. True: проход запущен, результат придёт в
         _privacy_run(second=True, left=rest)."""
-        from . import ocr
+        from . import ocr, privacy
         if getattr(self, "_privacy_pass2", None) is not None or not self.ctx.config.get("privacy_second_pass", True):
             return False
-        key = self.canvas.base.cacheKey()
+        key = self._privacy_key()
         ratio = self.canvas.base.devicePixelRatio() or 1.0
+        shape = None
+        if isinstance(mode, tuple):
+            shape, mode = mode
+            images = self._privacy_inserted_images()
+            if shape not in images:
+                return self._privacy_second_pass(words, rest[0], rest[1:]) if rest else False
+            source = self._privacy_image_source(shape)
+            r = shape.rect()
+            sx, sy = r.width() / max(1, source.width()), r.height() / max(1, source.height())
+            place = dict(sx=sx, sy=sy, dx=r.left(), dy=r.top(), tag=f"i{images.index(shape)}")
+        else:
+            source = self._privacy_source()
+            place = dict(sx=1 / ratio, sy=1 / ratio)
+        tag = f"p{place.get('tag', '')}{mode}"
         from .busy import BusySpinner
         spinner = BusySpinner(self.scroll.viewport(), tr("editor.ocr_busy"))
         spinner.start()
@@ -6591,17 +6759,18 @@ class EditorWindow(QMainWindow):
                 return   # окно закрыто или проход отменён новым нажатием «Скрыть личные данные» (В2 проверки 1.36.1)
             self._privacy_pass2 = None
             self._privacy_pass2_spinner = None
-            if self.canvas.base.cacheKey() != key:
-                return   # снимок успели обрезать или отменить: старые слова к нему не относятся (как у первого прохода)
-            extra = []
-            if not error:
-                from .ocr import Word
-                extra = [Word(w.text, QRectF(w.rect.x() / ratio, w.rect.y() / ratio, w.rect.width() / ratio,
-                                            w.rect.height() / ratio), w.line) for w in getattr(job, "words", [])]
-            merged = merge_privacy_pass(list(words), extra, f"p{mode}")
-            self._privacy_run(merged, second=True, left=rest)
+            if self._privacy_key() != key:
+                return   # снимок обрезали или отменили, картинку сдвинули: старые слова к нему не относятся (находка 7)
+            extra = [] if error else self._privacy_words(getattr(job, "words", []), **place)
+            merged = merge_privacy_pass(list(words), extra, tag)   # новое к найденному, без повторов (по положению)
+            left = list(rest)
+            if shape is not None and any(f.kind in (privacy.CARD, privacy.IBAN) and not f.maybe for f in privacy.find(extra)):
+                # на этой картинке карта найдена: второй чёрно-белый проход по ней не нужен (его соринки под номером
+                # мешали найти имя держателя), проходы других картинок идут
+                left = [step for step in left if not (isinstance(step, tuple) and step[0] is shape)]
+            self._privacy_run(merged, second=True, left=left)
         try:
-            job = ocr.start(self.canvas.base.copy(), done, ocr.resolve_langs(self.ctx.config.get("ocr_langs")),
+            job = ocr.start(source, done, ocr.resolve_langs(self.ctx.config.get("ocr_langs")),
                             self.ctx.config.get("ocr_quality", "accurate"), enhance=mode)
         except Exception:   # noqa: BLE001 - второй проход не должен ломать основной
             spinner.stop()
@@ -7471,6 +7640,8 @@ class EditorWindow(QMainWindow):
 
     def _canvas_changed(self):
         self.exported = False
+        self.restart_keep = False      # 1.36.3: новая правка после «Обновить»: окно снова держит выход
+        self.restart_written = False   # и при выходе записывается заново (находка 2 проверки 1.36.3)
 
     # --- 1.36: QR-код и штрихкод на снимке ---------------------------------------------------------
 
@@ -7575,7 +7746,9 @@ class EditorWindow(QMainWindow):
             self.canvas.cancel_text()
             event.ignore()
             return
-        if self.canvas.modified and not self.exported:
+        quitting = getattr(self.ctx, "_update_quitting", False) is True and self.restart_written
+        if self.canvas.modified and not self.exported and not quitting:
+            # 1.36.3: при выходе для обновления записанное окно закрывается без вопроса (после перезапуска откроется снова)
             # 1.34 (замечание владельца 21.11.2026: текст бледный, читается трудно): текст 15 px цветом основного текста,
             # «Esc: вернуться к редактированию» отдельной строкой; главная зелёная «Скопировать и закрыть» (основное
             # действие редактора, ничего не теряется), «Сохранить» спокойная, «Закрыть без сохранения» отдельно слева

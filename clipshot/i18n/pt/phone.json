@@ -56,6 +56,7 @@
   "phone.menu": "Captura/foto do celular",
   "phone.new_code": "Mostrar um código novo",
   "phone.no_network": "O computador não está em uma rede de casa. Conecte o Wi-Fi ou um cabo do roteador e clique em “Tentar de novo”.",
+  "phone.net_changed": "A rede mudou, o código foi atualizado: o computador agora está em {address}. Aponte a câmera do celular para o novo código.",
   "phone.page_ask_text": "Enviar de novo ou terminar sem ela?",
   "phone.page_ask_title": "Foto não enviada: {n}",
   "phone.page_bad_type": "Isto não é uma foto. Escolha uma imagem em JPEG ou PNG.",

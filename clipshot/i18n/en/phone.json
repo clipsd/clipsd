@@ -56,6 +56,7 @@
   "phone.menu": "Screenshot/photo from phone",
   "phone.new_code": "Show a new code",
   "phone.no_network": "The computer is not on a home network. Connect Wi-Fi or a cable from the router and press “Retry”.",
+  "phone.net_changed": "The network changed, the code is updated: the computer is now at {address}. Point the phone camera at the new code.",
   "phone.page_ask_text": "Send again or finish without it?",
   "phone.page_ask_title": "Photo not sent: {n}",
   "phone.page_bad_type": "This is not a photo. Choose a JPEG or PNG picture.",

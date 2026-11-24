@@ -1633,6 +1633,8 @@ class Updater(QObject):
         if error is not None:
             self._install_failed(record, error)
             return
+        # 1.36.3: windows that hold nothing are not released here; all open snapshots are saved for the restart when the
+        # program quits for the update (app.quit_for_update_now), whatever blocked or not
         blocker = self._quit_blocker()
         if blocker and self._release_blockers("install"):
             blocker = self._quit_blocker()

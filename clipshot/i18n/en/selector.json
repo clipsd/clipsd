@@ -69,5 +69,7 @@
   "selector.sub_edit_tools": "arrows, text, blur",
   "selector.saved": "Saved: {name}",
   "selector.saved_already": "Already saved: {name}",
-  "selector.save_failed": "Could not save the screenshot"
+  "selector.save_failed": "Could not save the screenshot",
+  "selector.form_tip_off": "Screenshot shape ({hotkey}): a click turns on “{name}”, arrow: all shapes",
+  "selector.form_tip_on": "Screenshot shape: {name} ({hotkey}) · click: rectangle, arrow: all shapes"
 }

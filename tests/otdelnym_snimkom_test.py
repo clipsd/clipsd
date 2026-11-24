@@ -277,8 +277,8 @@ check(len(images(ed)) == 1, "«Отменить» возвращает карт�
 ed.place_image(pic(200, 100))
 a.config["ui_theme"] = "pro"
 ed.refresh_theme()
-check(ed._apart_button.dark and ed._insert_hint.dark and "#8cc4ff" in ed._apart_button.styleSheet().lower(),
-      "тёмная тема: карточка и кнопка в тёмных цветах")
+check(ed._apart_button.dark and ed._insert_hint.dark and "background: #2563c8" in ed._apart_button.styleSheet().lower(),
+      "тёмная тема: карточка и кнопка в тёмных цветах (кнопка #2563c8, белый текст 5,68:1)")
 a.config["ui_theme"] = "standard"
 ed.refresh_theme()
 check(not ed._apart_button.dark and not ed._insert_hint.dark, "светлая тема: возврат")

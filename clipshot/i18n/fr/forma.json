@@ -13,6 +13,7 @@
   "forma.round_l": "Coins arrondis : grands",
   "forma.round_m": "Coins arrondis : moyens",
   "forma.round_s": "Coins arrondis : petits",
+  "forma.size_tip": "Faites glisser les poignées pour changer la taille de la forme, Shift : proportionnel\nDéplacer : faites glisser la zone autour de la forme, avec « Sélection et déplacement » (V) aussi à l’intérieur",
   "forma.tip_off": "Forme de la capture : coins arrondis, ovale, cercle\nUn clic active « {name} », la flèche à côté ouvre toutes les formes",
   "forma.tip_on": "Forme de la capture · {name}\nUn clic revient au rectangle, la flèche à côté ouvre toutes les formes",
   "forma.title": "Forme de la capture"

@@ -47,9 +47,12 @@ def mode_short(kind: str, mode: str) -> str:
 class PrivacySession:
     """Найденное на одном снимке и его размытия на холсте. Слова и рамки в точках холста (canvas.words)."""
 
-    def __init__(self, canvas, words, findings):
+    def __init__(self, canvas, words, findings, source=None):
         self.canvas = canvas
         self.words = list(words)
+        # 1.36.3: картинка, по которой меряются границы символов: снимок вместе со вставленными картинками (слова фото,
+        # вставленного поверх снимка, мерились бы по снимку под ним); None: сам снимок
+        self.source = source
         self.findings = list(findings)
         # «Похоже на IBAN» без подписи счёта рядом: не закрыто само; рядом с подписью (IBAN, Сметка, Account): закрыто (В3)
         self.modes = ["full" if getattr(f, "hide_by_default", not getattr(f, "maybe", False)) else "open" for f in self.findings]
@@ -74,7 +77,8 @@ class PrivacySession:
         if wi not in self._boxes:
             w = self.words[wi]
             try:
-                self._boxes[wi] = privacy.char_boxes(self.canvas.base, w.rect, w.text)
+                self._boxes[wi] = privacy.char_boxes(self.source if self.source is not None else self.canvas.base,
+                                                     w.rect, w.text)
             except Exception:   # noqa: BLE001 — измерение только уточняет границы, без него работают доли ширины
                 self._boxes[wi] = None
         return self._boxes[wi]

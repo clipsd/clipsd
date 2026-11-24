@@ -23,7 +23,7 @@ from .i18n import tr
 from .grab import DesktopGrabber, claim_shell_name, grab_qt, is_wayland, virtual_geometry
 from . import hidpi
 from . import neighbor
-from .ipc import QUIT_FOR_UPDATE, socket_path
+from .ipc import QUIT_COMMANDS, QUIT_FOR_UPDATE, socket_path
 from .sysenv import child_env, open_url
 from .selector import RegionSelector
 
@@ -278,7 +278,8 @@ class Clipshot(QObject):
         self.server = None
         self.tray = None
         self.hotkeys = None   # поток своих горячих клавиш (X11 вне GNOME, Windows)
-        self.quit_reason = ""  # почему программа выходит: "", "update", "signal"
+        self.quit_reason = ""  # почему программа выходит: "", "update", "uninstall", "signal"
+        self._update_quitting = False   # 1.36.3: выход для обновления начался, окна записаны (quit_for_update_now)
         self._signal_pipe = None
         self._rating = None    # окно оценки (feedback.RatingFlow), пока открыто
         self.rating_draft = None   # 1.32.1: звёзды и отзыв окна оценки, закрытого через Alt+W (только в памяти)
@@ -495,13 +496,16 @@ class Clipshot(QObject):
 
         def read():
             command = bytes(sock.readAll()).decode(errors="replace").strip()
-            if command == QUIT_FOR_UPDATE:
-                # clipsd-switch и запускатель Windows ждут «ok» или «busy» в том же соединении
-                answer = self.answer_quit_for_update()
+            if command in QUIT_COMMANDS:
+                # clipsd-switch и запускатель Windows ждут «ok» или «busy» в том же соединении. 1.36.3: снимки для
+                # возврата после перезапуска пишутся уже после ответа (quit_for_update_now): ответ не ждёт записи PNG
+                # (запускатель Windows ждёт его 2 с); при удалении программы (quit-for-uninstall) не пишутся вовсе
+                restore = command == QUIT_FOR_UPDATE
+                answer = self.answer_quit_for_update(restore)
                 sock.write(answer.encode() + b"\n")
                 sock.flush()
                 if answer == "ok":
-                    QTimer.singleShot(200, self.quit_for_update_now)
+                    QTimer.singleShot(200, lambda: self.quit_for_update_now(restore))
             elif neighbor.is_probe(command):
                 # вторая копия (другая сборка: с сайта или из Store) спрашивает, какая сборка работает
                 sock.write(neighbor.reply_bytes())
@@ -693,10 +697,11 @@ class Clipshot(QObject):
             self.open_editor(QImage(command[5:]), None)
         elif command == "demo":
             self.demo_tour()
-        elif command == QUIT_FOR_UPDATE:
-            # приходит от clipsd-switch и запускателя Windows перед сменой версии
-            if self.answer_quit_for_update() == "ok":
-                self.quit_for_update_now()
+        elif command in QUIT_COMMANDS:
+            # приходит от clipsd-switch и запускателя Windows перед сменой версии (quit-for-uninstall: перед удалением)
+            restore = command == QUIT_FOR_UPDATE
+            if self.answer_quit_for_update(restore) == "ok":
+                self.quit_for_update_now(restore)
         elif command == "quit":
             self.save_config()
             self.qapp.quit()
@@ -721,13 +726,17 @@ class Clipshot(QObject):
         at = getattr(self, "_restart_asked_at", None)
         return at is not None and 0 <= time.monotonic() - at < self.RESTART_ASK_S
 
-    def quit_blocker(self) -> str:
+    def quit_blocker(self, kept: bool = True) -> str:
         """Почему программу нельзя закрыть сейчас без потери работы ("" = можно).
 
         phone: открыто окно приёма «Скриншот/фото с телефона» (в том числе спрятанное после фото) или фото раскодируется;
         selector: открыто окно выделения (или вот-вот откроется: снимок запрошен); text: в редакторе набирается
         текст; unsaved: в редакторе есть пометки, которые не сохранены и не скопированы; dialog: открыто модальное
-        окно (настройки и т.п.)."""
+        окно (настройки и т.п.).
+
+        1.36.3: редактор, который человек отпустил на перезапуск (release_for_restart, признак restart_keep), выход не
+        держит: при выходе для обновления он записывается и открывается снова. kept=False (удаление программы): такой
+        редактор держит выход, как любой несохранённый, потому что записывать его некуда."""
         if self.selector is not None or self.insert_target is not None or self.capture_pending():
             return "selector"
         for editor in list(self.editors):
@@ -736,7 +745,7 @@ class Clipshot(QObject):
                 continue
             if getattr(canvas, "text_edit", None) is not None:
                 return "text"
-            if getattr(editor, "exported", False):
+            if getattr(editor, "exported", False) or (kept and getattr(editor, "restart_keep", False)):
                 continue
             if getattr(canvas, "modified", False) or getattr(editor, "only_in_memory", False):
                 return "unsaved"
@@ -765,7 +774,8 @@ class Clipshot(QObject):
         if reason in ("text", "unsaved"):
             for editor in list(self.editors):
                 canvas = getattr(editor, "canvas", None)
-                if canvas is not None and (getattr(canvas, "text_edit", None) is not None or not getattr(editor, "exported", False)):
+                if canvas is not None and (getattr(canvas, "text_edit", None) is not None or not (
+                        getattr(editor, "exported", False) or getattr(editor, "restart_keep", False))):
                     return editor
         if reason == "phone":
             from . import phone_ui
@@ -776,9 +786,10 @@ class Clipshot(QObject):
         """Человек сам нажал «Обновить» или «Перезапустить сейчас»: освободить всё, что держало выход, не теряя работу.
         Вводимый текст фиксируется; окно выделения закрывается; приём с телефона останавливается; окна без работы
         закрываются, настройки применяются (OK), «О программе» и справочные окна закрываются; редакторы с несохранёнными
-        пометками записываются в папку recovery (пометки вплавлены в картинку) и открываются заново после перезапуска.
-        Буфер обмена не держит (человек согласился). Возвращает список сделанных шагов (для журнала); что не удалось
-        закрыть само, остаётся причиной в quit_blocker."""
+        пометками отпускаются на перезапуск (restart_keep): выход больше не держат, а записываются в папку recovery при
+        самом выходе (quit_for_update_now) и открываются заново после перезапуска. Новая правка в окне снимает признак
+        (EditorWindow._canvas_changed). Буфер обмена не держит (человек согласился). Возвращает список сделанных шагов
+        (для журнала); что не удалось закрыть само, остаётся причиной в quit_blocker."""
         steps = []
         for editor in list(self.editors):
             canvas = getattr(editor, "canvas", None)
@@ -826,40 +837,73 @@ class Clipshot(QObject):
                 continue   # закрыто (WA_DeleteOnClose удаляет окно)
             if before:
                 break
-        saved = self._save_editors_for_restart()
-        if saved:
-            steps.append(f"editors saved for restore: {saved}")
+        kept = self._keep_editors_for_restart()
+        if kept:
+            steps.append(f"editors kept for restore: {kept}")
         self._flush_clipboard()
         return steps
+
+    def _keep_editors_for_restart(self) -> int:
+        """1.36.3: несохранённые редакторы отпускаются на перезапуск (признак restart_keep), файлы пишутся при выходе
+        (_save_editors_for_restart из quit_for_update_now). exported не трогается: закрытие такого окна человеком
+        по-прежнему спрашивает о несохранённых пометках (находка 3 проверки 1.36.3)."""
+        kept = 0
+        for editor in list(self.editors):
+            canvas = getattr(editor, "canvas", None)
+            if canvas is None or getattr(editor, "exported", False) or getattr(editor, "restart_keep", False):
+                continue
+            if getattr(canvas, "modified", False) or getattr(editor, "only_in_memory", False):
+                editor.restart_keep = True
+                kept += 1
+        return kept
 
     RECOVERY_DPR_TEXT = "clipsd-dpr"   # масштаб снимка и в самой PNG (запасной путь, если JSON не записался)
 
     def _save_editors_for_restart(self) -> int:
-        """Несохранённые редакторы: исходная картинка и пометки (JSON) в recovery, список в настройках; редактор помечается
-        сохранённым, чтобы выход не ждал его. После перезапуска restore_after_restart открывает их с теми же правимыми
+        """Выход для обновления (quit_for_update_now): все открытые редакторы пишутся в recovery (исходная картинка и
+        пометки в JSON), список в настройках. После перезапуска restore_after_restart открывает их с теми же правимыми
         пометками. Не вышло записать пометки: картинка с вплавленными пометками (как раньше).
 
         Масштаб снимка (devicePixelRatio, 125-200 % экрана) PNG сама не хранит: он пишется в JSON и текстом в PNG, иначе
         после перезапуска холст вырос бы вдвое, а пометки (в логических точках) съехали бы (Б2 проверки 1.36.1). Имя
-        файла уникально (uuid): два вызова в одну секунду не перезаписывают друг друга (С5)."""
+        файла уникально (uuid): два вызова в одну секунду не перезаписывают друг друга (С5).
+
+        1.36.3 (находки 1, 2, 9 проверки 1.36.3): пишутся все открытые снимки, и свежий без пометок тоже (владелец
+        24.11.2026: «нажимаю „Понятно“, у меня всё пропадает … остаюсь у пустого экрана»); запись идёт после ответа
+        «ok», не в ответе на сокет. Окно, уже записанное этим запуском, но изменённое после записи (restart_written снят
+        правкой), перезаписывается по тому же пути. Признак exported не трогается; записанное окно помечается
+        restart_written. Не записался несохранённый: признак restart_keep снимается, и окно снова держит выход
+        (quit_for_update_now тогда остаётся); не записался сохранённый: только запись в журнал."""
+        import logging
         import uuid
         from .shapes import shape_to_dict
+        log = logging.getLogger("clipsd.updater")
         entries = []
         saved = getattr(self, "_recovery_saved", None)
         if saved is None:
             saved = self._recovery_saved = []
+        written_now = 0
         for editor in list(self.editors):
             canvas = getattr(editor, "canvas", None)
-            if canvas is None or getattr(editor, "exported", False):
+            if canvas is None:
                 continue
-            if not (getattr(canvas, "modified", False) or getattr(editor, "only_in_memory", False)):
-                continue
+            entry = next((item for item in saved if item[1] is editor), None)
+            if entry is not None and getattr(editor, "restart_written", False):
+                continue   # уже записан этим запуском и с тех пор не менялся
+            was_exported = bool(getattr(editor, "exported", False))
+            unsaved = bool((getattr(canvas, "modified", False) or getattr(editor, "only_in_memory", False))
+                           and not was_exported)
+            info = {"modified": unsaved, "exported": was_exported,
+                    "autosave": str(getattr(editor, "autosave_path", "") or "")}
+            info["form"] = self._form_to_dict(getattr(canvas, "form", None))   # 1.36.3: форма снимка тоже возвращается
             try:
                 folder = self.recovery_dir()
                 folder.mkdir(parents=True, exist_ok=True)
-                stem = f"{int(time.time())}-{uuid.uuid4().hex[:12]}"
-                path = folder / f"{stem}.png"
-                marks = folder / f"{stem}.json"
+                if entry is not None:
+                    path = Path(entry[0])   # изменён после записи: тот же файл, новая картинка и пометки
+                else:
+                    path = folder / f"{int(time.time())}-{uuid.uuid4().hex[:12]}.png"
+                marks = path.with_suffix(".json")
                 written = False
                 try:
                     canvas.commit_text()
@@ -867,8 +911,8 @@ class Clipshot(QObject):
                     dpr = float(base.devicePixelRatio() or 1.0)
                     base.setText(self.RECOVERY_DPR_TEXT, repr(dpr))
                     if base.save(str(path), "PNG"):
-                        marks.write_text(json.dumps({"dpr": dpr, "shapes": [shape_to_dict(s) for s in canvas.shapes]}),
-                                         encoding="utf-8")
+                        marks.write_text(json.dumps({"dpr": dpr, "shapes": [shape_to_dict(s) for s in canvas.shapes],
+                                                     **info}), encoding="utf-8")
                         written = True
                 except Exception:   # noqa: BLE001 - пометки не записались: запасной путь ниже
                     written = False
@@ -877,40 +921,45 @@ class Clipshot(QObject):
                     dpr = float(flat.devicePixelRatio() or 1.0)
                     flat.setText(self.RECOVERY_DPR_TEXT, repr(dpr))
                     if not flat.save(str(path), "PNG"):
-                        continue
+                        raise OSError(f"PNG not written: {path}")   # нет места на диске, нет прав
                     try:
-                        marks.write_text(json.dumps({"dpr": dpr, "shapes": []}), encoding="utf-8")
+                        marks.write_text(json.dumps({"dpr": dpr, "shapes": [], **info}), encoding="utf-8")
                     except OSError:
                         pass   # масштаб есть и в самой PNG
-            except Exception as exc:   # noqa: BLE001 - не сохранилось: редактор остаётся и держит выход
+            except Exception as exc:   # noqa: BLE001 - не сохранилось: несохранённый редактор снова держит выход
                 print(f"Спасение снимка перед обновлением не удалось: {exc}")
+                log.warning("snapshot not saved for the restart (%s): %s", "unsaved" if unsaved else "saved", exc)
+                if unsaved:
+                    editor.restart_keep = False
                 continue
-            entries.append(str(path))
-            saved.append((str(path), editor))
-            editor.exported = True
+            editor.restart_written = True
+            written_now += 1
+            if entry is None:
+                entries.append(str(path))
+                saved.append((str(path), editor))
         if entries:
             self.config[self.RECOVERY_KEY] = list(self.config.get(self.RECOVERY_KEY) or []) + entries
             self.save_config()
-        return len(entries)
+        return written_now
 
     @staticmethod
     def _drop_recovery_files(name) -> None:
-        for f in (Path(name), Path(name).with_suffix(".json")):
+        try:
+            files = (Path(name), Path(name).with_suffix(".json"))
+        except (TypeError, ValueError):
+            return   # запись не путь (испорчены настройки)
+        for f in files:
             try:
                 f.unlink()
             except OSError:
                 pass
 
-    def drop_restart_restore(self) -> int:
-        """Смена версии сорвалась после освобождения окон (updater._fail_attempt): программа продолжает работать, спасённые
-        этим запуском снимки открыты здесь же. Записи restart_restore этого запуска и их файлы убираются, иначе при
-        следующем запуске открылись бы копии давно сохранённых снимков (С3 проверки 1.36.1); редакторы снова считаются
-        несохранёнными (закрытие спросит, как раньше). Записи прошлого запуска не трогаются. Возвращает число убранных."""
-        saved = list(getattr(self, "_recovery_saved", None) or [])
-        if not saved:
-            return 0
-        self._recovery_saved = []
-        names = {name for name, _ in saved}
+    def _forget_restart_entries(self, names) -> None:
+        """Записи restart_restore этого запуска с именами names и их файлы убираются (настройки записываются)."""
+        names = set(names)
+        if not names:
+            return
+        self._recovery_saved = [item for item in (getattr(self, "_recovery_saved", None) or []) if item[0] not in names]
         listed = list(self.config.get(self.RECOVERY_KEY) or [])
         left = [n for n in listed if n not in names]
         if left:
@@ -919,19 +968,35 @@ class Clipshot(QObject):
             self.config.pop(self.RECOVERY_KEY, None)
         if left != listed:
             self.save_config()
-        from PyQt6 import sip
-        for name, editor in saved:
+        for name in names:
             self._drop_recovery_files(name)
+
+    def drop_restart_restore(self) -> int:
+        """Смена версии сорвалась после освобождения окон (updater._fail_attempt, _install_failed) или выход остался
+        (quit_for_update_now): программа продолжает работать, окна открыты здесь же. Записи restart_restore этого запуска
+        и их файлы убираются, иначе при следующем запуске открылись бы копии давно сохранённых снимков (С3 проверки
+        1.36.1); отпущенные на перезапуск редакторы снова держат выход (признаки restart_keep и restart_written
+        снимаются, exported не менялся). Записи прошлого запуска не трогаются. Возвращает число убранных записей."""
+        from PyQt6 import sip
+        for editor in list(self.editors):
             try:
-                if not sip.isdeleted(editor) and editor in self.editors:
-                    editor.exported = False
+                if not sip.isdeleted(editor):
+                    editor.restart_keep = False
+                    editor.restart_written = False
             except (RuntimeError, TypeError):
                 pass
+        saved = list(getattr(self, "_recovery_saved", None) or [])
+        if not saved:
+            return 0
+        self._forget_restart_entries(item[0] for item in saved)
+        self._recovery_saved = []
         return len(saved)
 
     def restore_after_restart(self) -> int:
         """После обновления: снимки, спасённые перед перезапуском, открываются снова с теми же пометками и тем же
-        масштабом. Запись, которую не удалось прочитать, убирается вместе с файлами."""
+        масштабом. Запись, которую не удалось прочитать, убирается вместе с файлами. 1.36.3 (находка 10 проверки
+        1.36.3): каждая запись отдельно (испорченная не обрывает остальные); пометки не прочитались: окно считается
+        несохранённым (закрытие спросит)."""
         from .shapes import shape_from_dict
         listed = list(self.config.get(self.RECOVERY_KEY) or [])
         if not listed:
@@ -941,42 +1006,101 @@ class Clipshot(QObject):
         opened = 0
         for name in listed:
             try:
-                image = QImage(str(name))
-            except Exception:   # noqa: BLE001 - запись не путь (испорчены настройки)
-                continue
-            if image.isNull():
-                self._drop_recovery_files(name)
-                continue
-            marks = Path(name).with_suffix(".json")
-            shapes = []
-            dpr = None
-            if marks.exists():
-                try:
-                    data = json.loads(marks.read_text(encoding="utf-8"))
-                    dpr = data.get("dpr")
-                    shapes = [shape_from_dict(d) for d in data.get("shapes", [])]
-                except Exception as exc:   # noqa: BLE001 - пометки не читаются: открывается картинка без них
-                    print(f"Пометки восстановления не прочитаны: {exc}")
-                    shapes = []
-            if not isinstance(dpr, (int, float)) or isinstance(dpr, bool):
-                try:
-                    dpr = float(image.text(self.RECOVERY_DPR_TEXT) or 1.0)
-                except ValueError:
-                    dpr = 1.0
-            if not (0.5 <= float(dpr) <= 8.0):
-                dpr = 1.0
-            image.setDevicePixelRatio(float(dpr))
-            editor = self.open_editor(image, None)
-            if editor is not None:
-                if shapes:
-                    editor.canvas.shapes = shapes
-                    editor.canvas.update()
-                editor.canvas.modified = True   # не сохранён: при закрытии спросит, как раньше
-                opened += 1
+                if self._restore_one(name, shape_from_dict):
+                    opened += 1
+            except Exception as exc:   # noqa: BLE001 - испорченная запись не мешает остальным
+                print(f"Снимок после перезапуска не открыт: {exc}")
             self._drop_recovery_files(name)
         if opened:
             self.notify(tr("app.restored", n=opened))
         return opened
+
+    def _restore_one(self, name, shape_from_dict) -> bool:
+        if not isinstance(name, str):
+            return False   # запись не путь (испорчены настройки)
+        image = QImage(name)
+        if image.isNull():
+            return False
+        marks = Path(name).with_suffix(".json")
+        shapes = []
+        dpr = None
+        data = {}
+        broken = not marks.exists()   # без JSON: пометки вплавлены или потеряны, окно несохранённое (как раньше)
+        if marks.exists():
+            try:
+                data = json.loads(marks.read_text(encoding="utf-8"))
+                if not isinstance(data, dict):
+                    raise ValueError("not an object")
+                dpr = data.get("dpr")
+                shapes = [shape_from_dict(d) for d in data.get("shapes", [])]
+            except Exception as exc:   # noqa: BLE001 - пометки не читаются: открывается картинка без них
+                print(f"Пометки восстановления не прочитаны: {exc}")
+                shapes = []
+                broken = True
+                if not isinstance(data, dict):
+                    data = {}
+        if not isinstance(dpr, (int, float)) or isinstance(dpr, bool):
+            try:
+                dpr = float(image.text(self.RECOVERY_DPR_TEXT) or 1.0)
+            except ValueError:
+                dpr = 1.0
+        if not (0.5 <= float(dpr) <= 8.0):
+            dpr = 1.0
+        image.setDevicePixelRatio(float(dpr))
+        editor = self.open_editor(image, None)
+        if editor is None:
+            return False
+        if shapes:
+            editor.canvas.shapes = shapes
+            editor.canvas.update()
+        # несохранённый спросит при закрытии, как раньше; сохранённый (1.36.3) закрывается молча, как до обновления;
+        # пометки не прочитались: несохранённый (то, что было на снимке, могло пропасть, человек решит сам)
+        editor.canvas.modified = True if broken else bool(data.get("modified", True))
+        if data.get("exported") and not broken:
+            editor.exported = True
+        autosave = data.get("autosave")
+        if isinstance(autosave, str) and autosave and Path(autosave).exists() and not getattr(editor, "autosave_path", None):
+            editor.autosave_path = autosave
+        form = self._form_from_dict(data.get("form"))
+        if form is not None and not form.is_rect:
+            # 1.36.3 (проверка, круг 2, Р1): окно с формой (круг, овал, скругление, рамка формы) возвращается с ней же,
+            # без шага отмены и без отметки «изменено»; иначе «Скопировать» отдал бы прямоугольник
+            keep = editor.canvas.modified
+            editor.canvas.form = form
+            editor.canvas.form_changed.emit()
+            editor.canvas.update()
+            sync = getattr(editor, "_sync_form", None)
+            if sync is not None:
+                sync()
+            editor.canvas.modified = keep
+        return True
+
+    @staticmethod
+    def _form_to_dict(form):
+        if form is None or getattr(form, "is_rect", True):
+            return None
+        out = {"code": form.code, "r": form.r}
+        if form.center is not None:
+            out["center"] = [form.center.x(), form.center.y()]
+        if form.box is not None:
+            out["box"] = [form.box.x(), form.box.y(), form.box.width(), form.box.height()]
+        return out
+
+    @staticmethod
+    def _form_from_dict(d):
+        """Форма из записи восстановления или None (нет, испорчена: окно откроется прямоугольным)."""
+        if not isinstance(d, dict):
+            return None
+        try:
+            from PyQt6.QtCore import QPointF, QRectF as _R
+            from . import forma
+            center = d.get("center")
+            box = d.get("box")
+            return forma.Form(d.get("code"), QPointF(float(center[0]), float(center[1])) if center else None,
+                              float(d["r"]) if d.get("r") is not None else None,
+                              _R(*(float(v) for v in box)) if box else None)
+        except (TypeError, ValueError, KeyError, IndexError):
+            return None
 
     @staticmethod
     def _flush_clipboard():
@@ -1012,15 +1136,19 @@ class Clipshot(QObject):
             return False
         return self._owns_clipboard()
 
-    def answer_quit_for_update(self) -> str:
+    def answer_quit_for_update(self, restore: bool = True) -> str:
         """Ответ на quit-for-update: «ok» (программа сейчас выйдет) или «busy» (обновление отложено). Если человек сам
         решил обновиться («Обновить», «Перезапустить сейчас»), сначала освобождается всё, что можно без потери работы
-        (release_for_restart): обновление не откладывается из-за окон, которые он не просил держать."""
-        if self.explicit_restart() and self.quit_blocker():
+        (release_for_restart): обновление не откладывается из-за окон, которые он не просил держать. Ответ быстрый:
+        снимки пишутся после него (quit_for_update_now).
+
+        restore=False (1.36.3, quit-for-uninstall от uninstall.sh): программу удаляют, снимки после перезапуска никто не
+        откроет: ничего не освобождается и не отпускается, несохранённое держит выход, как без решения человека."""
+        if restore and self.explicit_restart() and self.quit_blocker():
             steps = self.release_for_restart()
             import logging
             logging.getLogger("clipsd.updater").warning("explicit update: released the blockers: %s", steps)
-        blocker = self.quit_blocker()
+        blocker = self.quit_blocker(kept=restore)
         if not blocker:
             return "ok"
         print(f"Обновление отложено: {blocker}")
@@ -1030,15 +1158,29 @@ class Clipshot(QObject):
         updater.get_updater(self).note_deferred(blocker)
         return f"busy:{blocker}"   # the helper, install.sh and uninstall.sh name the reason
 
-    def quit_for_update_now(self):
-        # Между «ok» и этим моментом человек мог начать новую правку: тогда остаёмся. Помощник спросит
-        # снова, получит «busy» и отложит обновление.
-        blocker = self.quit_blocker()
+    def quit_for_update_now(self, restore: bool = True):
+        """Выход после ответа «ok». Между «ok» и этим моментом человек мог начать новую правку: тогда остаёмся. Помощник
+        спросит снова, получит «busy» и отложит обновление.
+
+        1.36.3 (находка 1 проверки 1.36.3, владелец 24.11.2026: свежий снимок без пометок после «Обновить» и «Понятно»
+        пропадал): перед выходом записываются все открытые снимки, без условия на то, держали ли они выход и нажимал ли
+        человек «Обновить» (отложенное обновление проходит само и через 30 минут). Несохранённый не записался (нет места
+        на диске): записи этого запуска убираются, программа остаётся, обновление отложено. restore=False (удаление
+        программы): ничего не пишется, записи этого запуска убираются."""
+        blocker = self.quit_blocker(kept=restore)
+        if not blocker and restore:
+            self._save_editors_for_restart()
+            blocker = self.quit_blocker()   # несохранённый, который не записался, снова держит выход
+            if blocker:
+                self.drop_restart_restore()   # окна остаются открытыми здесь: копии при следующем запуске не нужны
+        elif not blocker:
+            self.drop_restart_restore()
         if blocker:
             from . import updater
             updater.get_updater(self).note_deferred(blocker)
             return
-        self.quit_reason = self.quit_reason or "update"
+        self._update_quitting = True   # закрытие окон при выходе: записанные закрываются без вопроса, записи остаются
+        self.quit_reason = self.quit_reason or ("update" if restore else "uninstall")
         self.save_config()
         self.qapp.quit()
 
@@ -1350,6 +1492,11 @@ class Clipshot(QObject):
         self._float_hidden = None
         action = getattr(self.selector, "action", "edit")
         full = getattr(self.selector, "full_mode", False)
+        # 1.36.3: форма, выбранная в окне выделения: копирование, сохранение, вставка и автосохранение получают её
+        # (forma.apply), редактор открывается с ней. «Закрепить» и запись видео без формы.
+        form = getattr(self.selector, "form", None)
+        if form is not None and form.is_rect:
+            form = None
         self.selector = None
         self._note_activity()
         if pixmap is not None and action != "record":
@@ -1361,11 +1508,15 @@ class Clipshot(QObject):
             QTimer.singleShot(250, self.open_screen_recording)   # дать окну выделения исчезнуть
             return
         target, self.insert_target = self.insert_target, None
+        from . import forma
+
+        def shaped():
+            return forma.apply(pixmap.toImage(), form) if form is not None else pixmap.toImage()
         if target is not None and target in self.editors:
             if pixmap is not None and action == "pin":
                 self.pin_image(pixmap.toImage(), rect.topLeft())   # 1.36: «Закрепить» из выделения поверх открытого редактора
             elif pixmap is not None:
-                target.canvas.insert_image(pixmap.toImage())
+                target.canvas.insert_image(shaped())
             target.show()
             target.raise_()
             target.activateWindow()
@@ -1378,19 +1529,21 @@ class Clipshot(QObject):
             if not full:   # весь экран не запоминаем: в следующий раз предлагается прошлая обычная область
                 self.config["last_region"] = [rect.x(), rect.y(), rect.width(), rect.height()]
                 self.save_config()
-            saved = self.autosave(pixmap.toImage())
             if action == "pin":
+                self.autosave(pixmap.toImage())
                 self.pin_image(pixmap.toImage(), rect.topLeft())
                 return
+            saved = self.autosave(shaped())
             if action == "save":
-                self.save_quick(pixmap.toImage())
+                self.save_quick(shaped())
                 return
             if action == "copy":
-                self.copy_image(pixmap.toImage())
+                self.copy_image(shaped())
                 self.notify(tr("app.copied_saved", path=saved) if saved else tr("app.copied"))
             else:
                 editor = self.open_editor(pixmap.toImage(), rect.topLeft())
                 if editor is not None:
+                    editor.start_with_form(form)
                     editor.autosave_path = saved
                     editor.only_in_memory = not saved   # снимок не в файле: выход для обновления его бы потерял
                     if action == "ocr" and self.config.get("ocr_enabled", True):
@@ -1719,6 +1872,11 @@ class Clipshot(QObject):
     def _editor_closed(self, editor):
         if editor in self.editors:
             self.editors.remove(editor)
+        if not getattr(self, "_update_quitting", False):
+            # 1.36.3 (находка 3 проверки 1.36.3): окно, записанное для возврата после перезапуска, человек закрыл сам:
+            # его запись и файлы убираются, иначе при следующем запуске оно открылось бы снова в старом состоянии
+            mine = [item[0] for item in (getattr(self, "_recovery_saved", None) or []) if item[1] is editor]
+            self._forget_restart_entries(mine)
         updater = getattr(self, "_updater", None)
         if updater is not None:
             updater.deferred_soon(1000)   # отложенное обновление может пойти сейчас (один общий таймер, Г4)

@@ -419,7 +419,7 @@ def selector(width, kept=None, cfg=None, translate=False):
     return sel
 
 
-TOP_ALL = ["record", "full", "ocr", "phone", "pin", "translate", "translate_pick"]   # 1.34: шесть плиток, 1.36: седьмая «Закрепить»
+TOP_ALL = ["record", "full", "ocr", "phone", "pin", "form", "translate", "translate_pick"]   # 1.34: шесть плиток, 1.36: седьмая «Закрепить», 1.36.3: «Форма снимка»
 TOP5 = TOP_ALL
 BOTTOM4 = ["save", "edit", "manual", "copy"]
 # 1.34 (вариант Б): на экранах с подписями «Сохранить» и «Другая область» равные мелкие отдельным рядом, под ними крупные:
@@ -430,7 +430,7 @@ for width, level in ((1280, "wide"), (800, "wide"), (480, "narrow")):
     buttons, bar, hint = sel._bar_layout()
     rects = {k: r for k, _t, _s, r in buttons}
     texts = {k: t for k, t, _s, _r in buttons}
-    TOP5 = [k for k in TOP_ALL if k != "pin" or width != 800]   # 1.36: на 800 px «Закрепить» не ставится (панель не мельчает)
+    TOP5 = [k for k in TOP_ALL if k not in ("pin", "form") or width != 800]   # 1.36: на 800 px «Закрепить» (и форма) не ставятся
     check([k for k, *_x in buttons] == TOP5 + BOTTOM4, f"{width}: пять плиток сверху и четыре кнопки снизу {[k for k, *_x in buttons]}")
     choice = sel._choice(sel.bar_level)
     ws = [rects[k].width() for k in BOTTOM4]
@@ -476,7 +476,7 @@ check(all(k in btns for k in BOTTOM4) and sel.translate_mode and set(sel.BAR_DIS
 sel.close()
 sel = selector(1280, QRect(500, 90, 300, 200), cfg={"translate_enabled": False})
 keys = [k for k, *_x in sel._bar_layout()[0]]
-check(keys == ["record", "full", "ocr", "phone", "pin"] + BOTTOM4, f"перевод выключен: четыре плитки (с «Закрепить») и четыре кнопки {keys}")
+check(keys == ["record", "full", "ocr", "phone", "pin", "form"] + BOTTOM4, f"перевод выключен: четыре плитки (с «Закрепить» и формой) и четыре кнопки {keys}")
 sel.close()
 
 # --- строка режима перевода в окне выделения: шрифт и длинные языки ----------------------------------------------

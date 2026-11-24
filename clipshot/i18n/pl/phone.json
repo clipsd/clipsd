@@ -56,6 +56,7 @@
   "phone.menu": "Zrzut/zdjęcie z telefonu",
   "phone.new_code": "Pokaż nowy kod",
   "phone.no_network": "Komputer nie jest w sieci domowej. Podłącz Wi-Fi lub kabel z routera i kliknij „Ponów”.",
+  "phone.net_changed": "Sieć się zmieniła, kod jest nowy: komputer ma teraz adres {address}. Skieruj aparat telefonu na nowy kod.",
   "phone.page_ask_text": "Wysłać ponownie czy zakończyć bez niego?",
   "phone.page_ask_title": "Zdjęcie niewysłane: {n}",
   "phone.page_bad_type": "To nie jest zdjęcie. Wybierz obraz w formacie JPEG lub PNG.",

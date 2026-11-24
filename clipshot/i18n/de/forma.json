@@ -13,6 +13,7 @@
   "forma.round_l": "Abgerundete Ecken: groß",
   "forma.round_m": "Abgerundete Ecken: mittel",
   "forma.round_s": "Abgerundete Ecken: klein",
+  "forma.size_tip": "Ziehen Sie die Griffe, um die Größe der Form zu ändern, Shift: proportional\nVerschieben: am Bereich um die Form ziehen, mit „Auswählen und verschieben“ (V) auch darin",
   "forma.tip_off": "Form des Screenshots: abgerundete Ecken, Oval, Kreis\nEin Klick schaltet „{name}“ ein, der Pfeil daneben öffnet alle Formen",
   "forma.tip_on": "Form des Screenshots · {name}\nEin Klick macht wieder ein Rechteck daraus, der Pfeil daneben öffnet alle Formen",
   "forma.title": "Form des Screenshots"

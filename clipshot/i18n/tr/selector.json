@@ -69,5 +69,7 @@
   "selector.sub_edit_tools": "oklar, metin, bulanıklık",
   "selector.saved": "Kaydedildi: {name}",
   "selector.saved_already": "Zaten kaydedildi: {name}",
-  "selector.save_failed": "Ekran görüntüsü kaydedilemedi"
+  "selector.save_failed": "Ekran görüntüsü kaydedilemedi",
+  "selector.form_tip_off": "Ekran görüntüsünün şekli ({hotkey}): tıklama “{name}” şeklini açar, ok: tüm şekiller",
+  "selector.form_tip_on": "Ekran görüntüsünün şekli: {name} ({hotkey}) · tıklama: dikdörtgen, ok: tüm şekiller"
 }

@@ -13,6 +13,7 @@
   "forma.round_l": "Angoli arrotondati: grandi",
   "forma.round_m": "Angoli arrotondati: medi",
   "forma.round_s": "Angoli arrotondati: piccoli",
+  "forma.size_tip": "Trascina le maniglie per cambiare la dimensione della forma, Shift: in proporzione\nSpostare: trascina l’area intorno alla forma, con «Seleziona e sposta» (V) anche al suo interno",
   "forma.tip_off": "Forma dello screenshot: angoli arrotondati, ovale, cerchio\nUn clic attiva «{name}», la freccia accanto apre tutte le forme",
   "forma.tip_on": "Forma dello screenshot · {name}\nUn clic torna al rettangolo, la freccia accanto apre tutte le forme",
   "forma.title": "Forma dello screenshot"

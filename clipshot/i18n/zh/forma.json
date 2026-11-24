@@ -13,6 +13,7 @@
   "forma.round_l": "圆角：大",
   "forma.round_m": "圆角：中",
   "forma.round_s": "圆角：小",
+  "forma.size_tip": "拖动控制点可调整形状大小，按 Shift 保持比例\n移动：拖动形状周围的区域，使用“选择和移动”（V）时也可在形状内部拖动",
   "forma.tip_off": "截图形状：圆角、椭圆、圆形\n单击启用“{name}”，旁边的箭头打开全部形状",
   "forma.tip_on": "截图形状 · {name}\n单击恢复为矩形，旁边的箭头打开全部形状",
   "forma.title": "截图形状"

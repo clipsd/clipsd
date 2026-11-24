@@ -66,5 +66,7 @@
   "selector.sub_edit_tools": "стрелки, текст, размытие",
   "selector.saved": "Сохранено: {name}",
   "selector.saved_already": "Уже сохранено: {name}",
-  "selector.save_failed": "Не удалось сохранить снимок"
+  "selector.save_failed": "Не удалось сохранить снимок",
+  "selector.form_tip_off": "Форма снимка ({hotkey}): щелчок включает «{name}», стрелка: все формы",
+  "selector.form_tip_on": "Форма снимка: {name} ({hotkey}) · щелчок: прямоугольник, стрелка: все формы"
 }

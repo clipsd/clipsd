@@ -109,23 +109,22 @@ class Deco:
 
 
 def outer_form(form):
-    """Форма готовой картинки: круг уже обрезан до своего квадрата и стоит по центру."""
-    if form is not None and form.code == forma.CIRCLE:
-        return forma.Form(forma.CIRCLE)
-    return form if form is not None else forma.Form()
+    """Форма готовой картинки: круг уже обрезан до своего квадрата и стоит по центру, 1.36.3: любая форма обрезана
+    до своей рамки и занимает картинку целиком (рамка формы сброшена, радиус прежний)."""
+    if form is None:
+        return forma.Form()
+    return forma.Form(form.code, radius=form.r)
 
 
 def outset_path(form, w: float, h: float, t: float) -> QPainterPath:
     """Контур формы, раздвинутый наружу на t (рамка и тень идут по нему)."""
     out = QPainterPath()
-    rect = QRectF(0, 0, w, h)
+    rect = forma.frame(form, w, h)   # 1.36.3: по рамке формы (круг в своём квадрате)
     if form.is_round:
-        r = min(form.radius, forma.max_radius(w, h))
+        r = min(form.radius, forma.max_radius(rect.width(), rect.height()))
         out.addRoundedRect(rect.adjusted(-t, -t, t, t), r + t, r + t)
-    elif form.code == forma.OVAL:
+    elif form.code in (forma.OVAL, forma.CIRCLE):
         out.addEllipse(rect.adjusted(-t, -t, t, t))
-    elif form.code == forma.CIRCLE:
-        out.addEllipse(forma.circle_rect(form, w, h).adjusted(-t, -t, t, t))
     else:
         out.addRect(rect.adjusted(-t, -t, t, t))
     return out
@@ -142,7 +141,8 @@ def shadow_layer(form, w: float, h: float, deco: Deco, scale: float) -> QImage:
     виде и плавное увеличение: без чтения пикселей по одному, на любой платформе одинаково."""
     pad = deco.pad()
     key = (form.code, form.center.x() if form.center is not None else None, form.center.y() if form.center is not None else None,
-           form.r, round(w, 3), round(h, 3), deco.shadow_size, deco.shadow_opacity, deco.frame_px(), pad, round(scale, 4))
+           form.r, None if form.box is None else form.box.getRect(), round(w, 3), round(h, 3), deco.shadow_size,
+           deco.shadow_opacity, deco.frame_px(), pad, round(scale, 4))
     if _cache["key"] == key:
         return _cache["image"]
     full_w, full_h = max(1, math.ceil((w + 2 * pad) * scale)), max(1, math.ceil((h + 2 * pad) * scale))

@@ -66,5 +66,7 @@
   "selector.sub_edit_tools": "frecce, testo, sfocatura",
   "selector.saved": "Salvato: {name}",
   "selector.saved_already": "Già salvato: {name}",
-  "selector.save_failed": "Impossibile salvare lo screenshot"
+  "selector.save_failed": "Impossibile salvare lo screenshot",
+  "selector.form_tip_off": "Forma dello screenshot ({hotkey}): un clic attiva «{name}», freccia: tutte le forme",
+  "selector.form_tip_on": "Forma dello screenshot: {name} ({hotkey}) · clic: rettangolo, freccia: tutte le forme"
 }

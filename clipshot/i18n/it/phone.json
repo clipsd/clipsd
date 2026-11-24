@@ -56,6 +56,7 @@
   "phone.menu": "Screenshot/foto dal telefono",
   "phone.new_code": "Mostra un nuovo codice",
   "phone.no_network": "Il computer non è collegato a una rete di casa. Collega il Wi-Fi o un cavo dal router e premi «Riprova».",
+  "phone.net_changed": "La rete è cambiata, il codice è aggiornato: il computer ora è all'indirizzo {address}. Inquadra il nuovo codice con la fotocamera del telefono.",
   "phone.page_ask_text": "Inviare di nuovo o terminare senza?",
   "phone.page_ask_title": "Foto non inviata: {n}",
   "phone.page_bad_type": "Questa non è una foto. Scegli un’immagine in formato JPEG o PNG.",

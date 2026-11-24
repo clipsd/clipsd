@@ -56,6 +56,7 @@
   "phone.menu": "从手机截图/拍照",
   "phone.new_code": "显示新的二维码",
   "phone.no_network": "电脑未连接家庭网络。请连接 Wi-Fi 或路由器网线，然后点击“重试”。",
+  "phone.net_changed": "网络已更改，二维码已更新：电脑现在的地址是 {address}。请用手机相机扫描新的二维码。",
   "phone.page_ask_text": "重新发送，还是不发送它直接结束？",
   "phone.page_ask_title": "照片未发送：{n}",
   "phone.page_bad_type": "这不是照片。请选择 JPEG 或 PNG 格式的图片。",

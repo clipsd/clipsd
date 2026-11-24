@@ -30,6 +30,7 @@ from .i18n import current, tr
 from .themes import GREEN
 
 TROUBLE_AFTER_MS = 20_000
+NET_CHECK_MS = 3000   # 1.36.3: как часто окно «С телефона» проверяет, не сменилась ли сеть
 PHOTO_QUALITY = 92          # JPEG quality of the autosaved photo (the page already sent a JPEG of 0.92)
 QR_MODULE = 7              # px per module: version 3 (29 + 2 x 4 quiet) -> 259 px (was 4 = 148 px; owner 22.11.2026: bigger)
 QR_MODULES = (7, 6, 5, 4)  # the window takes the biggest one that fits the height of the screen (1366 x 768 at 150 %)
@@ -798,6 +799,13 @@ class PhoneDialog(_FitMixin, ClipDialog):
         self.trouble_timer.setSingleShot(True)
         self.trouble_timer.setInterval(TROUBLE_AFTER_MS)
         self.trouble_timer.timeout.connect(self._no_phone_yet)
+        # 1.36.3 (владелец 24.11.2026: «пк не отображает новый qr с новой сетью при переподключении»): сеть проверяется
+        # раз в NET_CHECK_MS, пока окно открыто; адрес из кода пропал или сеть появилась после «нет сети»: приём
+        # открывается заново на новом адресе, код новый
+        self.net_timer = QTimer(self)
+        self.net_timer.setInterval(NET_CHECK_MS)
+        self.net_timer.timeout.connect(self.check_network)
+        self._no_network = False
 
     # --- receiver -----------------------------------------------------------------
 
@@ -811,9 +819,12 @@ class PhoneDialog(_FitMixin, ClipDialog):
         self.retry_btn.setVisible(False)
         self.fw_box.setVisible(False)
         found = self.candidates()
+        self.net_timer.start()
         if not found:
+            self._no_network = True
             self._fail(tr("phone.no_network"))
             return False
+        self._no_network = False
         self.candidate = found[0]
         key = {"wifi": "phone.step1_wifi", "ethernet": "phone.step1_cable"}.get(self.candidate.get("kind"),
                                                                               "phone.step1_other")
@@ -963,6 +974,7 @@ class PhoneDialog(_FitMixin, ClipDialog):
 
     def stop(self):
         self._close_zoom()
+        self.net_timer.stop()
         self.timer.stop()
         self.trouble_timer.stop()
         receiver, self.receiver = self.receiver, None
@@ -1078,6 +1090,32 @@ class PhoneDialog(_FitMixin, ClipDialog):
     def _relayout(self):
         """The window follows its content: smaller when the code is hidden, without empty space under the title."""
         fit_to_content(self)
+
+    def check_network(self) -> bool:
+        """Сеть сменилась, пока окно открыто: приём заново на новом адресе. True: приём перезапущен."""
+        if self.closing or not self.isVisible() and not getattr(self, "hidden_for_photo", False):
+            return False
+        found = self.candidates()
+        if self._no_network:
+            if found:
+                self.start()
+                return True
+            return False
+        if self.receiver is None or self.candidate is None:
+            return False   # шаг «Разрешить» или ошибка привязки: человек решает сам
+        ips = [c["ip"] for c in found]
+        if self.candidate["ip"] in ips:
+            return False
+        if not found:
+            self.stop()
+            self._no_network = True
+            self._fail(tr("phone.no_network"))
+            self.net_timer.start()
+            return True
+        self.start()
+        if self.receiver is not None:
+            self.step1.set_text(text=tr("phone.net_changed", address=self.candidate["ip"]))
+        return True
 
     def _tick(self):
         if self.receiver is not None:
@@ -1258,6 +1296,7 @@ class PhoneDialog(_FitMixin, ClipDialog):
         """Menu item while the window is hidden: the same window again (with the same code), not a second one."""
         self.hidden_for_photo = False
         self.open_centered()
+        self.check_network()   # 1.36.3: пока окно было скрыто, сеть могла смениться
 
     def _autosave(self, image: QImage):
         return _autosave_photo(self.ctx, image)

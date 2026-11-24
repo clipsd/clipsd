@@ -68,5 +68,7 @@
   "selector.sub_edit_tools": "箭头、文字、模糊",
   "selector.saved": "已保存：{name}",
   "selector.saved_already": "已经保存：{name}",
-  "selector.save_failed": "无法保存截图"
+  "selector.save_failed": "无法保存截图",
+  "selector.form_tip_off": "截图形状（{hotkey}）：单击启用“{name}”，箭头：全部形状",
+  "selector.form_tip_on": "截图形状：{name}（{hotkey}）· 单击：矩形，箭头：全部形状"
 }

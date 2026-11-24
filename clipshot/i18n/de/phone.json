@@ -56,6 +56,7 @@
   "phone.menu": "Screenshot/Foto vom Smartphone",
   "phone.new_code": "Neuen Code zeigen",
   "phone.no_network": "Der Computer ist mit keinem Heimnetz verbunden. Verbinden Sie WLAN oder ein Kabel vom Router und klicken Sie auf „Wiederholen“.",
+  "phone.net_changed": "Das Netzwerk hat sich geändert, der Code ist neu: Der Computer ist jetzt unter {address}. Richten Sie die Handykamera auf den neuen Code.",
   "phone.page_ask_text": "Erneut senden oder ohne es beenden?",
   "phone.page_ask_title": "Foto nicht gesendet: {n}",
   "phone.page_bad_type": "Das ist kein Foto. Wählen Sie ein Bild im Format JPEG oder PNG.",

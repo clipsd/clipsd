@@ -56,6 +56,7 @@
   "phone.menu": "Captura/foto desde el teléfono",
   "phone.new_code": "Mostrar un código nuevo",
   "phone.no_network": "El equipo no está en una red de casa. Conecte el Wi-Fi o un cable del router y pulse «Reintentar».",
+  "phone.net_changed": "La red ha cambiado, el código se ha actualizado: el ordenador ahora está en {address}. Apunte la cámara del teléfono al nuevo código.",
   "phone.page_ask_text": "¿Enviar de nuevo o terminar sin ella?",
   "phone.page_ask_title": "Foto sin enviar: {n}",
   "phone.page_bad_type": "Esto no es una foto. Elija una imagen en formato JPEG o PNG.",

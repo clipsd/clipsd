@@ -13,6 +13,7 @@
   "forma.round_l": "Rounded corners: large",
   "forma.round_m": "Rounded corners: medium",
   "forma.round_s": "Rounded corners: small",
+  "forma.size_tip": "Drag the handles to resize the shape, Shift: keep proportions\nMove it: drag the area around the shape, with “Select and move” (V) also inside it",
   "forma.tip_off": "Screenshot shape: rounded corners, oval, circle\nA click turns on “{name}”, the arrow next to it opens all shapes",
   "forma.tip_on": "Screenshot shape · {name}\nA click returns to a rectangle, the arrow next to it opens all shapes",
   "forma.title": "Screenshot shape"

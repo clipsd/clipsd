@@ -4,10 +4,14 @@
 # Additional terms under GNU GPL v3 section 7 apply; see TRADEMARKS.md.
 """Связь с фоновой копией без загрузки Qt: команда от Alt+W доходит за миллисекунды.
 
-Protocol: the client writes the raw UTF-8 command without a terminator. Only "quit-for-update" gets
-a reply line on the same connection: "ok\\n" (the program quits now) or "busy\\n" (it cannot quit
-without losing work, the update is deferred). Users of the reply: packaging/linux/clipsd-switch and
+Protocol: the client writes the raw UTF-8 command without a terminator. Only "quit-for-update" and
+"quit-for-uninstall" get a reply line on the same connection: "ok\\n" (the program quits now) or "busy\\n" (it
+cannot quit without losing work, the update is deferred). Users of the reply: packaging/linux/clipsd-switch and
 the Windows launcher (packaging/windows-exe/launcher/clipsd_launcher.c).
+1.36.3: before quitting for an update the open snapshots are saved and come back after the restart
+(Clipshot.quit_for_update_now); "quit-for-uninstall" (uninstall.sh through clipsd-switch --ask-quit --uninstall)
+quits the same way but saves nothing: no snapshots come back after the program is removed. A program older than
+1.36.3 ignores it and gives no reply; the helper then asks "quit-for-update".
 
 Where the channel lives:
 - Linux: ${XDG_RUNTIME_DIR}/clipsd.sock; without XDG_RUNTIME_DIR (or when that path is too long) a private folder of this user
@@ -34,6 +38,8 @@ def socket_name() -> str:
     return SOCKET_NAME if getattr(sys, "frozen", False) else SOURCE_SOCKET_NAME
 _MAX_UNIX_PATH = 100          # sun_path is 108 bytes on Linux; keep a margin
 QUIT_FOR_UPDATE = "quit-for-update"
+QUIT_FOR_UNINSTALL = "quit-for-uninstall"   # 1.36.3: as quit-for-update, but the open snapshots are not saved
+QUIT_COMMANDS = (QUIT_FOR_UPDATE, QUIT_FOR_UNINSTALL)
 
 
 @functools.lru_cache(maxsize=1)
@@ -232,7 +238,7 @@ def request(command: str, timeout: float = 5.0, path: str = ""):
 
 def send(command: str) -> bool:
     """Передать команду запущенной копии. False — фоновая копия не запущена (или Windows)."""
-    if command == QUIT_FOR_UPDATE:
+    if command in QUIT_COMMANDS:
         # Prints the reply for clipsd-switch: ok | busy | none (no running copy or no answer).
         # Always True, so that the entry point never starts the program for this command.
         reply = request(command) or "none"

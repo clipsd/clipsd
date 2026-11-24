@@ -13,6 +13,7 @@
   "forma.round_l": "Esquinas redondeadas: grandes",
   "forma.round_m": "Esquinas redondeadas: medianas",
   "forma.round_s": "Esquinas redondeadas: pequeñas",
+  "forma.size_tip": "Arrastre los tiradores para cambiar el tamaño de la forma, Shift: proporcional\nMover: arrastre el área alrededor de la forma, con «Seleccionar y mover» (V) también dentro",
   "forma.tip_off": "Forma de la captura: esquinas redondeadas, óvalo, círculo\nUn clic activa «{name}», la flecha de al lado abre todas las formas",
   "forma.tip_on": "Forma de la captura · {name}\nUn clic vuelve al rectángulo, la flecha de al lado abre todas las formas",
   "forma.title": "Forma de la captura"

@@ -26,6 +26,7 @@ qapp = QApplication.instance() or QApplication(sys.argv)
 from clipshot import app as appmod  # noqa: E402
 from clipshot import ocr, privacy  # noqa: E402
 from clipshot.editor import EditorWindow, OCR, merge_privacy_pass  # noqa: E402
+from clipshot.shapes import BLUR  # noqa: E402
 
 failures = []
 
@@ -200,11 +201,189 @@ check(s is not None and privacy.CARD in kinds and privacy.HOLDER in kinds, f"р�
 ed.canvas.modified = False
 ed.exported = True
 ed.close()
-ed = EditorWindow(screen(), Ctx(), QPoint(0, 0))
+# 1.36.3 (владелец 24.11.2026): фото карты вставлено «С телефона» поверх экранного снимка: распознавание читает снимок
+# вместе со вставленной картинкой, карта находится и закрывается поверх фото
+from clipshot.shapes import IMAGE, Shape  # noqa: E402
+from PyQt6.QtCore import QPointF  # noqa: E402
+big = QImage(1300, 1000, QImage.Format.Format_RGB32)
+big.fill(QColor("#ffffff"))
+pp = QPainter(big)
+pp.drawImage(0, 0, screen())
+pp.end()
+ed = EditorWindow(big, Ctx(), QPoint(0, 0))
+ed.present()
 check(ed._privacy_extra_passes() == [True], f"чистый экран: только проход с контрастом ({ed._privacy_extra_passes()})")
+card_photo = photo(seed=2)
+sh = Shape(IMAGE, "#ff0000", 2, QPointF(640, 60))
+sh.points = [QPointF(640, 60), QPointF(640 + card_photo.width(), 60 + card_photo.height())]
+sh.image = card_photo.convertToFormat(QImage.Format.Format_ARGB32_Premultiplied)
+ed.canvas.shapes.append(sh)
+check(ed._privacy_extra_passes() == [True, (sh, ocr.PHOTO), (sh, ocr.PHOTO_LIGHT)],
+      "экран со вставленным фото: оба чёрно-белых прохода по самой картинке (1.36.3)")
+src = ed._privacy_source()
+check(src.size() == ed.canvas.base.size() and src.pixelColor(640 + 300, 60 + 450) != ed.canvas.base.pixelColor(640 + 300, 60 + 450),
+      "снимок для распознавания включает вставленную картинку, размер тот же")
+for _ in range(4):
+    qapp.processEvents()
+ed.hide_personal()
+for _ in range(600):
+    QTest.qWait(100)
+    if getattr(ed, "_ocr_job", None) is None and getattr(ed, "_privacy_pass2", None) is None and ed.privacy_panel.isVisible():
+        break
+s = ed.privacy_session
+kinds = [f.kind for f in s.findings] if s else []
+check(s is not None and privacy.CARD in kinds, f"вставленное фото карты: карта найдена ({kinds})")
+if s is not None and privacy.CARD in kinds:
+    i = kinds.index(privacy.CARD)
+    r = s.rect_union(i)[0] if s.rect_union(i) else None
+    check(r is not None and r.left() >= 640 and r.top() >= 60, f"закрытие легло на вставленное фото ({r})")
+    cover = s.shapes.get(i)
+    cover = cover if isinstance(cover, list) else [cover]
+    pos = [ed.canvas.shapes.index(x) for x in cover if x in ed.canvas.shapes]
+    check(bool(pos) and min(pos) > ed.canvas.shapes.index(sh), f"закрытие нарисовано поверх вставленной картинки ({pos})")
+check(not any("8888" in w.text or "1881" in w.text for w in ed.canvas.words),
+      "слова фото не попали в слова снимка для «Копировать текст» (находка 5 проверки 1.36.3)")
 ed.canvas.modified = False
 ed.exported = True
 ed.close()
+
+
+# --- 1.36.3, находки 4-8 проверки 1.36.3 -----------------------------------------------------------------------
+def iban_de(bban: str) -> str:
+    """Вымышленный IBAN Германии с верной контрольной суммой (mod 97)."""
+    digits = "".join(str(int(ch, 36)) for ch in bban + "DE00")
+    check_digits = 98 - int(digits) % 97
+    raw = f"DE{check_digits:02d}{bban}"
+    return " ".join(raw[i:i + 4] for i in range(0, len(raw), 4))
+
+
+IBAN = iban_de("500105170648489890")
+
+
+def iban_screen():
+    out = QImage(1300, 1000, QImage.Format.Format_RGB32)
+    out.fill(QColor("#ffffff"))
+    q = QPainter(out)
+    f = QFont("DejaVu Sans")
+    f.setPixelSize(22)
+    q.setFont(f)
+    q.setPen(QColor("#111111"))
+    q.drawText(20, 40, "Beneficiary account")
+    q.drawText(20, 80, "IBAN: " + IBAN)
+    for k in range(8):
+        q.drawText(20, 140 + k * 36, f"Line of ordinary text number {k}")
+    q.end()
+    return out
+
+
+def add_image(editor, image, x, y, w, h):
+    shape = Shape(IMAGE, "#ff0000", 2, QPointF(x, y))
+    shape.points = [QPointF(x, y), QPointF(x + w, y + h)]
+    shape.image = image.convertToFormat(QImage.Format.Format_ARGB32_Premultiplied)
+    editor.canvas.shapes.append(shape)
+    return shape
+
+
+def wait_privacy(editor, limit=900):
+    for _ in range(limit):
+        QTest.qWait(100)
+        if getattr(editor, "_ocr_job", None) is None and getattr(editor, "_privacy_pass2", None) is None \
+                and editor.privacy_panel.isVisible():
+            break
+    session = editor.privacy_session
+    return session, ([f.kind for f in session.findings] if session else [])
+
+
+def fresh_editor(image):
+    editor = EditorWindow(image, Ctx(), QPoint(0, 0))
+    editor.present()
+    for _ in range(4):
+        qapp.processEvents()
+    return editor
+
+
+def close_editor(editor):
+    editor.canvas.modified = False
+    editor.exported = True
+    editor.close()
+
+
+# находка 4: IBAN на экране и фото карты поверх: первый проход находит IBAN, проходы по фото всё равно идут
+ed = fresh_editor(iban_screen())
+sh = add_image(ed, photo(seed=2), 640, 60, 620, 900)
+ed.hide_personal()
+s, kinds = wait_privacy(ed)
+check(privacy.IBAN in kinds and privacy.CARD in kinds, f"IBAN на экране и вставленное фото карты: найдены оба ({kinds})")
+if s is not None and privacy.CARD in kinds:
+    r = s.rect_union(kinds.index(privacy.CARD))[0]
+    check(sh.rect().contains(r), f"закрытие карты на вставленном фото ({r})")
+check(kinds.count(privacy.CARD) == 1 and kinds.count(privacy.IBAN) == 1, f"без повторов ({kinds})")
+close_editor(ed)
+
+# находка 5: слова снимка со вставленной картинкой не уходят в «Копировать текст» (картинку потом сдвинут или уберут)
+ed = fresh_editor(iban_screen())
+words_pic = QImage(600, 160, QImage.Format.Format_RGB32)
+words_pic.fill(QColor("#fffbe0"))
+q = QPainter(words_pic)
+f = QFont("DejaVu Sans")
+f.setPixelSize(34)
+q.setFont(f)
+q.setPen(QColor("#000000"))
+q.drawText(20, 60, "ALPHA BRAVO CHARLIE")
+q.drawText(20, 120, "DELTA ECHO FOXTROT")
+q.end()
+sh = add_image(ed, words_pic, 10, 130, 600, 160)
+ed.hide_personal()
+s, kinds = wait_privacy(ed)
+check(privacy.IBAN in kinds, f"IBAN под строками картинки найден ({kinds})")
+check(not any(w.text in ("ALPHA", "BRAVO", "DELTA") for w in ed.canvas.words),
+      f"слова вставленной картинки не в словах снимка ({[w.text for w in ed.canvas.words][:6]})")
+close_editor(ed)
+
+# находка 6: фото уменьшено на снимке до 45 %: читается в собственном разрешении
+ed = fresh_editor(iban_screen())
+sh = add_image(ed, photo(seed=2), 640, 60, 279, 405)
+ed.hide_personal()
+s, kinds = wait_privacy(ed)
+check(privacy.CARD in kinds and privacy.HOLDER in kinds, f"фото карты, уменьшенное до 45 %: карта и имя найдены ({kinds})")
+if s is not None and privacy.CARD in kinds:
+    r = s.rect_union(kinds.index(privacy.CARD))[0]
+    check(sh.rect().contains(r) and r.width() < 279, f"закрытие на уменьшенной картинке, в её масштабе ({r})")
+close_editor(ed)
+
+# синяя карта со светлыми цифрами вставлена поверх экрана: на ней доходит до второго чёрно-белого прохода
+ed = fresh_editor(iban_screen())
+sh = add_image(ed, blue, 640, 60, 620, 900)
+ed.hide_personal()
+s, kinds = wait_privacy(ed)
+check(privacy.CARD in kinds and privacy.IBAN in kinds, f"вставленная синяя карта и IBAN на экране: найдены ({kinds})")
+close_editor(ed)
+
+# находка 7: картинку сдвинули, пока шло распознавание: итог не ложится на старое место
+ed = fresh_editor(iban_screen())
+sh = add_image(ed, photo(seed=2), 640, 60, 620, 900)
+ed.hide_personal()
+sh.translate(QPointF(-300, 0))
+ed.canvas.update()
+for _ in range(300):
+    QTest.qWait(100)
+    if getattr(ed, "_ocr_job", None) is None and getattr(ed, "_privacy_pass2", None) is None:
+        break
+QTest.qWait(300)
+s = ed.privacy_session
+kinds = [f.kind for f in s.findings] if s else []
+check(s is None and not any(x.kind == BLUR for x in ed.canvas.shapes),
+      f"картинку сдвинули во время распознавания: старый итог не применён ({kinds})")
+close_editor(ed)
+
+# находка 8: следы ластика на вставленной картинке видны и распознаванию
+ed = fresh_editor(iban_screen())
+sh = add_image(ed, photo(seed=2), 640, 60, 620, 900)
+sh.erasures = [(40, [QPointF(700, 120), QPointF(900, 120)])]
+src = ed._privacy_source()
+check(src.pixelColor(800, 120) == ed.canvas.base.pixelColor(800, 120) and src.pixelColor(800, 400) != ed.canvas.base.pixelColor(800, 400),
+      "стёртое ластиком на картинке распознавание видит как снимок под ней")
+close_editor(ed)
 
 print("\nИТОГ:", "провалено %d" % len(failures) if failures else "всё хорошо")
 sys.exit(1 if failures else 0)

@@ -56,6 +56,7 @@
   "phone.menu": "Capture/photo depuis le téléphone",
   "phone.new_code": "Afficher un nouveau code",
   "phone.no_network": "L’ordinateur n’est pas sur un réseau domestique. Connectez le Wi-Fi ou un câble du routeur et cliquez sur « Réessayer ».",
+  "phone.net_changed": "Le réseau a changé, le code est mis à jour : l'ordinateur est maintenant à l'adresse {address}. Pointez l'appareil photo du téléphone vers le nouveau code.",
   "phone.page_ask_text": "Renvoyer ou terminer sans elle ?",
   "phone.page_ask_title": "Photo non envoyée : {n}",
   "phone.page_bad_type": "Ce n’est pas une photo. Choisissez une image au format JPEG ou PNG.",

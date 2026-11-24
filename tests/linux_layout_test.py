@@ -477,15 +477,23 @@ srv.listen(4)
 held = []
 while True:
     conn, _ = srv.accept()
-    if not conn.recv(64):        # a probe: connect and close without a command (ClipSD ignores it too)
+    command = conn.recv(64)
+    if not command:              # a probe: connect and close without a command (ClipSD ignores it too)
         conn.close()
         continue
+    with open(os.path.join(here, "commands"), "a") as f:
+        f.write(command.decode(errors="replace") + "\n")
     mode = open(os.path.join(here, "mode")).read().strip()
     with open(os.path.join(here, "asked"), "a") as f:
         f.write(mode + "\n")
     if mode == "hang":
         held.append(conn)
         continue
+    if mode.startswith("old-"):  # a program older than 1.36.3: ignores quit-for-uninstall, no reply
+        if command == b"quit-for-uninstall":
+            held.append(conn)
+            continue
+        mode = mode[4:]
     conn.sendall((mode + "\n").encode())
     conn.close()
     if mode == "ok":
@@ -667,6 +675,16 @@ def scenario_install_asks_first(tmp: Path):
         check(r.returncode == 4 and "Close the ClipSD editor" in (r.stdout + r.stderr) and e.app.exists()
               and p.poll() is None and e.program_pid() == loop_pid,
               f"uninstall.sh, program busy: stops with a clear message, nothing removed ({r.returncode})")
+        commands = (fake_dir / "commands").read_text().split()
+        check(commands[:1] == ["quit-for-update"] and commands[-1:] == ["quit-for-uninstall"],
+              f"install.sh asks quit-for-update, uninstall.sh quit-for-uninstall (1.36.3: no snapshots saved) ({commands})")
+        (fake_dir / "mode").write_text("old-busy\n")
+        (fake_dir / "commands").write_text("")
+        r = e.run("bash", e.app / "current/uninstall.sh")
+        commands = (fake_dir / "commands").read_text().split()
+        check(r.returncode == 4 and e.app.exists() and commands == ["quit-for-uninstall", "quit-for-update"],
+              f"uninstall.sh, program older than 1.36.3 (no reply to quit-for-uninstall): asked quit-for-update, busy stops ({commands})")
+        (fake_dir / "mode").write_text("busy\n")
         (fake_dir / "mode").write_text("ok\n")
         r = e.run("bash", rel1 / "install.sh")
         check(r.returncode == 0 and exited(p, 10) and p.returncode == 0 and e.current() == "versions/1.30.1",

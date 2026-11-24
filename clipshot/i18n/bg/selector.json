@@ -69,5 +69,7 @@
   "selector.sub_edit_tools": "стрелки, текст, размазване",
   "selector.saved": "Запазено: {name}",
   "selector.saved_already": "Вече е запазено: {name}",
-  "selector.save_failed": "Снимката не можа да се запази"
+  "selector.save_failed": "Снимката не можа да се запази",
+  "selector.form_tip_off": "Форма на снимката ({hotkey}): щракване включва „{name}“, стрелка: всички форми",
+  "selector.form_tip_on": "Форма на снимката: {name} ({hotkey}) · щракване: правоъгълник, стрелка: всички форми"
 }
