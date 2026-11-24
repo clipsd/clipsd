@@ -17,7 +17,8 @@ from dataclasses import dataclass, field
 from PyQt6.QtCore import QRectF
 
 PHONE, EMAIL, CARD, IBAN, LINK = "phone", "email", "card", "iban", "link"
-KINDS = (CARD, IBAN, PHONE, EMAIL, LINK)   # порядок в панели
+HOLDER = "holder"   # 1.36.2: имя держателя под номером карты (фото карты, 24.11.2026)
+KINDS = (CARD, HOLDER, IBAN, PHONE, EMAIL, LINK)   # порядок в панели
 LAST_DIGITS = 4                            # сколько последних цифр можно оставить открытыми
 PAD = 2.0                                  # запас вокруг рамки, точки снимка
 
@@ -34,6 +35,7 @@ MODES = {   # что можно оставить открытым у значе�
     EMAIL: ("full", "domain", "name", "open"),
     IBAN: ("full", "country_last4", "open"),
     LINK: ("full", "host", "open"),
+    HOLDER: ("full", "open"),
 }
 
 
@@ -139,35 +141,76 @@ def _iban_chains(text: str):
     return out
 
 
+def _bounds(chain: str, where: list):
+    """Где в цепочке начинаются и кончаются слова: (starts, ends) номеров знаков. Слово: знаки, идущие в тексте подряд."""
+    starts = {k for k in range(len(where)) if k == 0 or where[k - 1] != where[k] - 1}
+    ends = {k for k in range(len(where)) if k == len(where) - 1 or where[k + 1] != where[k] + 1}
+    return starts, ends
+
+
 def iban_candidates(text: str):
-    """Все IBAN в тексте: [(начало, конец, значение, надёжно)]. надёжно=True: контрольная сумма сошлась (может быть после
-    исправления путаницы знаков); False: начинается как IBAN (код страны, цифры, нужная длина, перед ним метка IBAN или
-    начало слова), но сумма не сходится ни при каких исправлениях: «Похоже на IBAN, проверьте»."""
-    found, spans = [], []
+    """Все IBAN в тексте: [(начало, конец, значение, надёжно, по_форме)]. надёжно=True: контрольная сумма сошлась (может
+    быть после исправления путаницы знаков); False: «Похоже на IBAN, проверьте»: код страны буквами, контрольные цифры
+    цифрами, нужная длина, не меньше половины цифр, но сумма не сходится ни при каких исправлениях.
+    1.36.2 (снимок владельца 24.11.2026, страница банка): значение начинается с начала слова (или сразу после метки
+    «IBAN», приклеенной распознаванием) и кончается концом слова. Раньше цепочка из хвоста «EUR» и сумм «0.00 EUR» с
+    соседних строк проходила как IBAN Румынии после трёх «исправлений» и съедала начало настоящего IBAN: закрыты суммы,
+    конец счёта открыт. Исправленное переходит на другую строку только как перенос одного IBAN (см. ниже), «Похоже» не
+    переходит. Без исправлений (код страны буквами, сумма сошлась как есть) границы не нужны.
+    Найденное без исправлений главнее исправленного, исправленное главнее «Похоже»: перекрытия решаются в эту сторону.
+    по_форме=True у «Похоже», которое стоит отдельным словом (или группами) ровно нужной длины: закрывается сразу."""
+    cands = []
     for chain, where in _iban_chains(text):
-        i = 0
-        while i < len(chain) - 14:
+        starts, ends = _bounds(chain, where)
+        for i in range(0, len(chain) - 14):
             head = chain[i:i + 2].upper()
             cc = "".join(_TO_LETTER.get(c, c) if c.isdigit() else c for c in head)
             want = IBAN_LENGTHS.get(cc)
-            check = "".join(_TO_DIGIT.get(c, c) for c in chain[i + 2:i + 4].upper())
-            if not want or i + want > len(chain) or not check.isdigit():
-                i += 1
+            if not want or i + want > len(chain):
                 continue
+            check = "".join(_TO_DIGIT.get(c, c) for c in chain[i + 2:i + 4].upper())
+            if not check.isdigit():
+                continue
+            last = i + want - 1
+            glued = chain[max(0, i - 4):i].upper() == "IBAN" and i - 4 >= 0 and (i - 4) in starts
+            at_start = i in starts or glued
+            at_end = last in ends
             raw = chain[i:i + want]
             fixed = fix_iban(raw)
-            start, end = where[i], where[i + want - 1] + 1
+            start, end = where[i], where[last] + 1
+            if fixed is not None and fixed[1] == 0 and cc == head:
+                cands.append((0, start, end, fixed[0], True, False))
+                continue
+            if not (at_start and at_end):
+                continue   # исправленное и «Похоже»: от начала до конца слова
+            span = text[start:end]
+            if "\n" in span:
+                # перенос строки (проверка 1.36.2, находка 1): один перенос, код страны буквами, сумма сошлась после
+                # исправлений, первая часть доходит до конца строки, вторая с начала следующей, перед IBAN начало
+                # строки, подпись счёта или приклеенная «IBAN»
+                ls = text.rfind("\n", 0, start) + 1
+                before = text[ls:start].split()
+                prev = text[text.rfind("\n", 0, max(0, ls - 1)) + 1:max(0, ls - 1)].split() if ls else []
+                labelled = any(_label_word(t) for t in before) or any(_label_word(t) for t in prev)   # «Сметка в лева:»
+                ok_wrap = (span.count("\n") == 1 and cc == head and fixed is not None
+                           and (not before or labelled or glued)
+                           and re.fullmatch(r"[^\n]*\S\n\S[^\n]*", span) is not None)
+                if not ok_wrap:
+                    continue
             if fixed is not None:
-                found.append((start, end, fixed[0], True))
-                i += want
+                cands.append((1, start, end, fixed[0], True, False))
                 continue
-            before = text[max(0, start - 8):start].upper()
-            if (i == 0 or "IBAN" in before or "IBAN" in chain[max(0, i - 6):i].upper()) and cc == head \
-                    and sum(c.isdigit() for c in raw) >= want // 2:
-                found.append((start, end, raw.upper(), False))
-                i += want
-                continue
-            i += 1
+            if "\n" not in text[start:end] and cc == head and chain[i + 2:i + 4].isdigit() \
+                    and not ({i + 1, i + 2, i + 3} & starts) and sum(c.isdigit() for c in raw) >= want // 2:
+                # «Похоже»: код страны и контрольные цифры одним словом («BG80», «DE12»), иначе даты и «No. 590…»
+                cands.append((2, start, end, raw.upper(), False, True))
+    taken, found = [], []
+    for _prio, start, end, value, sure, shaped in sorted(cands, key=lambda c: (c[0], c[1])):
+        if any(a < end and start < b for a, b in taken):
+            continue
+        taken.append((start, end))
+        found.append((start, end, value, sure, shaped))
+    found.sort()
     return found
 
 
@@ -180,11 +223,12 @@ class Finding:
     chars: list = field(default_factory=list)
     maybe: bool = False   # 1.36.1: «Похоже на IBAN, проверьте»: сумма не сошлась, без подписи счёта рядом НЕ закрыто, человек решает
     near_label: bool = False   # «Похоже на IBAN» рядом с подписью счёта (IBAN, Сметка, Account): закрыто сразу, как обычное (В3)
+    shaped: bool = False   # 1.36.2: «Похоже» отдельным словом точной длины IBAN (код страны, контрольные цифры): закрыто сразу
 
     @property
     def hide_by_default(self) -> bool:
         """Закрывать ли значение сразу: всё найденное, кроме «Похоже» без подписи счёта рядом."""
-        return not self.maybe or self.near_label
+        return not self.maybe or self.near_label or self.shaped
 
     def _glyphs(self) -> str:
         return self.value.replace(" ", "").replace("\n", "")
@@ -566,12 +610,13 @@ def find(words, countries=()) -> list:
             add(LINK, s, s + len(v))
     for m in _EMAIL.finditer(text):
         add(EMAIL, m.start(), m.end())
-    for start, end, value, sure in iban_candidates(text):
+    for start, end, value, sure, shaped in iban_candidates(text):
         if sure:
             add(IBAN, start, end)
         elif not any(taken[start:end]):
-            if add(IBAN, start, end):   # не молчим (без подписи счёта не закрываем само): отдельная строка «Похоже на IBAN»
+            if add(IBAN, start, end):   # не молчим: отдельная строка «Похоже на IBAN»
                 found[-1][1].maybe = True
+                found[-1][1].shaped = shaped   # 1.36.2: отдельное слово точной длины IBAN закрывается сразу
     # слова -> диапазоны в тексте
     spans_of = {}
     for ti, pr in enumerate(pos):
@@ -634,8 +679,57 @@ def find(words, countries=()) -> list:
                 i = hit[2]
             else:
                 i += 1
+    for start, f in list(found):
+        if f.kind == CARD:
+            for span in _holder_spans(words, f, spans_of):
+                add(HOLDER, *span)
     found.sort(key=lambda t: t[0])
     return [f for _s, f in found]
+
+
+_HOLDER_WORD = re.compile(r"^[A-ZÀ-ÖØ-ÞА-ЯЁ][A-ZÀ-ÖØ-ÞА-ЯЁ.'\-]{1,}$")
+
+
+def _holder_spans(words, card, spans_of) -> list:
+    """Имя на карте (1.36.2): строка из 2-4 слов заглавными буквами под номером карты (до 4,5 высоты строки ниже, служебные
+    строки вроде «VALID THRU 12/28» пропускаются;
+    не левее номера больше чем на две высоты). Только при известных рамках слов. [(начало, конец)] в тексте или []."""
+    idx = sorted({wi for wi, _ci in card.chars})
+    if not idx or any(getattr(words[i], "rect", None) is None for i in idx):
+        return []
+    top = min(words[i].rect.top() for i in idx)
+    bottom = max(words[i].rect.bottom() for i in idx)
+    left = min(words[i].rect.left() for i in idx)
+    right = max(words[i].rect.right() for i in idx)
+    h = max(6.0, bottom - top)
+    lines = {}
+    for j, w in enumerate(words):
+        r = getattr(w, "rect", None)
+        if j in idx or r is None or not (bottom - 0.2 * h <= r.top() <= bottom + 4.5 * h):
+            continue
+        if r.left() < left - 2 * h or r.right() > right + 2 * h or r.height() < 0.5 * h:
+            continue   # в стороне от номера или мелкая соринка (край карты на фото)
+        lines.setdefault(w.line, []).append(j)
+    for line in sorted(lines.values(), key=lambda js: min(words[j].rect.top() for j in js)):
+        line = sorted(line, key=lambda j: words[j].rect.left())
+        texts = [words[j].text.strip(",.:").upper() for j in line]
+        if all(t in _CARD_SERVICE or _CARD_DATE.match(t) or not t for t in texts):
+            continue   # «VALID THRU 12/28», «MASTERCARD DEBIT»: служебная строка карты, имя может быть ниже
+        if 2 <= len(line) <= 4 and all(_HOLDER_WORD.match(words[j].text.strip(",")) for j in line) \
+                and not any(t in _CARD_SERVICE for t in texts) \
+                and all(j in spans_of for j in line) and line == list(range(line[0], line[-1] + 1)):
+            return [(spans_of[line[0]][0], spans_of[line[-1]][1] + 1)]
+        return []   # строка под номером не имя и не служебная: дальше не ищем
+    return []
+
+
+# служебные слова на картах и рядом с номером (не имя держателя); проверка 1.36.2, находка 4
+_CARD_SERVICE = {"VALID", "THRU", "THROUGH", "FROM", "GOOD", "UNTIL", "EXPIRES", "EXPIRY", "EXP", "MONTH", "YEAR",
+                 "MM", "YY", "MM/YY", "DEBIT", "CREDIT", "PREPAID", "GOLD", "PLATINUM", "CLASSIC", "STANDARD",
+                 "INFINITE", "SIGNATURE", "WORLD", "ELITE", "BLACK", "VISA", "MASTERCARD", "MAESTRO", "ELECTRON",
+                 "BUSINESS", "CORPORATE", "CARD", "HOLDER", "CARDHOLDER", "MEMBER", "SINCE", "BANK", "STATUS",
+                 "ACTIVE", "BLOCKED", "CONTACTLESS", "VIRTUAL", "MIR", "UNIONPAY", "AMEX", "EXPRESS", "AMERICAN"}
+_CARD_DATE = re.compile(r"^\d{1,2}[/.\-]\d{2,4}$")
 
 
 def mask(kind: str, value: str) -> str:
@@ -662,6 +756,8 @@ def mask(kind: str, value: str) -> str:
     if kind == EMAIL:
         local, _at, domain = value.partition("@")
         return (local[:2] if len(local) > 2 else local[:1]) + "***@" + domain
+    if kind == HOLDER:
+        return " ".join(part[:1] + "***" for part in value.split())
     if kind == IBAN:
         s = re.sub(r"[\s.\-\u2010-\u2013·]", "", value)
         return s[:4] + " *** " + s[-4:]

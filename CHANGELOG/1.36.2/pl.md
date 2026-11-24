@@ -1,0 +1,3 @@
+- Ukryj dane osobowe: na zdjęciu karty z telefonu numer karty i imię pod nim są teraz znajdowane i ukrywane. Dla zdjęć program robi osobne czarno-białe rozpoznawanie.
+- Ukryj dane osobowe: IBAN na stronie banku jest ukrywany w całości. Wcześniej kwoty z sąsiednich wierszy („0.00 EUR”) mogły skleić się z początkiem numeru w fałszywe konto: ukrywane były kwoty, a koniec IBAN zostawał widoczny. Numer wyglądający jak IBAN (kod kraju, cyfry kontrolne, właściwa długość) jest teraz ukrywany od razu, nawet bez opisu konta obok.
+- „Kopiuj tekst” przy wciśniętym „Ukryj kawałek” lub „Odkryj kawałek”: obrysowywanie się wyłącza, a zaznaczanie myszą kopiuje tekst zamiast go ukrywać.

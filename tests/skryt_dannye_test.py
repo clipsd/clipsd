@@ -126,8 +126,8 @@ def test_find():
         if bad.startswith("XX"):
             continue   # без подписи и без известной страны не находится вовсе
         got = [f for f in privacy.find(words_of("Получатель " + bad)[0])]
-        check(len(got) == 1 and got[0].maybe and not got[0].near_label and not got[0].hide_by_default,
-              f"IBAN с неверной суммой без подписи счёта: «Похоже на IBAN, проверьте», само не закрывается: {bad}")
+        check(len(got) == 1 and got[0].maybe and not got[0].near_label and got[0].shaped and got[0].hide_by_default,
+              f"IBAN с неверной суммой без подписи счёта, но по виду IBAN: «Похоже», закрывается сразу (1.36.2): {bad}")
     check(kinds(LINK) == [("link", LINK)], "ссылка с token=")
     check(kinds("www.example.com/?key=abcdefgh") == [("link", "www.example.com/?key=abcdefgh")], "ссылка www с key=")
     check(kinds("https://example.com/page?id=42&lang=ru") == [], "обычная ссылка не закрывается")
@@ -532,8 +532,9 @@ def test_link_image_and_list():
 
 
 def test_maybe_iban_defaults():
-    """В3 проверки 1.36.1: «Похоже на IBAN» рядом с подписью счёта закрыто сразу (открыть можно), без подписи: открыто."""
-    ed, img, words = make("IBAN: DE89 3704 0044 0532 0130 01\nПолучатель GB82 WEST 1234 5698 7654 33")
+    """В3 проверки 1.36.1: «Похоже на IBAN» рядом с подписью счёта закрыто сразу (открыть можно), без подписи и без
+    кода страны (значок банка и цифры): открыто. 1.36.2: с кодом страны и точной длиной закрыто сразу (отдельная проверка)."""
+    ed, img, words = make("IBAN: DE89 3704 0044 0532 0130 01\nПолучатель BNBG96611020345678")
     ed.hide_personal()
     settle()
     s = ed.privacy_session
@@ -673,7 +674,7 @@ def test_languages():
     settle()
     ref = i18n._load("ru")
     keys = [k for k in ref if k.startswith("privacy.")]
-    check(len(keys) == 47, f"47 строк privacy.* в ru: {len(keys)}")
+    check(len(keys) == 49, f"49 строк privacy.* в ru (1.36.2: kind_holder, maybe_iban_shape): {len(keys)}")
     for lang in i18n.LANGUAGES:
         cat = i18n._load(lang)
         check(all(cat.get(k, "").strip() for k in keys), f"{lang}: все строки есть")

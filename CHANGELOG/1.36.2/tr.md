@@ -1,0 +1,3 @@
+- Kişisel verileri gizle: telefonla çekilmiş bir kart fotoğrafında kart numarası ve altındaki ad artık bulunup gizleniyor. Fotoğraflar için program ayrı bir siyah beyaz tanıma geçişi yapıyor.
+- Kişisel verileri gizle: banka sayfasındaki IBAN tamamen gizleniyor. Önceden yakın satırlardaki tutarlar («0.00 EUR») numaranın başıyla birleşip sahte bir hesap oluşturabiliyordu: tutarlar gizleniyor, IBAN'ın sonu açık kalıyordu. IBAN biçimindeki bir numara (ülke kodu, kontrol rakamları, doğru uzunluk) artık yanında hesap etiketi olmasa da hemen gizleniyor.
+- «Parça gizle» veya «Parça aç» basılıyken «Metni kopyala»: çizim kapanıyor ve fareyle seçmek metni gizlemek yerine kopyalıyor.

@@ -106,7 +106,56 @@ got = ibans("IBAN: " + bad)
 check(len(got) == 1 and got[0].maybe and got[0].near_label and got[0].hide_by_default,
       "сумма не сошлась после подписи IBAN: строка «Похоже на IBAN» (maybe), закрывается сразу (В3)")
 got = ibans("Получатель " + bad)
-check(len(got) == 1 and got[0].maybe and not got[0].hide_by_default, "сумма не сошлась, подписи счёта нет: «Похоже», не закрывается само")
+check(len(got) == 1 and got[0].maybe and got[0].shaped and got[0].hide_by_default,
+      "сумма не сошлась, подписи счёта нет, но отдельное слово точной длины: «Похоже», закрывается сразу (1.36.2)")
+got = [f for f in privacy.find(words("Получатель " + BG[4:]), ("BG",)) if f.kind == privacy.IBAN]
+check(len(got) == 1 and got[0].maybe and not got[0].shaped and not got[0].hide_by_default,
+      "без кода страны и подписи счёта: «Похоже», не закрывается само")
+
+# 1.36.2 (снимок владельца 24.11.2026, страница банка; номера вымышленные): столбец сумм «0.00 EUR» над IBAN не
+# склеивается с ним в ложный IBAN, настоящий IBAN закрывается целиком
+table = "46 434.53 EUR\n0.00 EUR\n0.00 EUR\n0.00 EUR\n" + BG
+got = found(table)
+check(len(got) == 1 and got[0].kind == privacy.IBAN and got[0].value == BG and not got[0].maybe,
+      f"столбец сумм над IBAN: найден ровно IBAN целиком, суммы не задеты ({[f.value for f in got]})")
+for _ in range(300):
+    junk = "\n".join(f"{rnd.randint(0, 99)}.{rnd.randint(0, 99):02d} {rnd.choice(['EUR', 'BGN', 'USD', 'RON', 'NOK'])}" for _ in range(4))
+    got = [f for f in found(junk + "\n" + BG) if f.kind == privacy.IBAN]
+    if not (len(got) == 1 and got[0].value == BG):
+        break
+check(len(got) == 1 and got[0].value == BG, f"300 случайных столбцов сумм над IBAN: ложных IBAN нет ({junk!r})")
+# граница слова: IBAN не начинается и не кончается посреди слова (кроме приклеенной метки «IBAN»)
+misread = BG[:8] + "I" + BG[9:] if BG[8].isdigit() else BG
+got = ibans("НАЛИЧНОСТ EUR " + misread)
+check(len(got) == 1 and got[0].hide_by_default and got[0].value.replace(" ", "") in (misread, BG),
+      f"после «EUR» на той же строке IBAN с ошибкой распознавания найден целиком и закрыт: {misread}")
+# проверка 1.36.2, находка 1: IBAN с переносом на вторую строку и ошибкой распознавания закрывается целиком
+wrapped_hits = 0
+for _ in range(100):
+    ib = make_iban("BG", "".join(rnd.choice("ABCDEFGHJKLMNPQRSTUVWXYZ") for _ in range(4)) + "".join(rnd.choice("0123456789") for _ in range(14)))
+    t = list(ib)
+    spots = [i for i, c in enumerate(t) if i >= 4 and c in "0158"]
+    k = rnd.choice(spots)
+    t[k] = {"0": "O", "1": "l", "5": "S", "8": "B"}[t[k]]
+    g = " ".join("".join(t)[j:j + 4] for j in range(0, 22, 4)).split(" ")
+    txt = "IBAN " + " ".join(g[:3]) + "\n" + " ".join(g[3:])
+    got = ibans(txt)
+    wrapped_hits += len(got) == 1 and got[0].value.replace("\n", " ").replace(" ", "") == "".join(t)
+check(wrapped_hits >= 95, f"перенос на вторую строку с одной ошибкой: найдено целиком {wrapped_hits} из 100")
+# круг 2 (Р2): перед перенесённым IBAN подпись с пояснением («Сметка в лева:», «IBAN (BGN):») или подпись строкой выше
+t = list(BG)
+k = next(i for i in range(4, 22) if t[i] in "0158")
+t[k] = {"0": "O", "1": "l", "5": "S", "8": "B"}[t[k]]
+g = " ".join("".join(t)[j:j + 4] for j in range(0, 22, 4)).split(" ")
+for lead in ("Сметка в лева: ", "IBAN (BGN): ", "Получател: ФИРМА ООД\nIBAN\n"):
+    got = ibans(lead + " ".join(g[:3]) + "\n" + " ".join(g[3:]))
+    check(len(got) == 1 and got[0].value.replace("\n", " ").replace(" ", "") == "".join(t),
+          f"перенос с ошибкой после «{lead.strip()}»: найден целиком")
+# находка 2: код страны из цифр без исправлений не даёт «надёжного» IBAN поперёк строк; находка 3: «Похоже» только
+# когда код страны и контрольные цифры одним словом
+check(not ibans("Meeting at 11 01.06.2026 21.10.2026"), "«at 11» и даты не «Похоже на IBAN»")
+check(not ibans("Item No. 5901234123457"), "«No. 5901234123457» (EAN-13) не «Похоже на IBAN»")
+check(not ibans("XEUR" + BG[:-3]), "обрывок IBAN внутри слова не принимается")
 check(not [f for f in found("Заказ 123456789012 на 4 500,00 лв., версия 1.36.1, BG 2026") if f.kind == privacy.IBAN], "обычные числа и слова не принимаются за IBAN")
 check(not [f for f in found("Total: BG12 abc") if f.kind == privacy.IBAN], "короткая строка с кодом страны не IBAN")
 

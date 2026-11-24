@@ -19,7 +19,7 @@ from .shapes import BLUR, Shape
 
 PANEL_W = 360
 ROW_BUTTON_W = 150
-KIND_KEYS = {privacy.CARD: "privacy.kind_card", privacy.IBAN: "privacy.kind_iban", privacy.PHONE: "privacy.kind_phone",
+KIND_KEYS = {privacy.CARD: "privacy.kind_card", privacy.HOLDER: "privacy.kind_holder", privacy.IBAN: "privacy.kind_iban", privacy.PHONE: "privacy.kind_phone",
              privacy.EMAIL: "privacy.kind_email", privacy.LINK: "privacy.kind_link"}
 
 
@@ -264,7 +264,8 @@ class PrivacyRow(QFrame):
         self.label.setToolTip(text)
         if getattr(self.finding, "maybe", False):   # сумма IBAN не сошлась: подсказка вместо тишины, закрыть можно в меню
             self.label.setText(self.label.fontMetrics().elidedText(tr("privacy.maybe_short") + " " + text, Qt.TextElideMode.ElideRight, 150))
-            hint = "privacy.maybe_iban_label" if getattr(self.finding, "near_label", False) else "privacy.maybe_iban"
+            hint = ("privacy.maybe_iban_label" if getattr(self.finding, "near_label", False)
+                    else "privacy.maybe_iban_shape" if getattr(self.finding, "shaped", False) else "privacy.maybe_iban")
             self.label.setToolTip(tr(hint) + "\n" + text)
         name = "custom" if custom else mode
         short = tr(SHORT_KEYS[name])

@@ -333,12 +333,17 @@ def prepare(image: QImage, quality: str = "accurate", enhance: bool = False) -> 
     img.setDevicePixelRatio(1.0)
     if _mean_brightness(img) < 128:
         img.invertPixels()
-    if enhance:
+    photo = enhance in (PHOTO, PHOTO_LIGHT)
+    if photo:
+        img = binarize_local(img, light=enhance == PHOTO_LIGHT)
+    elif enhance:
         img = enhance_gray(img)
     pixels = max(1, img.width() * img.height())
     factor = 3 if pixels * 9 <= MAX_PIXELS else 2 if pixels * 4 <= MAX_PIXELS else 1
-    if enhance and pixels * 16 <= MAX_PIXELS:
+    if enhance and not photo and pixels * 16 <= MAX_PIXELS:
         factor = 4   # мелкий бледный текст: ещё крупнее
+    if photo:
+        factor = 1   # фото без увеличения: цифры карты и так крупные, увеличенные Tesseract теряет
     if quality == "fast" and not enhance:
         factor = 1   # «Быстрее»: без увеличения, в 2-4 раза быстрее, мелкий текст читается хуже
     if factor > 1:
@@ -976,7 +981,74 @@ def _wanted_main(langs: str) -> str:
     return next((c for c in codes if c != "eng"), "")
 
 
-def merge_words(base, extra) -> list:
+PHOTO = "photo"         # 1.36.2: проход «Скрыть личные данные» для фото: чёрно-белая картинка, тёмные знаки на светлом
+PHOTO_LIGHT = "photo_light"   # то же для светлых знаков на тёмном (тёмная, синяя, красная карта)
+
+
+SMOOTH = 2   # сглаживание перед порогом: уменьшить во столько раз и вернуть
+
+
+def binarize_local(img: QImage, offset: int = 18, light: bool = False) -> QImage:
+    """Серая картинка -> чёрно-белая по местному порогу (1.36.2, фото карты с телефона, слова владельца 24.11.2026: «не
+    скрывает нормально»). На фото фон неровный (стена, пальцы, цветной пластик, блики), и Tesseract на сером не видит
+    ни одной строки; после порога «темнее местного среднего на offset» номер карты читается чисто. light: знаками
+    считается то, что светлее местного среднего (светлые цифры на тёмной карте), на выходе они чёрные на белом.
+    Цвет фона по средней яркости не угадать (зелёная карта с тёмными цифрами и синяя со светлыми одинаковы по
+    среднему), поэтому для фото два прохода, по одному на каждый случай. Местное среднее: картинка, уменьшенная до
+    клеток ~1/24 меньшей стороны и растянутая обратно (быстро, средствами Qt)."""
+    g = img.convertToFormat(QImage.Format.Format_Grayscale8)
+    w, h = g.width(), g.height()
+    if w < 8 or h < 8:
+        return g
+    # шум матрицы телефона и фактура фона (стена, пластик) дают россыпь точек, на которой Tesseract тонет: сначала лёгкое
+    # сглаживание (уменьшить вдвое и обратно), потом порог
+    g = g.scaled(max(1, w // SMOOTH), max(1, h // SMOOTH), Qt.AspectRatioMode.IgnoreAspectRatio,
+                 Qt.TransformationMode.SmoothTransformation).scaled(w, h, Qt.AspectRatioMode.IgnoreAspectRatio,
+                                                                    Qt.TransformationMode.SmoothTransformation)
+    cell = max(8, min(w, h) // 24)
+    small = g.scaled(max(1, w // cell), max(1, h // cell), Qt.AspectRatioMode.IgnoreAspectRatio,
+                     Qt.TransformationMode.SmoothTransformation)
+    mean = small.scaled(w, h, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+    out = QImage(w, h, QImage.Format.Format_Grayscale8)
+    for y in range(h):
+        row = bytes(g.constScanLine(y).asarray(w))
+        avg = bytes(mean.constScanLine(y).asarray(w))
+        dst = out.scanLine(y)
+        dst.setsize(w)
+        if light:
+            dst[:w] = bytes(0 if a > m + offset else 255 for a, m in zip(row, avg))
+        else:
+            dst[:w] = bytes(0 if a + offset < m else 255 for a, m in zip(row, avg))
+    return out
+
+
+def photo_share(image: QImage) -> float:
+    """Доля соседних точек, у которых цвет совпадает точь-в-точь (1.36.2): у экрана высокая (ровные поля, текст на
+    однотонном фоне), у фото низкая (шум матрицы). Смотрятся 40 строк через равные промежутки."""
+    img = image.convertToFormat(QImage.Format.Format_RGB32)
+    w, h = img.width(), img.height()
+    if w < 16 or h < 16:
+        return 1.0
+    same = total = 0
+    for k in range(40):
+        y = (k * 2 + 1) * h // 80
+        row = bytes(img.constScanLine(y).asarray(w * 4))
+        for x in range(0, (w - 1) * 4, 8):
+            total += 1
+            same += row[x:x + 3] == row[x + 4:x + 7]
+    return same / total if total else 1.0
+
+
+PHOTO_SHARE = 0.55     # меньше: снимок похож на фото, чёрно-белые проходы идут первыми
+SCREEN_SHARE = 0.8     # больше: чистый экран, чёрно-белые проходы не нужны вовсе
+
+
+def looks_like_photo(image: QImage) -> bool:
+    """Снимок похож на фото, а не на экран (1.36.2): см. photo_share."""
+    return photo_share(image) < PHOTO_SHARE
+
+
+def merge_words(base, extra, tag="x") -> list:
     """Слова второго прохода (с усилением контраста), которых нет в первом: слово из extra берётся, если его рамка меньше
     чем на 40 % своей площади перекрывается уже найденными. Порядок чтения восстанавливает layout()."""
     out = list(base)
@@ -988,7 +1060,10 @@ def merge_words(base, extra) -> list:
             if not inter.isEmpty():
                 covered += inter.width() * inter.height()
         if covered / area < 0.4:
-            out.append(w)
+            # свои ключи строк у слов второго прохода (проверка 1.36.2, находка 7): иначе layout() склеивал строку
+            # первого прохода и другую строку второго с тем же номером («DEBIT 4111 1111 MONOBANK 1111»)
+            line = w.line if isinstance(w.line, tuple) else (w.line,)
+            out.append(Word(w.text, w.rect, (tag,) + line))   # tag: свой у каждого прохода
     return layout(out)
 
 
@@ -1072,7 +1147,9 @@ def _recognize_words(image: QImage, langs: str, quality: str, enhance: bool = Fa
 def _prepare_windows(image: QImage, quality: str = "accurate", enhance: bool = False) -> QImage:
     img = image.convertToFormat(QImage.Format.Format_RGB32)
     img.setDevicePixelRatio(1.0)
-    if enhance:   # 1.36.1: серый с растянутым контрастом (мелкий бледный текст), обратно в RGB32 для Windows.Media.Ocr
+    if enhance in (PHOTO, PHOTO_LIGHT):   # 1.36.2: фото: чёрно-белая по местному порогу
+        img = binarize_local(img, light=enhance == PHOTO_LIGHT).convertToFormat(QImage.Format.Format_RGB32)
+    elif enhance:   # 1.36.1: серый с растянутым контрастом (мелкий бледный текст), обратно в RGB32 для Windows.Media.Ocr
         img = enhance_gray(img.convertToFormat(QImage.Format.Format_Grayscale8)).convertToFormat(QImage.Format.Format_RGB32)
     limit = 9000   # у Windows.Media.Ocr предел 10 000 px по стороне
     factor = 2 if max(img.width(), img.height()) * 2 <= limit and img.width() * img.height() * 4 <= MAX_PIXELS else 1
@@ -1399,7 +1476,7 @@ class OcrJob(QThread):
     def run(self):
         try:
             _found.help = None
-            self.words = (recognize_words(self.image, self.langs, self.quality, True) if self.enhance
+            self.words = (recognize_words(self.image, self.langs, self.quality, self.enhance) if self.enhance
                           else recognize_words(self.image, self.langs, self.quality))
             text = tidy(words_text(self.words))
             # текст есть, но нужного языка нет: подсказать. Tesseract без русского; Windows без русского

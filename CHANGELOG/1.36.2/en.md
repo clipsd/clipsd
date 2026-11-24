@@ -1,0 +1,3 @@
+- Hide personal data: on a phone photo of a card, the card number and the name below it are now found and hidden. For photos the program runs a separate black-and-white recognition pass.
+- Hide personal data: an IBAN on a bank page is hidden in full. Before, amounts from nearby lines ("0.00 EUR") could merge with the start of the number into a false account: the amounts were hidden and the end of the IBAN stayed visible. A number shaped like an IBAN (country code, check digits, right length) is now hidden right away, even without an account label next to it.
+- Copy text while Hide part or Reveal part is pressed: outlining is switched off, and selecting with the mouse copies the text instead of hiding it.

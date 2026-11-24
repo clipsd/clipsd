@@ -1,0 +1,3 @@
+- Ocultar dados pessoais: numa foto de um cartão tirada com o telemóvel, o número do cartão e o nome por baixo agora são encontrados e ocultados. Para fotos, o programa faz uma passagem de reconhecimento separada a preto e branco.
+- Ocultar dados pessoais: um IBAN na página do banco é ocultado por inteiro. Antes, valores de linhas vizinhas («0.00 EUR») podiam juntar-se ao início do número numa conta falsa: os valores eram ocultados e o fim do IBAN ficava visível. Um número com forma de IBAN (código do país, dígitos de controlo, comprimento certo) agora é ocultado de imediato, mesmo sem indicação de conta ao lado.
+- «Copiar texto» com «Ocultar um trecho» ou «Revelar um trecho» premido: o contorno é desligado e selecionar com o rato copia o texto em vez de o ocultar.

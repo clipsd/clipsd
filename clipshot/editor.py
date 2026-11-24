@@ -3515,6 +3515,18 @@ class SplitPrintButton(QPushButton):
         super().mousePressEvent(event)
 
 
+def merge_privacy_pass(words, extra, tag="x") -> list:
+    """Слова дополнительного прохода «Скрыть личные данные» вместе с прежними. Обычно прежние главнее, новые добавляются
+    туда, где пусто. Если новый проход сам нашёл карту или IBAN, главнее он (проверка 1.36.2, круг 2, Р1): первый проход
+    мог прочитать то же место с ошибкой («9555 …» вместо «5555 …»), и верный номер выбрасывался при слиянии."""
+    from . import ocr, privacy
+    if not extra:
+        return list(words)
+    if any(f.kind in (privacy.CARD, privacy.IBAN) and not f.maybe for f in privacy.find(extra)):
+        return ocr.merge_words(list(extra), list(words), "p0")
+    return ocr.merge_words(list(words), extra, tag)
+
+
 class EditorWindow(QMainWindow):
     closed = pyqtSignal(object)
     qr_ready = pyqtSignal(object, object)   # 1.36: (ключ картинки, найденные коды) из потока чтения кода
@@ -4709,6 +4721,10 @@ class EditorWindow(QMainWindow):
             return   # перевод выключен в настройках
         if tool in self._BACK_ATTR and self.canvas.tool != tool:
             setattr(self, self._BACK_ATTR[tool], self._real_tool_before(self.canvas.tool))   # к нему вернёт «Готово» / Esc
+        if self.canvas.band_mode and getattr(self, "privacy_panel", None) is not None:
+            # 1.36.2 (владелец 24.11.2026): выбран другой инструмент («Копировать текст», карандаш…), а «Скрыть кусок» /
+            # «Открыть кусок» ещё нажата: обводка выключается, иначе выделение текста мышью закрывало бы его
+            self.privacy_panel.set_tool("", emit=True)
         self.canvas.set_tool(tool)
         self._sync_translate_layer(tool)
         if tool != OCR:
@@ -6509,13 +6525,29 @@ class EditorWindow(QMainWindow):
                         self.ctx.config.get("ocr_quality", "accurate"))
         self._ocr_job = job
 
-    def _privacy_run(self, words, second: bool = False):
+    def _privacy_extra_passes(self) -> list:
+        """Дополнительные проходы распознавания, если карт и IBAN не нашлось (по порядку, до первой находки).
+        1.36.1: экран: проход с усилением контраста (мелкий бледный текст банковских страниц).
+        1.36.2 (слова владельца 24.11.2026 «не скрывает нормально», фото карты с телефона): на сером фото распознавание
+        не видит ни строки, поэтому у фото два чёрно-белых прохода (тёмные знаки на светлом и светлые на тёмном), без
+        прохода с контрастом (на фото он идёт 15-90 с). Снимок экрана с фотографиями внутри: сначала контраст, затем
+        оба чёрно-белых (проверка 1.36.2, находка 6: «или-или» теряло одно из двух)."""
+        from . import ocr
+        share = ocr.photo_share(self.canvas.base)
+        if share < ocr.PHOTO_SHARE:
+            return [ocr.PHOTO, ocr.PHOTO_LIGHT]
+        if share < ocr.SCREEN_SHARE:
+            return [True, ocr.PHOTO, ocr.PHOTO_LIGHT]
+        return [True]
+
+    def _privacy_run(self, words, second: bool = False, left=None):
         from . import privacy
         from . import i18n as _i18n
         found = privacy.find(words, privacy.countries_hint(_i18n.current()))
-        if not second and not any(f.kind in (privacy.CARD, privacy.IBAN) and not f.maybe for f in found) \
-                and self._privacy_second_pass(words):
-            return   # 1.36.1: карт и IBAN нет, а мелкий бледный текст мог не прочитаться: второй проход с усилением контраста
+        if not any(f.kind in (privacy.CARD, privacy.IBAN) and not f.maybe for f in found):
+            todo = list(left or []) if second else self._privacy_extra_passes()
+            if todo and self._privacy_second_pass(words, todo[0], todo[1:]):
+                return
         fresh = []
         probe = PrivacySession(self.canvas, words, found)
         for i, f in enumerate(found):
@@ -6535,9 +6567,11 @@ class EditorWindow(QMainWindow):
             self.privacy_panel.show_session(session)
         self._after_panel()
 
-    def _privacy_second_pass(self, words) -> bool:
-        """Второе распознавание с растяжением контраста и увеличением (мелкий серый текст банковских страниц); слова
-        объединяются с первыми по положению. True: проход запущен, результат придёт в _privacy_run(second=True)."""
+    def _privacy_second_pass(self, words, mode=True, rest=()) -> bool:
+        """Дополнительное распознавание: mode=True с растяжением контраста и увеличением (мелкий серый текст банковских
+        страниц), ocr.PHOTO / ocr.PHOTO_LIGHT чёрно-белое для фото (1.36.2); слова объединяются с прежними по положению.
+        rest: следующие проходы, если и этот не найдёт карт и IBAN. True: проход запущен, результат придёт в
+        _privacy_run(second=True, left=rest)."""
         from . import ocr
         if getattr(self, "_privacy_pass2", None) is not None or not self.ctx.config.get("privacy_second_pass", True):
             return False
@@ -6564,11 +6598,11 @@ class EditorWindow(QMainWindow):
                 from .ocr import Word
                 extra = [Word(w.text, QRectF(w.rect.x() / ratio, w.rect.y() / ratio, w.rect.width() / ratio,
                                             w.rect.height() / ratio), w.line) for w in getattr(job, "words", [])]
-            merged = ocr.merge_words(list(words), extra) if extra else list(words)
-            self._privacy_run(merged, second=True)
+            merged = merge_privacy_pass(list(words), extra, f"p{mode}")
+            self._privacy_run(merged, second=True, left=rest)
         try:
             job = ocr.start(self.canvas.base.copy(), done, ocr.resolve_langs(self.ctx.config.get("ocr_langs")),
-                            self.ctx.config.get("ocr_quality", "accurate"), enhance=True)
+                            self.ctx.config.get("ocr_quality", "accurate"), enhance=mode)
         except Exception:   # noqa: BLE001 - второй проход не должен ломать основной
             spinner.stop()
             return False
